@@ -112,7 +112,8 @@ describe('Conectar', () => {
     render(<Conectar />);
     preencherEEnviar();
     const botao = screen.getByRole<HTMLButtonElement>('button');
-    await waitFor(() => expect(botao.disabled).toBe(true));
+    await waitFor(() => expect(falso).toHaveBeenCalledTimes(1));
+    expect(botao.disabled).toBe(true);
     fireEvent.click(botao);
     expect(falso).toHaveBeenCalledTimes(1);
     liberar(new Response('{"ok":true,"dados":{}}'));
@@ -124,9 +125,85 @@ describe('Conectar', () => {
     render(<Conectar />);
     const campo = screen.getByLabelText<HTMLInputElement>('Código do aparelho');
     expect(campo.type).toBe('password');
-    expect(campo.getAttribute('autocomplete')).toBe('off');
     fireEvent.click(screen.getByLabelText('Mostrar código'));
     expect(campo.type).toBe('text');
+  });
+
+  it('o teclado e o navegador não mexem no código nem o guardam', () => {
+    render(<Conectar />);
+    const campo = screen.getByLabelText<HTMLInputElement>('Código do aparelho');
+    expect(campo.getAttribute('autocomplete')).toBe('new-password');
+    expect(campo.getAttribute('autocapitalize')).toBe('none');
+    expect(campo.getAttribute('autocorrect')).toBe('off');
+  });
+});
+
+describe('Conectar com outra URL já salva', () => {
+  const OUTRA_URL = 'https://script.google.com/macros/s/OUTRO-ID-FICTICIO/exec';
+  const SALVA = { url: URL_FICTICIA, codigo: 'codigo-anterior-ficticio-0123456789abcdef' };
+  const substituir = () => screen.findByRole('button', { name: 'Substituir conexão' });
+
+  it('para antes da rede: o código não sai sem confirmação', async () => {
+    await salvarConexao(SALVA);
+    const falso = respondeCom('{"ok":true,"dados":{}}');
+    render(<Conectar />);
+    preencherEEnviar(OUTRA_URL);
+    await substituir();
+    expect(falso).not.toHaveBeenCalled();
+    expect(await lerConexao()).toEqual(SALVA);
+  });
+
+  it('o aviso mostra a URL atual, para o dono comparar', async () => {
+    await salvarConexao(SALVA);
+    respondeCom('{"ok":true,"dados":{}}');
+    render(<Conectar />);
+    preencherEEnviar(OUTRA_URL);
+    await substituir();
+    expect(screen.getByRole('status').textContent).toContain(URL_FICTICIA);
+  });
+
+  it('confirmar testa a nova URL e substitui', async () => {
+    await salvarConexao(SALVA);
+    const falso = respondeCom('{"ok":true,"dados":{}}');
+    render(<Conectar />);
+    preencherEEnviar(OUTRA_URL);
+    fireEvent.click(await substituir());
+    await screen.findByText(/^Conectado em/);
+    expect(falso).toHaveBeenCalledTimes(1);
+    expect(await lerConexao()).toEqual({ url: OUTRA_URL, codigo: CODIGO });
+    expect(screen.queryByRole('button', { name: 'Substituir conexão' })).toBeNull();
+  });
+
+  it('confirmar com código errado mantém a conexão anterior', async () => {
+    await salvarConexao(SALVA);
+    respondeCom('{"ok":false,"erro":"codigo-invalido"}');
+    render(<Conectar />);
+    preencherEEnviar(OUTRA_URL);
+    fireEvent.click(await substituir());
+    await screen.findByText(/código.*incorreto/i);
+    expect(await lerConexao()).toEqual(SALVA);
+  });
+
+  it('mudar a URL depois do aviso cancela a confirmação', async () => {
+    await salvarConexao(SALVA);
+    const falso = respondeCom('{"ok":true,"dados":{}}');
+    render(<Conectar />);
+    preencherEEnviar(OUTRA_URL);
+    await substituir();
+    fireEvent.input(screen.getByLabelText('URL'), {
+      target: { value: 'https://script.google.com/macros/s/TERCEIRO-ID-FICTICIO/exec' },
+    });
+    expect(screen.queryByRole('button', { name: 'Substituir conexão' })).toBeNull();
+    expect(falso).not.toHaveBeenCalled();
+  });
+
+  it('a mesma URL com código novo não pede confirmação', async () => {
+    await salvarConexao(SALVA);
+    respondeCom('{"ok":true,"dados":{}}');
+    render(<Conectar />);
+    preencherEEnviar();
+    await screen.findByText(/^Conectado em/);
+    expect(await lerConexao()).toEqual({ url: URL_FICTICIA, codigo: CODIGO });
   });
 });
 

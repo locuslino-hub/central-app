@@ -4,7 +4,10 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
-script/.clasp.json
+.clasp.json
 .superpowers/
 script/.implantacao
 .clasprc.json
+.env*
+creds*.json
+client_secret*.json

@@ -11,11 +11,23 @@ const BANCO = 'central-conexao';
 const LOJA = 'conexao';
 const CHAVE = 'atual';
 
-/** Só o Google recebe o código: https, o host exato, sem porta nem usuário. */
+const CAMINHO_DE_WEB_APP = /^\/(a\/macros\/[^/]+\/|macros\/)s\/[\w-]+\/exec$/;
+
+/**
+ * Limita para onde o código pode ir: só web apps do Apps Script, em https, sem
+ * porta nem usuário. Não prova que o script é do dono: qualquer pessoa pode
+ * publicar um web app nesse endereço.
+ */
 export function enderecoAceito(url: string): boolean {
   try {
-    const { protocol, host, username, password } = new URL(url);
-    return protocol === 'https:' && host === 'script.google.com' && !username && !password;
+    const { protocol, host, username, password, pathname } = new URL(url);
+    return (
+      protocol === 'https:' &&
+      host === 'script.google.com' &&
+      !username &&
+      !password &&
+      CAMINHO_DE_WEB_APP.test(pathname)
+    );
   } catch {
     return false;
   }
@@ -44,6 +56,6 @@ export async function lerConexao(): Promise<Conexao | null> {
 }
 
 export async function salvarConexao(conexao: Conexao): Promise<void> {
-  if (!enderecoAceito(conexao.url)) throw new Error('Endereço fora de script.google.com');
+  if (!enderecoAceito(conexao.url)) throw new Error('Endereço não é de um web app do Apps Script');
   await comBanco((banco) => banco.put(LOJA, conexao, CHAVE));
 }

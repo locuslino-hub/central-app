@@ -27,7 +27,7 @@ code{font-size:12.5px;word-break:break-word;color:#4A524A}
 </div>
 <div class="caixa" id="saida"></div>
 <script type="module">
-import {Engine} from 'https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm';
+import {Engine} from 'https://cdn.jsdelivr.net/npm/@litert-lm/core@0.19.0/+esm';
 
 const SISTEMA=`Você organiza a agenda de um doutorando. Hoje é quinta-feira, 5 de novembro de 2026.
 Transforme a frase em itens. Responda SOMENTE com JSON, sem explicação, neste formato:
@@ -121,7 +121,7 @@ async function rodar(m){
 }
 document.querySelectorAll('button').forEach(b=>b.onclick=()=>rodar(b.dataset.m));
 window.rodar=rodar;
-const q=new URLSearchParams(location.search).get('m');if(q)rodar(q);
+const q=new URLSearchParams(location.search).get('m');if(q==='E2B'||q==='E4B')rodar(q);
 </script>
 </body>
 </html>

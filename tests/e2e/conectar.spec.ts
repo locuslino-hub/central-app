@@ -3,6 +3,15 @@ import { expect, test } from '@playwright/test';
 const URL_FICTICIA = 'https://script.google.com/macros/s/ID-FICTICIO/exec';
 const CODIGO = 'codigo-ficticio-de-teste-0123456789abcdef';
 
+test('o campo do código chega ao navegador sem correção nem sugestão', async ({ page }) => {
+  await page.goto('/central-app/#/conectar');
+  const campo = page.getByLabel('Código do aparelho');
+  await expect(campo).toHaveAttribute('autocomplete', 'new-password');
+  await expect(campo).toHaveAttribute('spellcheck', 'false');
+  await expect(campo).toHaveAttribute('autocapitalize', 'none');
+  await expect(campo).toHaveAttribute('autocorrect', 'off');
+});
+
 test('conecta o aparelho e guarda a conexão no navegador', async ({ page }) => {
   await page.route(URL_FICTICIA, async (rota) => {
     const certo = rota.request().postDataJSON().codigo === CODIGO;
