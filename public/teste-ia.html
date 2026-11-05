@@ -24,6 +24,8 @@ code{font-size:12.5px;word-break:break-word;color:#4A524A}
   <button data-m="E4B">Testar Gemma 4 E4B</button>
   <p id="estado">Escolha um modelo. O download leva alguns minutos.</p>
   <p id="placar"></p>
+  <p id="abertura"></p>
+  <p id="persistencia"></p>
 </div>
 <div class="caixa" id="saida"></div>
 <script type="module">
@@ -88,13 +90,16 @@ window.resultado=null;
 
 async function rodar(m){
   document.querySelectorAll('button').forEach(b=>b.disabled=true);
-  $('saida').innerHTML='';$('placar').textContent='';
+  $('saida').innerHTML='';$('placar').textContent='';$('abertura').textContent='';$('persistencia').textContent='';
   const r={modelo:m,ua:navigator.userAgent,casos:[]};window.resultado=r;
   try{
+    try{r.persistente=await navigator.storage.persist()}catch{r.persistente=null}
+    $('persistencia').textContent='Armazenamento persistente: '+(r.persistente===true?'concedido.':r.persistente===false?'não concedido.':'indisponível neste navegador.');
     const t0=performance.now();
     $('estado').textContent=`Baixando e carregando ${m}...`;
     const engine=await Engine.create({model:`hf://litert-community/gemma-4-${m}-it-litert-lm`,mainExecutorSettings:{maxNumTokens:2048}});
-    r.cargaSeg=Math.round((performance.now()-t0)/1000);
+    r.cargaSeg=+((performance.now()-t0)/1000).toFixed(1);
+    $('abertura').textContent=`Tempo para abrir ${m}: ${r.cargaSeg} s (da criação do motor até ficar pronto). Vale como "abrir" só se o modelo já estava baixado; esta página não sabe dizer se veio do cache. Rode de novo para medir.`;
     let certos=0;
     for(const [n,c] of CASOS.entries()){
       $('estado').textContent=`Frase ${n+1} de ${CASOS.length}...`;

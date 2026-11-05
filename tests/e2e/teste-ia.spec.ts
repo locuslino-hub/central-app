@@ -32,3 +32,20 @@ for (const busca of ['', '?m=', '?m=e2b', '?m=E2B-outro', '?m=..%2F..%2Foutro', 
     expect(iniciado).toBeNull();
   });
 }
+
+test('mostra se o armazenamento persistente foi concedido e o tempo para abrir', async ({ page }) => {
+  await page.route('https://cdn.jsdelivr.net/**', (rota) =>
+    rota.fulfill({
+      headers: { 'access-control-allow-origin': '*' },
+      contentType: 'application/javascript',
+      body: `export const Engine = { create: async () => ({ createConversation: async () => { throw new Error('parou aqui'); } }) };`,
+    }),
+  );
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'storage', { value: { persist: async () => true } });
+  });
+  await page.goto('/central-app/teste-ia.html?m=E4B');
+  await expect(page.locator('#persistencia')).toHaveText('Armazenamento persistente: concedido.');
+  await expect(page.locator('#abertura')).toContainText(/Tempo para abrir E4B: \d+(\.\d)? s/);
+  await expect(page.locator('#abertura')).toContainText('não sabe dizer se veio do cache');
+});

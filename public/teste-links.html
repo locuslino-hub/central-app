@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teste de links do OneDrive</title>
+<style>
+body{margin:0;padding:16px;background:#E8EAE3;color:#262B26;font:15px/1.45 system-ui,sans-serif}
+h1{font:400 30px/1.1 Georgia,serif;margin:0 0 6px}
+.caixa{background:#fff;border-radius:20px;padding:14px 16px;margin:12px 0;max-width:640px}
+label{display:block;font-weight:600;margin-bottom:6px}
+input{box-sizing:border-box;width:100%;min-height:44px;padding:0 12px;border:1px solid #B9BFB4;border-radius:12px;font:15px system-ui;background:#fff;color:#262B26}
+button{min-height:44px;padding:0 16px;border:0;border-radius:99px;background:#E0966F;color:#35170A;font:600 15px system-ui;margin:8px 8px 0 0}
+#aviso{font-weight:600;margin:0}
+#aviso.erro{color:#8A3350}
+#aviso.ok{color:#2F6B4A}
+code{font-size:12.5px;word-break:break-all;color:#4A524A}
+</style>
+</head>
+<body>
+<h1>Teste de links do OneDrive</h1>
+<p>Teste descartável. Nada sai deste aparelho: o link colado só é usado para abrir o arquivo.</p>
+<div class="caixa">
+  <label for="link">Link do arquivo no OneDrive (começa com https://)</label>
+  <input id="link" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button type="button" id="normal">Abrir normal</button>
+  <button type="button" id="word">Abrir no Word</button>
+  <button type="button" id="ppt">Abrir no PowerPoint</button>
+</div>
+<div class="caixa">
+  <p id="aviso" role="status">Cole um link e escolha como abrir.</p>
+  <p>Endereço usado: <code id="alvo">nenhum</code></p>
+</div>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  function mostrar(texto,classe,alvo){
+    $('aviso').textContent=texto;
+    $('aviso').className=classe||'';
+    $('alvo').textContent=alvo||'nenhum';
+  }
+  function linkSeguro(){
+    var texto=$('link').value.trim();
+    if(!texto){mostrar('Cole primeiro o link do arquivo.','erro');return null}
+    var url;
+    try{url=new URL(texto)}catch(e){mostrar('Isso não parece um link. Cole o endereço completo, começando com https://.','erro');return null}
+    if(url.protocol!=='https:'){mostrar('Só aceito links que começam com https://. Este não serve.','erro');return null}
+    return url.href;
+  }
+  function abrir(alvo,mesmaAba){
+    var a=document.createElement('a');
+    a.href=alvo;
+    if(!mesmaAba){a.target='_blank';a.rel='noopener noreferrer'}
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  $('normal').addEventListener('click',function(){
+    var link=linkSeguro();if(!link)return;
+    mostrar('Abrindo no navegador.','ok',link);
+    abrir(link,false);
+  });
+  [['word','ms-word:ofe|u|','Word'],['ppt','ms-powerpoint:ofe|u|','PowerPoint']].forEach(function(p){
+    $(p[0]).addEventListener('click',function(){
+      var link=linkSeguro();if(!link)return;
+      var alvo=p[1]+link;
+      mostrar('Tentando abrir no '+p[2]+'. Se nada acontecer, use "Abrir normal".','ok',alvo);
+      abrir(alvo,true);
+    });
+  });
+})();
+</script>
+</body>
+</html>
