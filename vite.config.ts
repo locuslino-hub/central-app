@@ -8,5 +8,6 @@ export default defineConfig({
     environment: 'jsdom',
     exclude: ['tests/e2e/**', 'node_modules/**'],
     globalSetup: ['tests/setup-fuso.ts'],
+    setupFiles: ['tests/setup.ts'],
   },
 });

@@ -5,19 +5,26 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p script && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "script:build": "node script/build.mjs",
+    "script:publicar": "npm run script:build && node script/publicar.mjs"
   },
   "dependencies": {
+    "idb": "^8.0.4",
     "preact": "^11.1.1"
   },
   "devDependencies": {
+    "@google/clasp": "^3.4.1",
     "@playwright/test": "^1.65.0",
     "@preact/preset-vite": "^2.10.6",
     "@testing-library/preact": "^3.2.6",
+    "@types/google-apps-script": "^2.0.15",
     "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.7",
     "jsdom": "^31.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.6",

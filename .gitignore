@@ -6,3 +6,5 @@ blob-report/
 playwright/.cache/
 script/.clasp.json
 .superpowers/
+script/.implantacao
+.clasprc.json
