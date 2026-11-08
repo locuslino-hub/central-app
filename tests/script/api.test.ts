@@ -254,3 +254,41 @@ describe('fix 3: falhas vão para console.error', () => {
     expect(erros).not.toHaveBeenCalled();
   });
 });
+
+describe('revisão: sanitizador mais estrito', () => {
+  function comNome(nome: string, mensagem: string) {
+    const erro = new Error(mensagem);
+    erro.name = nome;
+    return erro;
+  }
+
+  it.each([
+    ['com espaço', 'Http Response'],
+    ['com sinais', 'Erro<script>'],
+    ['com dígitos', 'Erro123'],
+    ['longo demais', 'E'.repeat(41)],
+    ['vazio', ''],
+  ])('nome %s vira Error', (_caso, nome) => {
+    expect(resumoDoErro(comNome(nome, 'falhou'))).toBe('Error: falhou');
+  });
+
+  it('nome só com letras, até 40, fica', () => {
+    expect(resumoDoErro(comNome('HttpResponseException', 'falhou'))).toBe('HttpResponseException: falhou');
+    expect(resumoDoErro(comNome('E'.repeat(40), 'falhou'))).toBe(`${'E'.repeat(40)}: falhou`);
+  });
+
+  it('sequência de 16 caracteres com cara de id vira reticências; de 15 fica', () => {
+    expect(resumoDoErro(new Error('id abcdefgh12345678 sumiu'))).toBe('Error: id … sumiu');
+    expect(resumoDoErro(new Error('id abcdefgh1234567 sumiu'))).toBe('Error: id abcdefgh1234567 sumiu');
+  });
+
+  it.each([
+    ['aspas duplas sem fechar', 'Campo "Segredo da Marina sem fim'],
+    ['aspas simples sem fechar', "Campo 'Segredo da Marina sem fim"],
+    ['uma fechada e outra aberta', 'Campo "a" e "Segredo da Marina'],
+  ])('%s: corta tudo depois da aspa que sobra', (_caso, mensagem) => {
+    const resumo = resumoDoErro(new Error(mensagem));
+    expect(resumo).not.toContain('Segredo');
+    expect(resumo).toMatch(/^Error: Campo /);
+  });
+});

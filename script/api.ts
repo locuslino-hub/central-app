@@ -41,6 +41,7 @@ export function iguais(enviado: string, guardado: string): boolean {
 
 const MARCA_DO_CONTEUDO = 'Message:';
 const TAMANHO_MAXIMO_DO_RESUMO = 200;
+const NOME_DE_ERRO = /^[A-Za-z]{1,40}$/;
 
 /**
  * Nome e mensagem do erro, para o registro de execuções, sem nada do dono:
@@ -52,14 +53,17 @@ export function resumoDoErro(erro: unknown): string {
   const partes = partesDoErro(erro);
   if (!partes) return erro === null ? 'null' : typeof erro;
   if (partes.nome === 'SyntaxError') return partes.nome;
+  // Nome fora do padrão pode ter sido montado com dados: fica o genérico.
+  const nome = NOME_DE_ERRO.test(partes.nome) ? partes.nome : 'Error';
   let mensagem = partes.mensagem;
   const corte = mensagem.indexOf(MARCA_DO_CONTEUDO);
   if (corte >= 0) mensagem = `${mensagem.slice(0, corte + MARCA_DO_CONTEUDO.length)} …`;
-  mensagem = mensagem
-    .replace(/"[^"]*"|'[^']*'/g, '"…"')
-    .replace(/[A-Za-z0-9_-]{20,}/g, '…')
-    .slice(0, TAMANHO_MAXIMO_DO_RESUMO);
-  return mensagem ? `${partes.nome}: ${mensagem}` : partes.nome;
+  mensagem = mensagem.replace(/"[^"]*"|'[^']*'/g, '…');
+  // Aspa que sobrou sem par: o resto pode ser texto do dono, então sai tudo.
+  const aspa = mensagem.search(/["']/);
+  if (aspa >= 0) mensagem = `${mensagem.slice(0, aspa)}…`;
+  mensagem = mensagem.replace(/[A-Za-z0-9_-]{16,}/g, '…').slice(0, TAMANHO_MAXIMO_DO_RESUMO);
+  return mensagem ? `${nome}: ${mensagem}` : nome;
 }
 
 /**

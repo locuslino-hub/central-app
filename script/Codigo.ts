@@ -72,6 +72,8 @@ function lerConteudo(id: string): string {
     method: 'get',
     headers: { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` },
     muteHttpExceptions: true,
+    // Redirecionamento não é seguido: o token só vai ao Drive, e 302 vira erro.
+    followRedirects: false,
   };
   let resposta: GoogleAppsScript.URL_Fetch.HTTPResponse;
   try {
@@ -95,8 +97,10 @@ function procurar(consulta: string) {
  * Id do arquivo principal: guardado nas propriedades, ou achado pelo nome.
  * Lança (vira `interno`, nada é gravado) se o guardado foi para a lixeira ou
  * se há mais de um com o nome: o dono decide qual vale, o script não adivinha.
+ * `guardar`: a sincronia guarda o id achado pelo nome; as funções do editor
+ * (autorizarDrive, diagnosticarDrive) só olham, sem mudar propriedades.
  */
-function idDoArquivo(): string | null {
+function idDoArquivo({ guardar = true }: { guardar?: boolean } = {}): string | null {
   const guardado = propriedades().getProperty(CHAVE_DO_ARQUIVO);
   if (guardado) {
     if (drive().Files.get(guardado, { fields: 'id,trashed' }).trashed) {
@@ -108,7 +112,7 @@ function idDoArquivo(): string | null {
   if (achados.length > 1) throw new Error('Mais de um arquivo de dados');
   const [achado] = achados;
   if (!achado) return null;
-  propriedades().setProperty(CHAVE_DO_ARQUIVO, achado.id);
+  if (guardar) propriedades().setProperty(CHAVE_DO_ARQUIVO, achado.id);
   return achado.id;
 }
 
@@ -175,7 +179,7 @@ export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
  */
 export function autorizarDrive() {
   ScriptApp.getOAuthToken();
-  const id = idDoArquivo();
+  const id = idDoArquivo({ guardar: false });
   if (id === null) {
     Logger.log(
       'Permissão do Drive aprovada. O arquivo central-dados.json será criado na primeira sincronia.',
@@ -215,7 +219,7 @@ export function diagnosticarDrive() {
   const linhas = ['Diagnóstico do Drive (sem conteúdo nem ids):'];
   let id: string | null;
   try {
-    id = idDoArquivo();
+    id = idDoArquivo({ guardar: false });
   } catch (erro) {
     Logger.log(`${linhas[0]}\nNão consegui localizar o arquivo de dados (${resumoDoErro(erro)}).`);
     return;

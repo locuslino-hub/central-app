@@ -95,7 +95,7 @@ const TOKEN_FICTICIO = 'token-ficticio-ya29-0123456789abcdefghijklmnopqrstuvwxyz
 
 interface ChamadaDeRede {
   url: string;
-  params: { method?: string; muteHttpExceptions?: boolean; headers?: Record<string, string> };
+  params: { method?: string; muteHttpExceptions?: boolean; followRedirects?: boolean; headers?: Record<string, string> };
   charset?: string;
 }
 
@@ -107,6 +107,8 @@ function redeFalsa(drive: ReturnType<typeof driveFalso>) {
     status: 200,
     corpoDoErro: '',
     falharCom: '',
+    /** O Drive responde 302: se o script seguir o redirecionamento, recebe 200 de outro lugar. */
+    redirecionar: false,
     ScriptApp: {
       getOAuthToken() {
         rede.tokens += 1;
@@ -118,6 +120,13 @@ function redeFalsa(drive: ReturnType<typeof driveFalso>) {
         const chamada: ChamadaDeRede = { url, params };
         rede.chamadas.push(chamada);
         if (rede.falharCom) throw new Error(rede.falharCom);
+        if (rede.redirecionar) {
+          const seguiu = params?.followRedirects !== false;
+          return {
+            getResponseCode: () => (seguiu ? 200 : 302),
+            getContentText: () => (seguiu ? '{"versao":1,"ultimo":0,"registros":[]}' : ''),
+          };
+        }
         const casado = /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/([^?]+)\?alt=media$/.exec(url);
         const autorizado = params?.headers?.Authorization === `Bearer ${TOKEN_FICTICIO}`;
         const arquivo = casado ? drive.arquivos.get(decodeURIComponent(casado[1])) : undefined;
@@ -765,5 +774,44 @@ describe('diagnosticarDrive (leitura pela API)', () => {
     const { globais, registros } = carregar();
     (globais as unknown as { diagnosticarDrive(): void }).diagnosticarDrive();
     expect(registros.join('\n')).toMatch(/ainda não existe/);
+  });
+});
+
+describe('revisão: redirecionamento e busca sem gravar o id', () => {
+  it('a leitura pede followRedirects: false', () => {
+    const { pedir, rede } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    pedir('puxar', { desde: 0 });
+    expect(rede.chamadas.at(-1)!.params.followRedirects).toBe(false);
+  });
+
+  it('redirecionamento do Drive vira interno (HTTP 302), sem seguir para outro lugar', () => {
+    const { pedir, rede, erros } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    rede.redirecionar = true;
+    expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
+    expect(erros.join('\n')).toContain('HTTP 302');
+  });
+
+  it.each(['autorizarDrive', 'diagnosticarDrive'] as const)(
+    '%s acha o arquivo pelo nome sem gravar o id nas propriedades',
+    (funcao) => {
+      const { pedir, globais, propriedades, registros } = conectado();
+      pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+      propriedades.delete('ID_DO_ARQUIVO_DE_DADOS');
+
+      (globais as unknown as Record<string, () => void>)[funcao]();
+
+      expect(propriedades.has('ID_DO_ARQUIVO_DE_DADOS')).toBe(false);
+      expect(registros.join('\n')).toMatch(/já existe|Leitura pela API do Drive: ok/);
+    },
+  );
+
+  it('a sincronia continua guardando o id achado pelo nome', () => {
+    const { pedir, propriedades } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    propriedades.delete('ID_DO_ARQUIVO_DE_DADOS');
+    pedir('puxar', { desde: 0 });
+    expect(propriedades.get('ID_DO_ARQUIVO_DE_DADOS')).toBe('arquivo-1');
   });
 });
