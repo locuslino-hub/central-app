@@ -34,3 +34,16 @@ Links do OneDrive (link copiado pelo OneDrive, colado em `teste-links.html`):
 
 O dono abre arquivos pelo Explorador; a Central depende do link copiado.
 Celular fica para a prova da Tarefa 22.
+
+## Sincronização (8/11/2026)
+
+Tarefa criada num aparelho aparece no outro em até 60 s.
+
+| Sentido | Resultado |
+|---|---|
+| Notebook → celular | Passou |
+| Celular → notebook | Passou |
+
+Leitura do arquivo no Drive pela API REST (escopos `drive.file` e
+`script.external_request`). A janela de permissão do Google não abriu no
+DuckDuckGo; foi aprovada pelo Chrome.
