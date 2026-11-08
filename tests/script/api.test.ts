@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { iguais, novoCodigo, tratar, tratarCorpo, type Ambiente } from '../../script/api';
+import { iguais, novoCodigo, resumoDoErro, tratar, tratarCorpo, type Ambiente } from '../../script/api';
 import { armazemNaMemoria } from '../apoio/armazem';
 
 const CODIGO = 'codigo-ficticio-de-teste-0123456789abcdef';
@@ -171,5 +171,86 @@ describe('novoCodigo', () => {
     expect(novoCodigo(() => fila.shift()!)).toBe(
       '11111111111141118111111111111111' + '22222222222242228222222222222222',
     );
+  });
+});
+
+describe('fix 3: resumoDoErro (o que vai para o registro de execuções)', () => {
+  function comNome(nome: string, mensagem: string) {
+    const erro = new Error(mensagem);
+    erro.name = nome;
+    return erro;
+  }
+
+  it('exceção do Drive com o conteúdo na mensagem: fica só o começo, até Message:', () => {
+    const erro = comNome(
+      'HttpResponseException',
+      'Response Code: 200. Message: {"versao":1,"registros":[{"registro":{"titulo":"Segredo da Marina"}}]}',
+    );
+    const resumo = resumoDoErro(erro);
+    expect(resumo).toBe('HttpResponseException: Response Code: 200. Message: …');
+  });
+
+  it('id longo (arquivo do Drive, código) vira reticências', () => {
+    const resumo = resumoDoErro(new Error('File not found: 1AbCdEfGhIjKlMnOpQrStUvWxYz012345.'));
+    expect(resumo).not.toContain('1AbCdEfGhIjKlMnOpQrStUvWxYz012345');
+    expect(resumo).toContain('File not found');
+  });
+
+  it('texto entre aspas some', () => {
+    const resumo = resumoDoErro(new Error('Campo "Segredo da Marina" inválido'));
+    expect(resumo).not.toContain('Segredo');
+  });
+
+  it('SyntaxError (JSON.parse cita o texto lido) registra só o nome', () => {
+    expect(resumoDoErro(new SyntaxError('Unexpected token s in JSON: segredo'))).toBe('SyntaxError');
+  });
+
+  it('algo que não é Error registra só o tipo', () => {
+    expect(resumoDoErro('texto solto com segredo')).toBe('string');
+  });
+
+  it('mensagem muito longa é cortada', () => {
+    expect(resumoDoErro(new Error('palavra '.repeat(100))).length).toBeLessThanOrEqual(220);
+  });
+});
+
+describe('fix 3: falhas vão para console.error', () => {
+  it('falha dentro de tratar é registrada com nome e mensagem', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const quebrado: Ambiente = {
+      armazem: armazemNaMemoria(),
+      lerCodigo() {
+        throw new Error('Drive fora do ar');
+      },
+    };
+    expect(tratar({ codigo: CODIGO, acao: 'ping' }, quebrado)).toEqual({ ok: false, erro: 'interno' });
+    expect(erros).toHaveBeenCalledTimes(1);
+    expect(String(erros.mock.calls[0].join(' '))).toContain('Error: Drive fora do ar');
+  });
+
+  it('JSON quebrado no corpo registra só SyntaxError, nunca o corpo nem o código', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const corpo = `{"codigo":"${CODIGO}","dados":{"titulo":"Segredo da Marina"`;
+    expect(tratarCorpo(corpo, ambiente)).toEqual({ ok: false, erro: 'interno' });
+    const registrado = erros.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(registrado).toContain('SyntaxError');
+    expect(registrado).not.toContain(CODIGO);
+    expect(registrado).not.toContain('Segredo');
+  });
+
+  it('corpo grande demais registra só o tamanho', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const corpo = JSON.stringify({ codigo: CODIGO, acao: 'ping', dados: { x: 'Segredo'.repeat(40_000) } });
+    tratarCorpo(corpo, ambiente);
+    const registrado = erros.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(registrado).toContain(String(corpo.length));
+    expect(registrado).not.toContain('Segredo');
+    expect(registrado).not.toContain(CODIGO);
+  });
+
+  it('código errado não é falha: nada é registrado', () => {
+    const erros = vi.spyOn(console, 'error').mockImplementation(() => {});
+    tratar({ codigo: 'outro', acao: 'ping' }, ambiente);
+    expect(erros).not.toHaveBeenCalled();
   });
 });

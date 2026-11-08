@@ -39,6 +39,44 @@ export function iguais(enviado: string, guardado: string): boolean {
   return diferenca === 0;
 }
 
+const MARCA_DO_CONTEUDO = 'Message:';
+const TAMANHO_MAXIMO_DO_RESUMO = 200;
+
+/**
+ * Nome e mensagem do erro, para o registro de execuções, sem nada do dono:
+ * corta o que vem depois de "Message:" (o Drive põe o conteúdo do arquivo
+ * ali), troca texto entre aspas e sequências longas (ids, código) por "…" e
+ * limita o tamanho. SyntaxError fica só com o nome: o JSON.parse cita o texto lido.
+ */
+export function resumoDoErro(erro: unknown): string {
+  const partes = partesDoErro(erro);
+  if (!partes) return erro === null ? 'null' : typeof erro;
+  if (partes.nome === 'SyntaxError') return partes.nome;
+  let mensagem = partes.mensagem;
+  const corte = mensagem.indexOf(MARCA_DO_CONTEUDO);
+  if (corte >= 0) mensagem = `${mensagem.slice(0, corte + MARCA_DO_CONTEUDO.length)} …`;
+  mensagem = mensagem
+    .replace(/"[^"]*"|'[^']*'/g, '"…"')
+    .replace(/[A-Za-z0-9_-]{20,}/g, '…')
+    .slice(0, TAMANHO_MAXIMO_DO_RESUMO);
+  return mensagem ? `${partes.nome}: ${mensagem}` : partes.nome;
+}
+
+/**
+ * Nome e mensagem de qualquer coisa com cara de erro. Sem `instanceof Error`:
+ * exceções dos serviços do Google podem não herdar de Error.
+ */
+export function partesDoErro(erro: unknown): { nome: string; mensagem: string } | null {
+  if (typeof erro !== 'object' || erro === null) return null;
+  const { name, message } = erro as { name?: unknown; message?: unknown };
+  if (typeof message !== 'string') return null;
+  return { nome: typeof name === 'string' && name ? name : 'Error', mensagem: message };
+}
+
+function registrarFalha(onde: string, resumo: string) {
+  if (typeof console !== 'undefined') console.error(`Central: falha em ${onde}: ${resumo}`);
+}
+
 function codigoConfere(enviado: unknown, guardado: string | null): boolean {
   if (typeof enviado !== 'string') return false;
   if (guardado === null || guardado.length < TAMANHO_MINIMO_DO_CODIGO) return false;
@@ -55,16 +93,21 @@ export function tratar(pedido: unknown, ambiente: Ambiente): Resposta {
     if (!executar) return recusa('codigo-invalido');
     return { ok: true, dados: executar(dados, ambiente) };
   } catch (erro) {
+    registrarFalha('tratar', resumoDoErro(erro));
     return recusa(erro instanceof Ocupado ? 'ocupado' : 'interno');
   }
 }
 
 export function tratarCorpo(corpo: string | undefined, ambiente: Ambiente): Resposta {
-  if (typeof corpo === 'string' && corpo.length > TAMANHO_MAXIMO_DO_CORPO) return recusa('interno');
+  if (typeof corpo === 'string' && corpo.length > TAMANHO_MAXIMO_DO_CORPO) {
+    registrarFalha('tratarCorpo', `corpo com ${corpo.length} caracteres, acima do limite`);
+    return recusa('interno');
+  }
   let pedido: unknown;
   try {
     pedido = JSON.parse(corpo as string);
-  } catch {
+  } catch (erro) {
+    registrarFalha('tratarCorpo', corpo === undefined ? 'sem corpo' : resumoDoErro(erro));
     return recusa('interno');
   }
   return tratar(pedido, ambiente);

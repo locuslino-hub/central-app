@@ -30,12 +30,15 @@ interface BlobFalso {
   getContentType(): string;
 }
 
+type FormaDaLeitura = 'texto' | 'blob' | 'objeto' | 'excecao-200';
+
 /** Drive avançado (v3) na memória, só com o que o script usa. */
 function driveFalso() {
   const arquivos = new Map<string, ArquivoNoDrive>();
   const listas: string[] = [];
   let proximo = 0;
-  let formaDaLeitura: 'texto' | 'blob' = 'texto';
+  // 'texto' é o que os tipos (@types) prometem; 'excecao-200' é o que o Drive real faz (ver fix 3).
+  let formaDaLeitura: FormaDaLeitura = 'texto';
   const Files = {
     create(recurso: { name: string; mimeType?: string }, midia: BlobFalso) {
       proximo += 1;
@@ -53,9 +56,14 @@ function driveFalso() {
       const arquivo = arquivos.get(id);
       if (!arquivo) throw new Error('File not found');
       if (opcoes?.alt !== 'media') return { id, name: arquivo.name, trashed: arquivo.trashed };
-      return formaDaLeitura === 'texto'
-        ? arquivo.conteudo
-        : { getDataAsString: () => arquivo.conteudo, getContentType: () => 'application/json' };
+      if (formaDaLeitura === 'texto') return arquivo.conteudo;
+      if (formaDaLeitura === 'objeto') return JSON.parse(arquivo.conteudo);
+      if (formaDaLeitura === 'excecao-200') {
+        const erro = new Error(`Response Code: 200. Message: ${arquivo.conteudo}`);
+        erro.name = 'HttpResponseException';
+        throw erro;
+      }
+      return { getDataAsString: () => arquivo.conteudo, getContentType: () => 'application/json' };
     },
     update(recurso: { trashed?: boolean }, id: string, midia?: BlobFalso): unknown {
       const arquivo = arquivos.get(id);
@@ -79,7 +87,7 @@ function driveFalso() {
     arquivos,
     listas,
     servico: { Files },
-    lerComo(forma: 'texto' | 'blob') {
+    lerComo(forma: FormaDaLeitura) {
       formaDaLeitura = forma;
     },
   };
@@ -90,6 +98,7 @@ function carregar() {
   const propriedades = new Map<string, string>();
   const leituras = new Map<string, number>();
   const registros: string[] = [];
+  const erros: string[] = [];
   const drive = driveFalso();
   const cache = { valores: new Map<string, string>(), quebrado: false, putQuebrado: false, prazos: [] as number[] };
   const cacheDoScript = () => {
@@ -146,6 +155,10 @@ function carregar() {
       },
     },
     Logger: { log: (mensagem: unknown) => void registros.push(String(mensagem)) },
+    console: {
+      log: (...partes: unknown[]) => void registros.push(partes.map(String).join(' ')),
+      error: (...partes: unknown[]) => void erros.push(partes.map(String).join(' ')),
+    },
     ContentService: {
       MimeType: { JSON: 'application/json' },
       createTextOutput(texto: string): Saida {
@@ -170,7 +183,7 @@ function carregar() {
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, leituras, registros, postar, drive, trava, cache };
+  return { globais, propriedades, leituras, registros, erros, postar, drive, trava, cache };
 }
 
 // O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
@@ -507,5 +520,105 @@ describe('fix 2: cache do código', () => {
     const { globais, cache } = carregar();
     cache.quebrado = true;
     expect(() => globais.gerarCodigo()).toThrow(/gerarCodigo de novo/);
+  });
+});
+
+// Forma real documentada (issue 149104685 do Google, aberta; confirmada em 2026):
+// no serviço avançado, Files.get(id, {alt: 'media'}) LANÇA HttpResponseException
+// com "Response Code: 200. Message: <conteúdo>", em vez de devolver o conteúdo.
+describe('fix 3: Drive real (alt=media lança com Response Code 200)', () => {
+  it('puxar dá interno e o registro diz por quê, sem conteúdo nem id', () => {
+    const { pedir, drive, erros } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
+    drive.lerComo('excecao-200');
+
+    expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
+    const registrado = erros.join('\n');
+    expect(registrado).toContain('HttpResponseException: Response Code: 200. Message: …');
+    expect(registrado).not.toContain('Segredo');
+    expect(registrado).not.toContain('arquivo-1');
+  });
+
+  it('erro do Drive com id longo na mensagem não leva o id ao registro', () => {
+    const { pedir, drive, erros, propriedades } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    const idLongo = '1AbCdEfGhIjKlMnOpQrStUvWxYz012345';
+    propriedades.set('ID_DO_ARQUIVO_DE_DADOS', idLongo);
+    drive.servico.Files.get = () => {
+      throw new Error(`File not found: ${idLongo}.`);
+    };
+
+    expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
+    expect(erros.join('\n')).toContain('File not found');
+    expect(erros.join('\n')).not.toContain(idLongo);
+  });
+});
+
+describe('fix 3: diagnosticarDrive', () => {
+  function preparado() {
+    const carregado = conectado();
+    carregado.pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
+    const principal = [...carregado.drive.arquivos.values()].find((a) => a.name === 'central-dados.json')!;
+    const diagnosticar = () => {
+      const antes = carregado.registros.length;
+      (carregado.globais as unknown as { diagnosticarDrive(): void }).diagnosticarDrive();
+      return carregado.registros.slice(antes).join('\n');
+    };
+    return { ...carregado, principal, diagnosticar };
+  }
+
+  it('é função global no topo do arquivo, para o dono rodar pelo editor', () => {
+    expect(pacote).toMatch(/^function diagnosticarDrive\(/m);
+  });
+
+  it.each([
+    ['texto', /alt=media devolveu: texto/],
+    ['blob', /alt=media devolveu: Blob/],
+    ['objeto', /alt=media devolveu: objeto/],
+    ['excecao-200', /alt=media lançou HttpResponseException; começa com "Response Code: 200": sim/],
+  ] as const)('com o Drive devolvendo %s, registra tipo, tamanho e se o JSON abre, sem conteúdo nem id', (forma, tipo) => {
+    const { drive, principal, diagnosticar } = preparado();
+    drive.lerComo(forma);
+    const relatorio = diagnosticar();
+
+    expect(relatorio).toMatch(tipo);
+    expect(relatorio).toContain(`${principal.conteudo.length} caracteres`);
+    expect(relatorio).toMatch(/JSON\.parse: ok/);
+    expect(relatorio).not.toContain('Segredo');
+    expect(relatorio).not.toContain(principal.id);
+  });
+
+  it('registra também o resultado do caminho de leitura do app', () => {
+    const { drive, diagnosticar } = preparado();
+    drive.lerComo('excecao-200');
+    expect(diagnosticar()).toMatch(/Leitura do app: falhou \(HttpResponseException: Response Code: 200\. Message: …\)/);
+    drive.lerComo('texto');
+    expect(diagnosticar()).toMatch(/Leitura do app: ok, \d+ caracteres, JSON\.parse: ok/);
+  });
+
+  it('conteúdo que não é JSON aparece como JSON.parse: falhou', () => {
+    const { principal, diagnosticar } = preparado();
+    principal.conteudo = 'Segredo da Marina, não é JSON';
+    const relatorio = diagnosticar();
+    expect(relatorio).toMatch(/JSON\.parse: falhou/);
+    expect(relatorio).not.toContain('Segredo');
+  });
+
+  it('não grava nada no Drive nem muda propriedades', () => {
+    const { drive, principal, propriedades, diagnosticar } = preparado();
+    const conteudo = principal.conteudo;
+    const quantos = drive.arquivos.size;
+    const props = new Map(propriedades);
+    drive.lerComo('excecao-200');
+    diagnosticar();
+    expect(principal.conteudo).toBe(conteudo);
+    expect(drive.arquivos.size).toBe(quantos);
+    expect(propriedades).toEqual(props);
+  });
+
+  it('sem arquivo ainda, diz que ele não existe', () => {
+    const { globais, registros } = carregar();
+    (globais as unknown as { diagnosticarDrive(): void }).diagnosticarDrive();
+    expect(registros.join('\n')).toMatch(/ainda não existe/);
   });
 });

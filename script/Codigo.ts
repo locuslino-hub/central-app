@@ -1,6 +1,6 @@
 // Pontos de entrada do Apps Script. Cada função exportada aqui vira uma função
 // global no pacote (ver build.mjs). O resto fica em api.ts e dados.ts, sem serviços do Google.
-import { novoCodigo, tratarCorpo, type Ambiente } from './api';
+import { novoCodigo, partesDoErro, resumoDoErro, tratarCorpo, type Ambiente } from './api';
 import { NOME_DO_ARQUIVO, Ocupado, type Armazem } from './dados';
 
 const CHAVE_DO_CODIGO = 'CODIGO_DO_APARELHO';
@@ -153,6 +153,79 @@ export function autorizarDrive() {
       ? 'Permissão do Drive aprovada. O arquivo central-dados.json já existe.'
       : 'Permissão do Drive aprovada. O arquivo central-dados.json será criado na primeira sincronia.',
   );
+}
+
+const PREFIXO_DA_EXCECAO = 'Response Code: 200. Message: ';
+
+function jsonAbre(texto: string): string {
+  try {
+    JSON.parse(texto);
+    return 'JSON.parse: ok';
+  } catch {
+    return 'JSON.parse: falhou';
+  }
+}
+
+/** Tipo e tamanho de um texto, e se o JSON abre. Nunca o texto. */
+function medir(texto: string): string {
+  return `${texto.length} caracteres, ${jsonAbre(texto)}`;
+}
+
+function descreverRetorno(bruto: unknown): string {
+  if (typeof bruto === 'string') return `texto, ${medir(bruto)}`;
+  const blob = bruto as { getDataAsString?: () => string } | null;
+  if (blob && typeof blob.getDataAsString === 'function') return `Blob, ${medir(blob.getDataAsString())}`;
+  if (bruto !== null && typeof bruto === 'object') {
+    return `objeto (JSON já interpretado pelo serviço), ${medir(JSON.stringify(bruto))} ao reconverter`;
+  }
+  return bruto === null ? 'null' : typeof bruto;
+}
+
+/**
+ * O dono roda pelo editor quando a sincronia falha. Mostra no registro como o
+ * Drive entrega o arquivo de dados: tipo, tamanho em caracteres e se o JSON
+ * abre. Nunca registra o conteúdo nem ids, e não grava nada.
+ */
+export function diagnosticarDrive() {
+  const linhas = ['Diagnóstico do Drive (sem conteúdo nem ids):'];
+  let id: string | null;
+  try {
+    id = idDoArquivo();
+  } catch (erro) {
+    Logger.log(`${linhas[0]}\nNão consegui localizar o arquivo de dados (${resumoDoErro(erro)}).`);
+    return;
+  }
+  if (id === null) {
+    Logger.log(`${linhas[0]}\nO arquivo ${NOME_DO_ARQUIVO} ainda não existe.`);
+    return;
+  }
+  try {
+    const meta = drive().Files.get(id, { fields: 'size,mimeType' });
+    linhas.push(`Arquivo: existe; tamanho no Drive: ${meta.size ?? '?'} bytes; tipo: ${meta.mimeType ?? '?'}`);
+  } catch (erro) {
+    linhas.push(`Arquivo: metadados falharam (${resumoDoErro(erro)})`);
+  }
+  try {
+    linhas.push(`Files.get alt=media devolveu: ${descreverRetorno(drive().Files.get(id, { alt: 'media' }))}`);
+  } catch (erro) {
+    const partes = partesDoErro(erro);
+    const mensagem = partes?.mensagem ?? '';
+    const nome = partes?.nome ?? typeof erro;
+    const comPrefixo = mensagem.startsWith(PREFIXO_DA_EXCECAO);
+    linhas.push(
+      `Files.get alt=media lançou ${nome}; começa com "Response Code: 200": ${comPrefixo ? 'sim' : 'não'}; ` +
+        (comPrefixo
+          ? `conteúdo na mensagem: ${medir(mensagem.slice(PREFIXO_DA_EXCECAO.length))}`
+          : `mensagem: ${mensagem.length} caracteres`),
+    );
+  }
+  try {
+    const conteudo = armazem.ler();
+    linhas.push(conteudo === null ? 'Leitura do app: sem arquivo' : `Leitura do app: ok, ${medir(conteudo)}`);
+  } catch (erro) {
+    linhas.push(`Leitura do app: falhou (${resumoDoErro(erro)})`);
+  }
+  Logger.log(linhas.join('\n'));
 }
 
 /** O dono roda uma vez pelo editor. Rodar de novo troca o código. */
