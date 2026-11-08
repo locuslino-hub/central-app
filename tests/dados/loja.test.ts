@@ -1,13 +1,20 @@
 import { IDBFactory } from 'fake-indexeddb';
+import { openDB } from 'idb';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { criarDesfazer } from '../../src/dados/desfazer';
 import {
   apagar,
   assinar,
+  dispensarAviso,
+  gravarDoServidor,
   lerConfig,
+  lerDesde,
   listar,
+  listarAvisos,
   listarPendentes,
+  removerPendentes,
   salvar,
+  salvarDesde,
   semear,
 } from '../../src/dados/loja';
 import type { Colecao, Mudanca, ParaSalvar, Tarefa } from '../../src/dados/tipos';
@@ -424,5 +431,118 @@ describe('lerConfig', () => {
 
     expect((await lerConfig()).fimDoDia).toBe('21:30');
     expect(await listar('config')).toHaveLength(1);
+  });
+});
+
+describe('config com id fixo', () => {
+  it.each([
+    ['id qualquer', { id: 'outro', fimDoDia: '21:00' }],
+    ['sem id', { fimDoDia: '21:00' }],
+  ])('%s grava sempre em geral, que lerConfig lê', async (_nome, registro) => {
+    await salvar('config', registro);
+
+    expect((await lerConfig()).fimDoDia).toBe('21:00');
+    expect((await listar('config')).map((c) => c.id)).toEqual(['geral']);
+    expect(await listarPendentes()).toMatchObject([{ colecao: 'config', id: 'geral' }]);
+  });
+});
+
+describe('loja para a sincronia', () => {
+  it('removerPendentes tira só os seq pedidos', async () => {
+    await salvar('tarefas', tarefa('a'));
+    await salvar('tarefas', tarefa('b'));
+    await salvar('tarefas', tarefa('c'));
+    const [um, dois, tres] = await listarPendentes();
+
+    await removerPendentes([um.seq, tres.seq]);
+
+    expect(await listarPendentes()).toEqual([dois]);
+  });
+
+  it('removerPendentes com lista vazia ou seq inexistente não falha', async () => {
+    await salvar('tarefas', tarefa('a'));
+    await removerPendentes([]);
+    await removerPendentes([999]);
+    expect(await listarPendentes()).toHaveLength(1);
+  });
+
+  it('marca desde começa em 0 e guarda o valor salvo', async () => {
+    expect(await lerDesde()).toBe(0);
+    await salvarDesde(1234);
+    expect(await lerDesde()).toBe(1234);
+  });
+
+  it('avisos começam vazios e dispensar tira um aviso', async () => {
+    expect(await listarAvisos()).toEqual([]);
+    await gravarDoServidor([
+      {
+        colecao: 'tarefas',
+        registro: { id: 't1', ...tarefa('Remota'), atualizadoEm: AGORA - 1, aparelho: 'outro' },
+      },
+    ]);
+    await salvar('tarefas', { id: 't1', ...tarefa('Local') });
+    await gravarDoServidor([
+      {
+        colecao: 'tarefas',
+        registro: { id: 't1', ...tarefa('Remota 2'), atualizadoEm: AGORA + 1, aparelho: 'outro' },
+      },
+    ]);
+    const [aviso] = await listarAvisos();
+    expect(aviso).toBeDefined();
+
+    await dispensarAviso(aviso.id);
+    expect(await listarAvisos()).toEqual([]);
+  });
+
+  it('falha no meio da escrita rejeita salvar e apagar, sem rejeição solta e sem meia escrita', async () => {
+    const primeira = await salvar('tarefas', tarefa('Primeira'));
+    const soltas: unknown[] = [];
+    const anotar = (motivo: unknown) => void soltas.push(motivo);
+    process.on('unhandledRejection', anotar);
+    onTestFinished(() => void process.off('unhandledRejection', anotar));
+    // Força o pendente a repetir um seq que já existe: o add falha e a transação aborta.
+    const original = IDBObjectStore.prototype.add;
+    vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function (
+      this: IDBObjectStore,
+      valor: unknown,
+      chave?: IDBValidKey,
+    ) {
+      return original.call(this, { ...(valor as object), seq: 1 }, chave);
+    });
+
+    await expect(salvar('tarefas', tarefa('Segunda'))).rejects.toBeDefined();
+    await expect(apagar('tarefas', primeira.id)).rejects.toBeDefined();
+    await new Promise((pronto) => setTimeout(pronto, 50));
+
+    expect(soltas).toEqual([]);
+    vi.mocked(IDBObjectStore.prototype.add).mockRestore();
+    expect(await listar('tarefas')).toEqual([primeira]);
+    expect(await listarPendentes()).toHaveLength(1);
+  });
+});
+
+describe('migração do banco', () => {
+  it('banco da versão 1 sobe guardando registros e pendentes, ganha avisos e zera desde', async () => {
+    const antigo = await openDB('central-dados', 1, {
+      upgrade(banco) {
+        for (const c of ['salas', 'pessoas', 'tarefas', 'palavras', 'documentos', 'paginas', 'estadosEmail', 'rascunhos', 'config']) {
+          banco.createObjectStore(c, { keyPath: 'id' });
+        }
+        banco.createObjectStore('pendentes', { keyPath: 'seq', autoIncrement: true });
+        banco.createObjectStore('local');
+      },
+    });
+    const guardada = { id: 't1', ...tarefa('Antes da migração'), atualizadoEm: AGORA, aparelho: 'notebook' };
+    await antigo.put('tarefas', guardada);
+    await antigo.add('pendentes', { tipo: 'registro', colecao: 'tarefas', id: 't1' });
+    await antigo.put('local', 'notebook', 'aparelho');
+    await antigo.put('local', 999, 'desde');
+    antigo.close();
+
+    expect(await listar('tarefas')).toEqual([guardada]);
+    expect(await listarPendentes()).toEqual([{ seq: 1, tipo: 'registro', colecao: 'tarefas', id: 't1' }]);
+    expect(await listarAvisos()).toEqual([]);
+    expect(await lerDesde()).toBe(0);
+    expect((await salvar('tarefas', guardada)).aparelho).toBe('notebook');
   });
 });

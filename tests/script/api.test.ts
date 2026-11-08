@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { iguais, novoCodigo, tratar, tratarCorpo, type Ambiente } from '../../script/api';
+import { armazemNaMemoria } from '../apoio/armazem';
 
 const CODIGO = 'codigo-ficticio-de-teste-0123456789abcdef';
 
 function ambienteCom(codigo: string | null): Ambiente {
-  return { lerCodigo: () => codigo };
+  return { lerCodigo: () => codigo, armazem: armazemNaMemoria() };
 }
 
 const ambiente = ambienteCom(CODIGO);
@@ -21,17 +22,20 @@ describe('tratar', () => {
     expect(tratar({ codigo: CODIGO, acao: 'ping' }, ambiente)).toEqual({ ok: true, dados: {} });
   });
 
-  it('responde interno para ação desconhecida', () => {
+  it('recusa ação desconhecida como codigo-invalido, mesmo com o código certo', () => {
     expect(tratar({ codigo: CODIGO, acao: 'nao-existe' }, ambiente)).toEqual({
       ok: false,
-      erro: 'interno',
+      erro: 'codigo-invalido',
     });
   });
 
   it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty'])(
     'não confunde a ação %s com propriedade herdada',
     (acao) => {
-      expect(tratar({ codigo: CODIGO, acao }, ambiente)).toEqual({ ok: false, erro: 'interno' });
+      expect(tratar({ codigo: CODIGO, acao }, ambiente)).toEqual({
+        ok: false,
+        erro: 'codigo-invalido',
+      });
     },
   );
 
@@ -93,6 +97,7 @@ describe('tratar', () => {
 
   it('falha interna não carrega detalhe nenhum', () => {
     const quebrado: Ambiente = {
+      armazem: armazemNaMemoria(),
       lerCodigo() {
         throw new Error('detalhe interno em /caminho/secreto');
       },

@@ -1,5 +1,6 @@
 // Lógica pura do script: nada aqui toca serviços do Google. Tudo o que vem de
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
+import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 
 export type ErroDoScript = 'codigo-invalido' | 'ocupado' | 'interno';
 
@@ -7,6 +8,7 @@ export type Resposta = { ok: true; dados: unknown } | { ok: false; erro: ErroDoS
 
 export interface Ambiente {
   lerCodigo(): string | null;
+  armazem: Armazem;
 }
 
 type Acao = (dados: unknown, ambiente: Ambiente) => unknown;
@@ -14,7 +16,11 @@ type Acao = (dados: unknown, ambiente: Ambiente) => unknown;
 const TAMANHO_MINIMO_DO_CODIGO = 32;
 
 // Map, e não objeto: `acoes.get('constructor')` não acha nada herdado.
-const acoes = new Map<unknown, Acao>([['ping', () => ({})]]);
+const acoes = new Map<unknown, Acao>([
+  ['ping', () => ({})],
+  ['puxar', (dados, ambiente) => puxar(dados, ambiente.armazem)],
+  ['enviar', (dados, ambiente) => enviar(dados, ambiente.armazem)],
+]);
 
 function recusa(erro: ErroDoScript): Resposta {
   return { ok: false, erro };
@@ -45,14 +51,16 @@ export function tratar(pedido: unknown, ambiente: Ambiente): Resposta {
     // O código vem antes da ação: sem ele, ninguém descobre quais ações existem.
     if (!codigoConfere(codigo, ambiente.lerCodigo())) return recusa('codigo-invalido');
     const executar = acoes.get(acao);
-    if (!executar) return recusa('interno');
+    // Ação desconhecida tem a mesma resposta de código errado.
+    if (!executar) return recusa('codigo-invalido');
     return { ok: true, dados: executar(dados, ambiente) };
-  } catch {
-    return recusa('interno');
+  } catch (erro) {
+    return recusa(erro instanceof Ocupado ? 'ocupado' : 'interno');
   }
 }
 
 export function tratarCorpo(corpo: string | undefined, ambiente: Ambiente): Resposta {
+  if (typeof corpo === 'string' && corpo.length > TAMANHO_MAXIMO_DO_CORPO) return recusa('interno');
   let pedido: unknown;
   try {
     pedido = JSON.parse(corpo as string);

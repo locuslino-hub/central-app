@@ -76,6 +76,9 @@ export type Colecoes = {
 
 export type Colecao = keyof Colecoes;
 
+/** Qualquer registro de qualquer coleção. */
+export type Registro = Colecoes[Colecao];
+
 /** O que se entrega a `salvar`: a base é opcional, a loja carimba `atualizadoEm` e `aparelho`. */
 export type ParaSalvar<T extends Base> = Omit<T, keyof Base> & Partial<Base>;
 
@@ -94,4 +97,24 @@ export type PendenteRegistro = {
 
 export type Pendente = PendenteRegistro;
 
-export type Mudanca = { colecao: Colecao; id: string };
+/** `remota`: a escrita veio de outro aparelho, pela sincronia. */
+export type Mudanca = { colecao: Colecao; id: string; remota?: true };
+
+/**
+ * Conflito resolvido pela sincronia: a mesma coisa mudou em dois aparelhos e
+ * venceu a alteração mais recente. A versão que perdeu fica guardada aqui
+ * inteira, para nada sumir. Só existe neste aparelho; não sincroniza.
+ */
+export type Aviso = {
+  /** Dado pelo IndexedDB. */
+  id: number;
+  colecao: Colecao;
+  registroId: string;
+  perdedora: Registro;
+  vencedora: Registro;
+  /** Quando o conflito foi visto neste aparelho. */
+  criadoEm: number;
+};
+
+/** Registro vindo do servidor, já validado pela loja. */
+export type Remoto = { colecao: Colecao; registro: Registro };

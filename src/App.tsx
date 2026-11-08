@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Conectar } from './ui/Conectar';
+import { ProvaSincronia } from './ui/ProvaSincronia';
 
 export function App() {
   const [hash, setHash] = useState(location.hash);
@@ -16,6 +17,7 @@ export function App() {
     <>
       <h1>Central de Comando</h1>
       <a href="#/conectar">Conectar aparelho</a>
+      <ProvaSincronia />
     </>
   );
 }

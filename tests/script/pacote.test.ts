@@ -17,12 +17,96 @@ interface Saida {
   setMimeType(tipo: string): Saida;
 }
 
+interface ArquivoNoDrive {
+  id: string;
+  name: string;
+  mimeType?: string;
+  trashed: boolean;
+  conteudo: string;
+}
+
+interface BlobFalso {
+  getDataAsString(): string;
+  getContentType(): string;
+}
+
+/** Drive avançado (v3) na memória, só com o que o script usa. */
+function driveFalso() {
+  const arquivos = new Map<string, ArquivoNoDrive>();
+  const listas: string[] = [];
+  let proximo = 0;
+  let formaDaLeitura: 'texto' | 'blob' = 'texto';
+  const Files = {
+    create(recurso: { name: string; mimeType?: string }, midia: BlobFalso) {
+      proximo += 1;
+      const arquivo = {
+        id: `arquivo-${proximo}`,
+        name: recurso.name,
+        mimeType: recurso.mimeType,
+        trashed: false,
+        conteudo: midia.getDataAsString(),
+      };
+      arquivos.set(arquivo.id, arquivo);
+      return { id: arquivo.id, name: arquivo.name };
+    },
+    get(id: string, opcoes?: { alt?: string }): unknown {
+      const arquivo = arquivos.get(id);
+      if (!arquivo) throw new Error('File not found');
+      if (opcoes?.alt !== 'media') return { id, name: arquivo.name };
+      return formaDaLeitura === 'texto'
+        ? arquivo.conteudo
+        : { getDataAsString: () => arquivo.conteudo, getContentType: () => 'application/json' };
+    },
+    update(recurso: { trashed?: boolean }, id: string, midia?: BlobFalso): unknown {
+      const arquivo = arquivos.get(id);
+      if (!arquivo) throw new Error('File not found');
+      if (recurso.trashed !== undefined) arquivo.trashed = recurso.trashed;
+      if (midia) arquivo.conteudo = midia.getDataAsString();
+      return { id };
+    },
+    list(opcoes: { q: string }) {
+      listas.push(opcoes.q);
+      const nome = /name = '([^']+)'/.exec(opcoes.q)?.[1];
+      const prefixo = /name contains '([^']+)'/.exec(opcoes.q)?.[1];
+      const files = [...arquivos.values()]
+        .filter((a) => !a.trashed)
+        .filter((a) => (nome ? a.name === nome : prefixo ? a.name.includes(prefixo) : true))
+        .map((a) => ({ id: a.id, name: a.name }));
+      return { files };
+    },
+  };
+  return {
+    arquivos,
+    listas,
+    servico: { Files },
+    lerComo(forma: 'texto' | 'blob') {
+      formaDaLeitura = forma;
+    },
+  };
+}
+
 /** Roda o pacote como o Apps Script roda: sem módulos, serviços como globais. */
 function carregar() {
   const propriedades = new Map<string, string>();
   const registros: string[] = [];
+  const drive = driveFalso();
+  const trava = { livre: true, presa: false, esperas: [] as number[] };
   let uuids = 0;
   const contexto = vm.createContext({
+    Drive: drive.servico,
+    LockService: {
+      getScriptLock: () => ({
+        tryLock(ms: number) {
+          trava.esperas.push(ms);
+          if (!trava.livre) return false;
+          trava.presa = true;
+          return true;
+        },
+        releaseLock() {
+          trava.presa = false;
+        },
+      }),
+    },
     PropertiesService: {
       getScriptProperties: () => ({
         getProperty: (chave: string) => propriedades.get(chave) ?? null,
@@ -30,6 +114,14 @@ function carregar() {
       }),
     },
     Utilities: {
+      newBlob: (dados: string, tipo: string): BlobFalso => ({
+        getDataAsString: () => dados,
+        getContentType: () => tipo,
+      }),
+      formatDate: (data: Date, fuso: string, formato: string) => {
+        if (fuso !== 'Europe/Lisbon' || formato !== 'yyyy-MM-dd') throw new Error('formato inesperado');
+        return data.toISOString().slice(0, 10);
+      },
       getUuid: () => {
         uuids += 1;
         return `${String(uuids).padStart(8, '0')}-1111-4111-8111-111111111111`;
@@ -60,7 +152,156 @@ function carregar() {
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, registros, postar };
+  return { globais, propriedades, registros, postar, drive, trava };
+}
+
+// O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
+const T0 = Date.parse('2026-11-05T12:20:00Z');
+
+function tarefa(id: string, titulo: string, atualizadoEm = T0) {
+  return { colecao: 'tarefas', registro: { id, titulo, atualizadoEm, aparelho: 'notebook' } };
+}
+
+type RespostaDoPacote = { ok: boolean; dados?: any; erro?: string };
+
+/** Pacote carregado, com código gerado, e um atalho para pedir ações. */
+function conectado() {
+  const carregado = carregar();
+  carregado.globais.gerarCodigo();
+  const [codigo] = [...carregado.propriedades.values()];
+  const pedir = (acao: string, dados: unknown) =>
+    carregado.postar(JSON.stringify({ codigo, acao, dados })).resposta as RespostaDoPacote;
+  return { ...carregado, pedir };
+}
+
+describe('autorizarDrive', () => {
+  it('é função global no topo do arquivo, para o dono rodar pelo editor', () => {
+    expect(pacote).toMatch(/^function autorizarDrive\(/m);
+    expect(typeof (carregar().globais as unknown as { autorizarDrive: unknown }).autorizarDrive).toBe(
+      'function',
+    );
+  });
+
+  it('usa o Drive, registra uma mensagem e não cria arquivo nem troca o código', () => {
+    const { globais, propriedades, registros, drive } = carregar();
+    globais.gerarCodigo();
+    const antes = new Map(propriedades);
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+
+    expect(drive.listas.length).toBeGreaterThan(0);
+    expect(drive.arquivos.size).toBe(0);
+    expect(propriedades).toEqual(antes);
+    expect(registros.at(-1)).toMatch(/Permissão do Drive/);
+  });
+
+  it('com o arquivo já criado, não registra o conteúdo nem o id', () => {
+    const { globais, registros, propriedades, postar } = carregar();
+    globais.gerarCodigo();
+    const [codigo] = [...propriedades.values()];
+    postar(JSON.stringify({ codigo, acao: 'enviar', dados: { mudancas: [tarefa('t1', 'Segredo da Marina')] } }));
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Permissão do Drive/);
+    expect(mensagem).not.toContain('Segredo');
+    expect(mensagem).not.toContain('arquivo-1');
+  });
+});
+
+describe('dados no Drive pelo pacote', () => {
+  it('enviar cria central-dados.json em JSON e puxar devolve o enviado', () => {
+    const { pedir, drive } = conectado();
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'Ler com Marina')] })).toEqual({
+      ok: true,
+      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [] },
+    });
+
+    const arquivos = [...drive.arquivos.values()];
+    expect(arquivos.map((a) => [a.name, a.mimeType])).toEqual([
+      ['central-dados.json', 'application/json'],
+    ]);
+    expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'Ler com Marina')]);
+  });
+
+  it('escritas seguintes atualizam o mesmo arquivo, sem procurar de novo', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    const buscas = () => drive.listas.filter((q) => q.includes("name = 'central-dados.json'")).length;
+    const antes = buscas();
+    pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
+
+    expect([...drive.arquivos.values()].filter((a) => a.name === 'central-dados.json')).toHaveLength(1);
+    expect(pedir('puxar', { desde: 0 }).dados.registros).toHaveLength(2);
+    expect(buscas()).toBe(antes);
+  });
+
+  it('acha o arquivo já existente pelo nome quando o id não está guardado', () => {
+    const { pedir, propriedades } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'Aula da Aurora')] });
+    const guardado = [...propriedades].find(([, valor]) => valor === 'arquivo-1');
+    expect(guardado).toBeDefined();
+    propriedades.delete(guardado![0]);
+
+    expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'Aula da Aurora')]);
+  });
+
+  it('lê o conteúdo também quando o Drive devolve um blob', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    drive.lerComo('blob');
+    expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'a')]);
+  });
+
+  it('arquivo guardado que sumiu do Drive dá interno e não cria outro vazio', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    drive.arquivos.clear();
+
+    expect(pedir('enviar', { mudancas: [tarefa('t2', 'b')] })).toEqual({ ok: false, erro: 'interno' });
+    expect(drive.arquivos.size).toBe(0);
+  });
+
+  it('trava ocupada responde ocupado; a trava é sempre solta', () => {
+    const { pedir, trava } = conectado();
+    trava.livre = false;
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'a')] })).toEqual({ ok: false, erro: 'ocupado' });
+
+    trava.livre = true;
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'a')] }).ok).toBe(true);
+    expect(trava.presa).toBe(false);
+    expect(trava.esperas.every((ms) => ms > 0 && ms <= 30_000)).toBe(true);
+  });
+
+  it('solta a trava mesmo quando a gravação falha', () => {
+    const { pedir, trava, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    drive.servico.Files.update = () => {
+      throw new Error('Drive fora do ar');
+    };
+    expect(pedir('enviar', { mudancas: [tarefa('t2', 'b')] })).toEqual({ ok: false, erro: 'interno' });
+    expect(trava.presa).toBe(false);
+  });
+
+  it('cópia diária vira arquivo próprio e cópias com mais de 30 dias vão para a lixeira', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    drive.arquivos.set('velha', {
+      id: 'velha',
+      name: 'central-dados-2026-09-01.json',
+      trashed: false,
+      conteudo: '{}',
+    });
+
+    pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
+
+    const vivos = [...drive.arquivos.values()].filter((a) => !a.trashed).map((a) => a.name);
+    expect(vivos.sort()).toEqual([`central-dados-${hojeEmLisboa()}.json`, 'central-dados.json']);
+    expect(drive.arquivos.get('velha')!.trashed).toBe(true);
+  });
+});
+
+function hojeEmLisboa() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 describe('pacote do Apps Script', () => {
@@ -153,7 +394,13 @@ describe('manifesto publicado', () => {
     });
   });
 
-  it('declara os escopos explicitamente, sem pedir nada além do usado', () => {
-    expect(manifesto().oauthScopes).toEqual([]);
+  it('declara os escopos explicitamente: só arquivos do Drive criados pelo próprio script', () => {
+    expect(manifesto().oauthScopes).toEqual(['https://www.googleapis.com/auth/drive.file']);
+  });
+
+  it('liga o serviço avançado do Drive na v3', () => {
+    expect(manifesto().dependencies).toEqual({
+      enabledAdvancedServices: [{ userSymbol: 'Drive', serviceId: 'drive', version: 'v3' }],
+    });
   });
 });
