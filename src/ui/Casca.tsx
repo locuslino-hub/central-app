@@ -52,7 +52,7 @@ export function Casca() {
         </div>
         <Vista rota={rota} />
       </main>
-      {tela === 'computador' && <PainelDireito />}
+      {tela === 'computador' && <PainelDireito semChat={rota.id === 'chat'} />}
       {tela === 'celular' && <Atalhos rota={rota} hoje={hoje} variante="barra" />}
     </div>
   );

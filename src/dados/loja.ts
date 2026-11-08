@@ -7,6 +7,7 @@ import type {
   Colecoes,
   Config,
   Mudanca,
+  Palavra,
   ParaSalvar,
   Pendente,
   Registro,
@@ -49,6 +50,25 @@ const SALAS_INICIAIS: [id: string, nome: string][] = [
   ['sala-mba', 'MBA'],
   ['sala-pessoal', 'Pessoal'],
   ['sala-casa', 'Casa'],
+];
+
+/**
+ * Palavras que a memória do chat já conhece (Tarefa 8): `termo` como o dono
+ * escreveria, ligado a uma sala. Ids fixos pelo mesmo motivo das salas.
+ */
+export const PALAVRAS_INICIAIS: readonly [id: string, termo: string, salaId: string][] = [
+  ['palavra-banheiro', 'banheiro', 'sala-casa'],
+  ['palavra-cozinha', 'cozinha', 'sala-casa'],
+  ['palavra-lampada', 'lâmpada', 'sala-casa'],
+  ['palavra-chuveiro', 'chuveiro', 'sala-casa'],
+  ['palavra-torneira', 'torneira', 'sala-casa'],
+  ['palavra-projeto', 'projeto', 'sala-investigacao'],
+  ['palavra-tese', 'tese', 'sala-doutoramento'],
+  ['palavra-aula', 'aula', 'sala-aulas'],
+  ['palavra-aulas', 'aulas', 'sala-aulas'],
+  ['palavra-orientacao', 'orientação', 'sala-orientacoes'],
+  ['palavra-aluna', 'aluna', 'sala-orientacoes'],
+  ['palavra-mba', 'MBA', 'sala-mba'],
 ];
 
 const ID_CONFIG = 'geral';
@@ -204,25 +224,41 @@ export async function listarPendentes(): Promise<Pendente[]> {
 }
 
 /**
- * Cria as salas iniciais que faltam. Sementes têm `atualizadoEm` 0 e não entram
- * em `pendentes`: todo aparelho as cria igual, e qualquer edição real vence.
- * Id já existente (mesmo apagado ou renomeado) é deixado como está.
+ * Grava as sementes que faltam numa coleção. Sementes têm `atualizadoEm` 0 e
+ * não entram em `pendentes`: todo aparelho as cria igual, e qualquer edição
+ * real vence. Id já existente (mesmo apagado ou alterado) é deixado como está.
+ * Os ouvintes só ouvem das que foram criadas agora.
  */
-export async function semear(): Promise<void> {
+async function semearColecao<C extends 'salas' | 'palavras'>(colecao: C, sementes: Colecoes[C][]): Promise<void> {
   const criadas = await comBanco(async (banco) => {
-    const tx = escrever(banco, ['salas']);
-    const salas = tx.objectStore('salas');
+    const tx = escrever(banco, [colecao]);
+    const loja = tx.objectStore(colecao);
     const ids: string[] = [];
-    for (const [ordem, [id, nome]] of SALAS_INICIAIS.entries()) {
-      if (await salas.getKey(id)) continue;
-      const sala: Sala = { id, nome, ordem, atualizadoEm: 0, aparelho: SEMENTE };
-      await salas.put(sala);
-      ids.push(id);
+    for (const semente of sementes) {
+      if (await loja.getKey(semente.id)) continue;
+      await loja.put(semente);
+      ids.push(semente.id);
     }
     await tx.done;
     return ids;
   });
-  for (const id of criadas) notificar({ colecao: 'salas', id });
+  for (const id of criadas) notificar({ colecao, id });
+}
+
+/** Cria as salas iniciais que faltam (ver `semearColecao`). */
+export async function semear(): Promise<void> {
+  const salas = SALAS_INICIAIS.map(
+    ([id, nome], ordem): Sala => ({ id, nome, ordem, atualizadoEm: 0, aparelho: SEMENTE }),
+  );
+  await semearColecao('salas', salas);
+}
+
+/** Cria as palavras iniciais da memória do chat que faltam, com a mesma regra das salas. */
+export async function semearPalavras(): Promise<void> {
+  const palavras = PALAVRAS_INICIAIS.map(
+    ([id, termo, salaId]): Palavra => ({ id, termo, salaId, atualizadoEm: 0, aparelho: SEMENTE }),
+  );
+  await semearColecao('palavras', palavras);
 }
 
 /** Ajustes atuais; sem nada salvo, os padrões (fim do dia 20:00). Salvar com `salvar('config', …)`. */

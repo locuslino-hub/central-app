@@ -1,19 +1,19 @@
-// Coluna da direita no computador: Agora e Chat. As telas de verdade chegam nas
-// próximas tarefas; por ora cada painel mostra o que vai morar nele.
+// Coluna da direita no computador: Agora e Chat. O Agora chega numa próxima
+// tarefa; por ora mostra o que vai morar nele. O chat já é o de verdade.
 import { PAINEIS_DIREITOS, type Painel } from '../rotas';
+import { Chat } from './Chat';
 
-const PAINEL: Record<Painel, { titulo: string; texto: string }> = {
-  agora: { titulo: 'Agora', texto: 'A tarefa em foco aparece aqui.' },
-  chat: { titulo: 'Chat', texto: 'Aqui você escreve para a Central, como falaria com uma pessoa.' },
-};
+const TITULO: Record<Painel, string> = { agora: 'Agora', chat: 'Chat' };
 
-export function PainelDireito() {
+/** `semChat`: a página aberta já é o chat (`#/chat`), e o painel não o repete. */
+export function PainelDireito({ semChat = false }: { semChat?: boolean }) {
+  const paineis = PAINEIS_DIREITOS.filter((painel) => !(semChat && painel === 'chat'));
   return (
     <aside class="painel-direito" aria-label="Agora e chat">
-      {PAINEIS_DIREITOS.map((painel) => (
+      {paineis.map((painel) => (
         <section key={painel} class={`cartao-${painel}`} aria-labelledby={`painel-${painel}`}>
-          <h2 id={`painel-${painel}`}>{PAINEL[painel].titulo}</h2>
-          <p class="foco-vazio">{PAINEL[painel].texto}</p>
+          <h2 id={`painel-${painel}`}>{TITULO[painel]}</h2>
+          {painel === 'agora' ? <p class="foco-vazio">A tarefa em foco aparece aqui.</p> : <Chat />}
         </section>
       ))}
     </aside>

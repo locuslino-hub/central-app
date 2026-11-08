@@ -1,7 +1,8 @@
-// A página de cada rota. Só o Painel do dia e Conectar existem; as demais mostram
+// A página de cada rota. Painel do dia, Conectar e Chat existem; as demais mostram
 // o título e dizem que ainda não estão prontas, até a tarefa delas chegar.
 import type { ComponentChildren } from 'preact';
 import type { RotaAtual } from '../rotas';
+import { Chat } from './Chat';
 import { Conectar } from './Conectar';
 import { usePessoa, useSala, useTituloDaAba } from './hooks';
 import { ProvaSincronia } from './ProvaSincronia';
@@ -76,6 +77,14 @@ export function Vista({ rota }: { rota: RotaAtual }) {
       );
     case 'conectar':
       return <ConectarNaCasca titulo={rota.titulo} />;
+    case 'chat':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <div class="painel chat-pagina">
+            <Chat />
+          </div>
+        </Pagina>
+      );
     case 'sala':
       return <Sala key={rota.param} id={rota.param!} />;
     case 'pessoa':
