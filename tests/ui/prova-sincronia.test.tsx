@@ -2,16 +2,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { describe, expect, it, vi } from 'vitest';
 import { gravarDoServidor, listar, listarPendentes, salvar } from '../../src/dados/loja';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
-import { sincronizar } from '../../src/dados/sincronia';
-import { ProvaSincronia, TEXTO_DO_ESTADO } from '../../src/ui/ProvaSincronia';
-import { ErroConexao } from '../../src/conexao/cliente';
+import { ProvaSincronia } from '../../src/ui/ProvaSincronia';
 
 function criar(titulo: string) {
   fireEvent.input(screen.getByLabelText('Nova tarefa'), { target: { value: titulo } });
   fireEvent.click(screen.getByRole('button', { name: 'Criar' }));
 }
 
-describe('ProvaSincronia (temporária, até a Tarefa 9)', () => {
+describe('ProvaSincronia (temporária, até a Tarefa 9; o estado da sincronia agora é testado em casca.test.tsx)', () => {
   it('cria a tarefa na loja, mostra na lista e limpa o campo', async () => {
     render(<ProvaSincronia />);
     criar('Comprar café para Aurora');
@@ -49,18 +47,6 @@ describe('ProvaSincronia (temporária, até a Tarefa 9)', () => {
       },
     ]);
     await screen.findByText('Vinda do celular');
-  });
-
-  it('mostra o estado da sincronia em português', async () => {
-    render(<ProvaSincronia />);
-    await sincronizar({ chamar: () => Promise.reject(new ErroConexao()), esperar: async () => {} });
-    await waitFor(() => expect(screen.getByText(TEXTO_DO_ESTADO['sem-internet'])).toBeTruthy());
-  });
-
-  it('todo estado tem texto', () => {
-    expect(Object.keys(TEXTO_DO_ESTADO).sort()).toEqual(
-      ['atualizado', 'atualizando', 'erro-codigo', 'por-enviar', 'sem-internet'].sort(),
-    );
   });
 
   it('botão e campo têm pelo menos 44 px de altura', () => {

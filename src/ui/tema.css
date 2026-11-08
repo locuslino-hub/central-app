@@ -1,0 +1,126 @@
+/*
+ * Tema Sálvia (Moderno 3). Valores de prototipo-esbocos/temas/paletas.css
+ * (paleta salvia) e tema-6.css. As fontes ficam guardadas no app: a política
+ * de segurança do index.html não deixa carregar de fora.
+ */
+@import '@fontsource-variable/instrument-sans/wght.css';
+@import '@fontsource/instrument-serif/latin-400.css';
+
+:root {
+  --papel: #e8eae3;
+  --folha: #ffffff;
+  --poco: #f3f4ef;
+  --tinta: #262b26;
+  --tinta2: #4a524a;
+  --tinta3: #596159;
+  --linha: #e2e5dc;
+  --fio: #eceee7;
+  --campo: #7e867c;
+  --pinho: #34563f;
+  --pinho2: #284431;
+  --acao: #3f6b4f;
+  --acao2: #2f5340;
+  --alerta: #b93a22;
+  --coral: #e0966f;
+  --coral2: #d27f57;
+  --coral-t: #35170a;
+  --agua: #bcd6b6;
+  --agua2: #a6c8a0;
+  --pessego: #f4e4d8;
+  --cabe: #dcebd8;
+  --ambar: #6f5508;
+  --som-rgb: 80 88 70;
+  --coral-rgb: 224 150 111;
+  --som2-rgb: 130 80 50;
+
+  --ui: 'Instrument Sans Variable', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --titulo: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+
+  --r-g: 30px;
+  --r-m: 20px;
+  --r-p: 14px;
+  --relevo: 0 1px 1px rgb(var(--som-rgb) / 0.05), 0 8px 16px -8px rgb(var(--som-rgb) / 0.13),
+    0 30px 48px -26px rgb(var(--som-rgb) / 0.3);
+  --relevo-p: 0 1px 1px rgb(var(--som-rgb) / 0.05), 0 5px 12px -5px rgb(var(--som-rgb) / 0.16);
+  --poco-in: inset 0 1px 2px rgb(var(--som-rgb) / 0.12);
+
+  /* Toque mínimo: 44 px em tudo que se aperta. */
+  --toque: 44px;
+}
+
+/* Cor de cada sala: --c é o texto e o ponto, --f o fundo suave. */
+.sala-dout { --c: #2f6b4a; --f: #d4e6d2; }
+.sala-inv { --c: #6f5508; --f: #efe6c8; }
+.sala-aulas { --c: #2b5f78; --f: #d6e6ec; }
+.sala-ori { --c: #8f4318; --f: #f6dfcd; }
+.sala-pes { --c: #8a3350; --f: #f2dce0; }
+.sala-mba { --c: #5b4d7e; --f: #e4dfee; }
+.sala-casa { --c: #5e5a4b; --f: #e6e3d8; }
+.sala-outra { --c: var(--tinta2); --f: var(--poco); }
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 15px;
+  background: var(--papel);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--papel);
+  color: var(--tinta);
+  font: 400 1rem/1.5 var(--ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Telas grandes: tudo cresce junto (as medidas do app são em rem). */
+@media (min-width: 1700px) {
+  html { font-size: 17px; }
+}
+@media (min-width: 2200px) {
+  html { font-size: 20px; }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--campo) transparent;
+}
+
+:focus-visible {
+  outline: 2.5px solid var(--acao);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--acao);
+}
+
+h1,
+h2 {
+  font-weight: 400;
+}
+
+.so-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

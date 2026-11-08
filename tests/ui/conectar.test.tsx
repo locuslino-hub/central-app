@@ -230,6 +230,8 @@ describe('rota da tela', () => {
   });
 
   it('sem esse endereço, a tela fica fechada e há um link para ela', () => {
+    // Computador: o menu completo tem o link (no celular e no tablet ele fica no Mais).
+    Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true, writable: true });
     render(<App />);
     expect(screen.queryByRole('button', { name: 'Testar e salvar' })).toBeNull();
     const link = screen.getByRole<HTMLAnchorElement>('link', { name: 'Conectar aparelho' });

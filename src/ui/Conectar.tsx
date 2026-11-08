@@ -77,7 +77,7 @@ export function Conectar() {
   }
 
   return (
-    <main>
+    <section class="painel conectar">
       <h1>Conectar aparelho</h1>
       <form
         onSubmit={(evento) => {
@@ -138,6 +138,6 @@ export function Conectar() {
           Substituir conexão
         </button>
       )}
-    </main>
+    </section>
   );
 }

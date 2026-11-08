@@ -28,11 +28,11 @@ test('conecta o aparelho e guarda a conexão no navegador', async ({ page }) => 
   await page.getByLabel('URL').fill(URL_FICTICIA);
   await page.getByLabel('Código do aparelho').fill('codigo-errado-ficticio-0123456789abcdef');
   await page.getByRole('button', { name: 'Testar e salvar' }).click();
-  await expect(page.getByRole('status')).toContainText('incorreto');
+  await expect(page.locator('.conectar').getByRole('status')).toContainText('incorreto');
 
   await page.getByLabel('Código do aparelho').fill(CODIGO);
   await page.getByRole('button', { name: 'Testar e salvar' }).click();
-  await expect(page.getByRole('status')).toHaveText(/^Conectado em \d+,\d s$/);
+  await expect(page.locator('.conectar').getByRole('status')).toHaveText(/^Conectado em \d+,\d s$/);
 
   const salvo = await page.evaluate(
     () =>

@@ -13,6 +13,8 @@
     "script:publicar": "npm run script:build && node script/publicar.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/instrument-sans": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
     "idb": "^8.0.4",
     "preact": "^11.1.1"
   },

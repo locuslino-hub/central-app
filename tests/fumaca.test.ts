@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { App } from '../src/App';
 
 describe('fumaça', () => {
-  it('App renderiza o texto Central', () => {
+  it('App renderiza a casca com o título da página', () => {
     render(h(App, null));
-    expect(screen.getByText(/Central/)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Painel do dia' })).toBeTruthy();
   });
 
   it('testes rodam no fuso Europe/Lisbon', () => {
