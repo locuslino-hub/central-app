@@ -280,12 +280,17 @@ function objeto(valor: unknown): valor is Record<string, unknown> {
 /**
  * Aceita só o que o script também aceitaria (script/colecoes.ts): coleção
  * conhecida, ids e campos com a forma certa, carimbo até 10 min no futuro.
+ * O "agora" é o maior entre este relógio e o do servidor: aparelho com
+ * relógio atrasado não descarta o que o servidor já aceitou.
  */
-function validarRemoto(valor: unknown): Remoto[] {
-  if (!objeto(valor)) return [];
-  const { colecao, registro } = valor;
-  if (!colecaoConhecida(colecao) || !registroValido(colecao, registro, Date.now())) return [];
-  return [{ colecao, registro: registro as Registro }];
+function validadorRemoto(relogioDoServidor: number) {
+  const agora = Math.max(Date.now(), Number.isFinite(relogioDoServidor) ? relogioDoServidor : 0);
+  return (valor: unknown): Remoto[] => {
+    if (!objeto(valor)) return [];
+    const { colecao, registro } = valor;
+    if (!colecaoConhecida(colecao) || !registroValido(colecao, registro, agora)) return [];
+    return [{ colecao, registro: registro as Registro }];
+  };
 }
 
 /**
@@ -305,8 +310,8 @@ function houveConflito(perdedora: Registro, vencedora: Registro): boolean {
  * pendentes desse registro saem: a versão local perdeu e não deve ser enviada.
  * Itens malformados ou de coleção desconhecida são ignorados.
  */
-export async function gravarDoServidor(itens: readonly unknown[]): Promise<void> {
-  const remotos = itens.flatMap(validarRemoto);
+export async function gravarDoServidor(itens: readonly unknown[], relogioDoServidor = 0): Promise<void> {
+  const remotos = itens.flatMap(validadorRemoto(relogioDoServidor));
   if (remotos.length === 0) return;
   const colecoes = [...new Set(remotos.map((remoto) => remoto.colecao))];
 
@@ -371,29 +376,43 @@ async function aparar(tx: Escrita) {
 }
 
 /**
- * Versões de outro aparelho que o envio deste sobrescreveu no servidor (a
- * corrida entre puxar e enviar). Cada uma vira aviso, com a versão local
- * atual como vencedora. Itens malformados são ignorados.
+ * Fecha um lote enviado, numa escrita só: as versões de outro aparelho que o
+ * envio sobrescreveu no servidor (a corrida entre puxar e enviar) viram
+ * avisos, com a versão local atual como vencedora, e os pendentes aceitos
+ * saem da fila. Se algo falha, nada muda: os pendentes ficam para a próxima.
  */
-export async function guardarSubstituidas(itens: readonly unknown[]): Promise<void> {
-  const remotos = itens.flatMap(validarRemoto).filter(({ registro }) => registro.atualizadoEm > 0);
-  if (remotos.length === 0) return;
+export async function concluirEnvio(
+  substituidas: readonly unknown[],
+  seqsAceitos: readonly number[],
+  relogioDoServidor = 0,
+): Promise<void> {
+  const remotos = substituidas
+    .flatMap(validadorRemoto(relogioDoServidor))
+    .filter(({ registro }) => registro.atualizadoEm > 0);
+  if (remotos.length === 0 && seqsAceitos.length === 0) return;
   const colecoes = [...new Set(remotos.map((remoto) => remoto.colecao))];
   await comBanco(async (banco) => {
-    const tx = escrever(banco, [...colecoes, AVISOS]);
-    for (const { colecao, registro: perdedora } of remotos) {
-      const vencedora: Registro | undefined = await tx.objectStore(colecao).get(perdedora.id);
-      if (!vencedora) continue;
-      const aviso: Omit<Aviso, 'id'> = {
-        colecao,
-        registroId: perdedora.id,
-        perdedora,
-        vencedora,
-        criadoEm: Date.now(),
-      };
-      await tx.objectStore(AVISOS).add(aviso);
+    const tx = escrever(banco, [...colecoes, AVISOS, PENDENTES]);
+    try {
+      for (const seq of seqsAceitos) await tx.objectStore(PENDENTES).delete(seq);
+      for (const { colecao, registro: perdedora } of remotos) {
+        const vencedora: Registro | undefined = await tx.objectStore(colecao).get(perdedora.id);
+        if (!vencedora) continue;
+        const aviso: Omit<Aviso, 'id'> = {
+          colecao,
+          registroId: perdedora.id,
+          perdedora,
+          vencedora,
+          criadoEm: Date.now(),
+        };
+        await tx.objectStore(AVISOS).add(aviso);
+      }
+      await aparar(tx);
+    } catch (erro) {
+      // Erro síncrono não aborta sozinho: desfaz o que já foi pedido.
+      tx.abort();
+      throw erro;
     }
-    await aparar(tx);
     await tx.done;
   });
 }

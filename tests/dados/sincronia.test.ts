@@ -5,6 +5,7 @@ import { ErroConexao, ErroScript } from '../../src/conexao/cliente';
 import {
   apagar,
   assinar,
+  concluirEnvio,
   gravarDoServidor,
   listar,
   listarAvisos,
@@ -831,5 +832,173 @@ describe('fix 1: avisos limitados', () => {
     expect(avisos).toHaveLength(200);
     expect(avisos[0].registroId).toBe('t5');
     expect(avisos.at(-1)!.registroId).toBe('t204');
+  });
+});
+
+describe('fix 2: relógios diferentes (notebook +9 min, celular -2 min)', () => {
+  // O relógio real é AGORA; o servidor marca o tempo real, cada aparelho o seu.
+  const notebookAdiantado = () => horario(9);
+  const celularAtrasado = () => horario(-2);
+
+  beforeEach(() => {
+    servidor.armazem.agora = () => AGORA;
+  });
+
+  it('o celular atrasado recebe os registros do notebook adiantado, lápides incluídas', async () => {
+    no(notebook);
+    notebookAdiantado();
+    const fica = await salvar('tarefas', tarefa('Fica'));
+    const sai = await salvar('tarefas', tarefa('Sai'));
+    await apagar('tarefas', sai.id);
+    expect(await sincronizarAqui()).toBe('atualizado');
+
+    no(celular);
+    celularAtrasado();
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect((await listar('tarefas')).map((t) => t.id)).toEqual([fica.id]);
+    expect(await listar('tarefas', { comApagados: true })).toContainEqual(
+      expect.objectContaining({ id: sai.id, apagado: true }),
+    );
+  });
+
+  it('conflito devolvido no envio é resolvido mesmo com o relógio atrasado', async () => {
+    no(notebook);
+    notebookAdiantado();
+    const criada = await salvar('tarefas', tarefa('Reunião com Prof. Souza'));
+    await sincronizarAqui();
+    no(celular);
+    celularAtrasado();
+    await sincronizarAqui();
+    await salvar('tarefas', { ...criada, titulo: 'Reunião (celular)' });
+
+    // Entre o puxar e o enviar do celular, o notebook grava uma versão mais nova.
+    servidor.aoResponder((acao) => {
+      if (acao !== 'puxar') return;
+      servidor.aoResponder(undefined);
+      enviar(
+        {
+          mudancas: [
+            {
+              colecao: 'tarefas',
+              registro: { ...criada, titulo: 'Reunião (notebook)', atualizadoEm: criada.atualizadoEm + 5, aparelho: criada.aparelho },
+            },
+          ],
+        },
+        servidor.armazem,
+      );
+    });
+    expect(await sincronizarAqui()).toBe('atualizado');
+
+    expect((await listar('tarefas')).map((t) => t.titulo)).toEqual(['Reunião (notebook)']);
+    expect(await listarPendentes()).toEqual([]);
+    expect(await listarAvisos()).toMatchObject([{ perdedora: { titulo: 'Reunião (celular)' } }]);
+  });
+
+  it('substituida vinda do aparelho adiantado vira aviso no celular atrasado', async () => {
+    no(notebook);
+    notebookAdiantado();
+    const criada = await salvar('tarefas', tarefa('Aula da Aurora'));
+    await sincronizarAqui();
+    no(celular);
+    celularAtrasado();
+    await sincronizarAqui();
+    // Três edições: o carimbo do celular sobe a partir do que ele recebeu.
+    let local = await salvar('tarefas', { ...criada, titulo: 'Aula (celular 1)' });
+    local = await salvar('tarefas', { ...local, titulo: 'Aula (celular 2)' });
+    local = await salvar('tarefas', { ...local, titulo: 'Aula (celular 3)' });
+
+    servidor.aoResponder((acao) => {
+      if (acao !== 'puxar') return;
+      servidor.aoResponder(undefined);
+      enviar(
+        {
+          mudancas: [
+            {
+              colecao: 'tarefas',
+              registro: { ...criada, titulo: 'Aula (notebook)', atualizadoEm: criada.atualizadoEm + 1, aparelho: criada.aparelho },
+            },
+          ],
+        },
+        servidor.armazem,
+      );
+    });
+    expect(await sincronizarAqui()).toBe('atualizado');
+
+    expect((await listar('tarefas')).map((t) => t.titulo)).toEqual(['Aula (celular 3)']);
+    expect(await listarAvisos()).toMatchObject([
+      { perdedora: { titulo: 'Aula (notebook)' }, vencedora: { titulo: 'Aula (celular 3)' } },
+    ]);
+  });
+});
+
+describe('fix 2: avisos de substituidas e pendentes juntos', () => {
+  it('se gravar o aviso falha, os pendentes ficam e nenhum aviso fica pela metade', async () => {
+    const criada = await tarefaNosDois('Orientação com Renata');
+    horario(2);
+    no(celular);
+    await salvar('tarefas', { ...criada, titulo: 'Orientação (celular)' });
+    servidor.aoResponder((acao) => {
+      if (acao !== 'puxar') return;
+      servidor.aoResponder(undefined);
+      enviar(
+        {
+          mudancas: [
+            {
+              colecao: 'tarefas',
+              registro: { ...criada, titulo: 'Orientação (notebook)', atualizadoEm: AGORA + MINUTO, aparelho: 'outro-aparelho' },
+            },
+          ],
+        },
+        servidor.armazem,
+      );
+    });
+    const antes = await listarPendentes();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = IDBObjectStore.prototype.add;
+    vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function (
+      this: IDBObjectStore,
+      valor: unknown,
+      chave?: IDBValidKey,
+    ) {
+      if (this.name === 'avisos') throw new Error('disco cheio');
+      return original.call(this, valor, chave);
+    });
+    horario(3);
+
+    expect(await sincronizarAqui()).not.toBe('atualizado');
+    vi.mocked(IDBObjectStore.prototype.add).mockRestore();
+    expect(await listarPendentes()).toEqual(antes);
+    expect(await listarAvisos()).toEqual([]);
+  });
+
+  it('concluirEnvio também deixa só os 200 avisos mais novos', async () => {
+    no(notebook);
+    for (let i = 0; i < 205; i++) await salvar('tarefas', { id: `t${i}`, ...tarefa(`Local ${i}`) });
+    await concluirEnvio(
+      Array.from({ length: 205 }, (_, i) => ({
+        colecao: 'tarefas',
+        registro: { id: `t${i}`, ...tarefa(`Substituída ${i}`), atualizadoEm: AGORA - MINUTO, aparelho: 'outro' },
+      })),
+      [],
+      AGORA,
+    );
+    const avisos = await listarAvisos();
+    expect(avisos).toHaveLength(200);
+    expect(avisos[0].registroId).toBe('t5');
+    expect(avisos.at(-1)!.registroId).toBe('t204');
+  });
+
+  it('concluirEnvio tira os pendentes pedidos e grava os avisos na mesma escrita', async () => {
+    no(notebook);
+    const a = await salvar('tarefas', { id: 'a', ...tarefa('A') });
+    await salvar('tarefas', { id: 'b', ...tarefa('B') });
+    const [pa] = await listarPendentes();
+    await concluirEnvio(
+      [{ colecao: 'tarefas', registro: { ...a, titulo: 'A de outro', atualizadoEm: AGORA - MINUTO, aparelho: 'outro' } }],
+      [pa.seq],
+      AGORA,
+    );
+    expect((await listarPendentes()).map((p) => p.id)).toEqual(['b']);
+    expect(await listarAvisos()).toMatchObject([{ registroId: 'a', perdedora: { titulo: 'A de outro' } }]);
   });
 });

@@ -91,12 +91,16 @@ function carregar() {
   const leituras = new Map<string, number>();
   const registros: string[] = [];
   const drive = driveFalso();
-  const cache = { valores: new Map<string, string>(), quebrado: false };
+  const cache = { valores: new Map<string, string>(), quebrado: false, putQuebrado: false, prazos: [] as number[] };
   const cacheDoScript = () => {
     if (cache.quebrado) throw new Error('CacheService fora do ar');
     return {
       get: (chave: string) => cache.valores.get(chave) ?? null,
-      put: (chave: string, valor: string, _segundos?: number) => void cache.valores.set(chave, valor),
+      put: (chave: string, valor: string, segundos?: number) => {
+        if (cache.putQuebrado) throw new Error('Cache cheio');
+        cache.prazos.push(segundos ?? -1);
+        cache.valores.set(chave, valor);
+      },
       remove: (chave: string) => void cache.valores.delete(chave),
     };
   };
@@ -227,7 +231,7 @@ describe('dados no Drive pelo pacote', () => {
     const { pedir, drive } = conectado();
     expect(pedir('enviar', { mudancas: [tarefa('t1', 'Ler com Marina')] })).toEqual({
       ok: true,
-      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [], recusadas: [], substituidas: [] },
+      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [], recusadas: [], substituidas: [], agora: expect.any(Number) },
     });
 
     const arquivos = [...drive.arquivos.values()];
@@ -481,5 +485,27 @@ describe('código do aparelho em cache', () => {
     const { postar, cache } = carregar();
     postar(JSON.stringify({ codigo: 'x'.repeat(40), acao: 'ping' }));
     expect(cache.valores.size).toBe(0);
+  });
+});
+
+describe('fix 2: cache do código', () => {
+  it('o código fica no cache por 10 min', () => {
+    const { pedir, cache } = conectado();
+    pedir('ping', {});
+    expect(cache.prazos.length).toBeGreaterThan(0);
+    expect(cache.prazos.every((segundos) => segundos === 600)).toBe(true);
+  });
+
+  it('gerarCodigo falha (lança) se não conseguir pôr o código novo no cache, sem registrar o código', () => {
+    const { globais, cache, registros } = carregar();
+    cache.putQuebrado = true;
+    expect(() => globais.gerarCodigo()).toThrow(/gerarCodigo de novo/);
+    expect(registros.join('\n')).not.toMatch(/Código do aparelho/);
+  });
+
+  it('gerarCodigo falha se o CacheService estiver fora do ar', () => {
+    const { globais, cache } = carregar();
+    cache.quebrado = true;
+    expect(() => globais.gerarCodigo()).toThrow(/gerarCodigo de novo/);
   });
 });

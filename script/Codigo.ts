@@ -9,8 +9,8 @@ const CHAVE_DA_COPIA = 'ULTIMA_COPIA';
 const FUSO = 'Europe/Lisbon';
 const TIPO_JSON = 'application/json';
 const ESPERA_DA_TRAVA_MS = 10_000;
-/** O máximo do CacheService: 6 h. */
-const SEGUNDOS_NO_CACHE = 6 * 60 * 60;
+/** 10 min: código trocado fora de gerarCodigo (editado à mão) deixa de valer logo. */
+const SEGUNDOS_NO_CACHE = 10 * 60;
 
 const propriedades = () => PropertiesService.getScriptProperties();
 
@@ -159,13 +159,14 @@ export function autorizarDrive() {
 export function gerarCodigo() {
   const codigo = novoCodigo(() => Utilities.getUuid());
   propriedades().setProperty(CHAVE_DO_CODIGO, codigo);
-  // O cache passa a ter o código novo: o antigo para de valer na hora.
+  // O cache passa a ter o código novo: o antigo para de valer na hora. Se o
+  // cache não aceitar, falha alto: o antigo valeria por até 10 min sem o dono saber.
   try {
     const cache = cacheDoScript();
     if (!cache) throw new Error('sem cache');
     cache.put(CHAVE_DO_CODIGO, codigo, SEGUNDOS_NO_CACHE);
   } catch {
-    Logger.log('Aviso: o cache não respondeu; o código antigo pode valer por até 6 horas.');
+    throw new Error('O cache do script não respondeu. Espere um minuto e rode gerarCodigo de novo.');
   }
   Logger.log('Código do aparelho (copie e cole na tela Conectar aparelho): ' + codigo);
 }

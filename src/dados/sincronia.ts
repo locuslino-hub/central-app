@@ -5,8 +5,8 @@ import { TAMANHO_MAXIMO_DO_CORPO } from '../../script/dados';
 import { ErroConexao, ErroScript, chamar as chamarScript } from '../conexao/cliente';
 import {
   assinar as assinarLoja,
+  concluirEnvio,
   gravarDoServidor,
-  guardarSubstituidas,
   lerDesde,
   lerRegistros,
   listarPendentes,
@@ -40,6 +40,8 @@ type RespostaEnviar = {
   /** Forma inválida para o script: ficam na fila (sem tela ainda; Tarefa 6). */
   recusadas: unknown[];
   substituidas: unknown[];
+  /** Relógio do servidor, para conferir carimbos do futuro (0 se não veio). */
+  agora: number;
 };
 
 // ---- Estado, para a tela (Tarefa 6) ----
@@ -103,7 +105,12 @@ function respostaEnviar(valor: unknown): RespostaEnviar {
     throw new ErroScript('interno');
   }
   const lista = (valor: unknown) => (Array.isArray(valor) ? valor : []);
-  return { ...resposta, recusadas: lista(resposta.recusadas), substituidas: lista(resposta.substituidas) };
+  return {
+    ...resposta,
+    recusadas: lista(resposta.recusadas),
+    substituidas: lista(resposta.substituidas),
+    agora: Number.isFinite(resposta.agora) ? resposta.agora : 0,
+  };
 }
 
 async function puxar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
@@ -114,7 +121,8 @@ async function puxar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
   // Carimbo do servidor menor que o já visto: o arquivo voltou no tempo (cópia
   // restaurada). Puxa tudo; o que este aparelho tem de mais novo volta à fila.
   if (resposta.agora < desde) resposta = await pedir(0);
-  await gravarDoServidor(resposta.registros);
+  // `agora` do servidor como relógio: este aparelho pode estar atrasado.
+  await gravarDoServidor(resposta.registros, resposta.agora);
   await salvarDesde(resposta.agora);
 }
 
@@ -174,14 +182,16 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
       async () => respostaEnviar(await chamar('enviar', { desde, mudancas })),
       esperar,
     );
-    await guardarSubstituidas(resposta.substituidas);
     // Conflitos: o servidor tinha versão mais nova. A mesclagem grava a dele,
     // guarda a nossa em avisos e tira os pendentes desse registro.
-    await gravarDoServidor(resposta.conflitos);
+    await gravarDoServidor(resposta.conflitos, resposta.agora);
     const aceitas = new Set(resposta.aceitas.map(({ colecao, id }) => chaveDe(colecao, id)));
     // Só os seq lidos antes do envio: escrita feita durante o envio fica na fila.
-    await removerPendentes(
+    // Avisos das substituídas e saída dos pendentes vão juntos (uma escrita).
+    await concluirEnvio(
+      resposta.substituidas,
       lote.filter(({ colecao, id }) => aceitas.has(chaveDe(colecao, id))).flatMap(({ seqs }) => seqs),
+      resposta.agora,
     );
   }
 }

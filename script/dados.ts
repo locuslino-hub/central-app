@@ -41,6 +41,11 @@ export type RespostaEnviar = {
   recusadas: Chave[];
   /** Versões de outro aparelho, recebidas depois do `desde` do cliente, que o envio sobrescreveu. */
   substituidas: Item[];
+  /**
+   * Relógio do servidor, nunca menor que o maior carimbo do arquivo. O app
+   * confere "até 10 min no futuro" contra ele, não só contra o próprio relógio.
+   */
+  agora: number;
 };
 
 export interface Armazem {
@@ -142,7 +147,7 @@ export function enviar(dados: unknown, armazem: Armazem): RespostaEnviar {
       recusadas.push({ colecao, id: registro.id });
     }
   }
-  const resposta: RespostaEnviar = { aceitas: [], conflitos: [], recusadas, substituidas: [] };
+  const resposta: RespostaEnviar = { aceitas: [], conflitos: [], recusadas, substituidas: [], agora };
   if (validas.length === 0) return resposta;
 
   return armazem.comTrava(() => {
@@ -195,6 +200,7 @@ export function enviar(dados: unknown, armazem: Armazem): RespostaEnviar {
       if (conteudoAntes !== null) copiaDoDia(armazem, conteudoAntes);
       armazem.gravar(conteudo);
     }
+    resposta.agora = Math.max(armazem.agora(), arquivo.ultimo);
     return resposta;
   });
 }

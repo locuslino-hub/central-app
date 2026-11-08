@@ -122,6 +122,7 @@ describe('enviar', () => {
       conflitos: [],
       recusadas: [],
       substituidas: [],
+      agora: expect.any(Number),
     });
     expect(armazem.gravacoes).toHaveLength(1);
     expect(armazem.gravacoes[0].naTrava).toBe(true);
@@ -138,6 +139,7 @@ describe('enviar', () => {
       conflitos: [item(nova)],
       recusadas: [],
       substituidas: [],
+      agora: expect.any(Number),
     });
     expect(puxar({ desde: 0 }, armazem).registros).toEqual([item(nova)]);
   });
@@ -184,6 +186,7 @@ describe('enviar', () => {
       conflitos: [],
       recusadas: [],
       substituidas: [],
+      agora: expect.any(Number),
     });
     expect(armazem.gravacoes).toEqual([]);
   });
@@ -254,7 +257,7 @@ describe('ações pelo tratar', () => {
     const registro = tarefa('t1', 'Aula da Aurora', T0);
     expect(pedir(armazem, 'enviar', { mudancas: [item(registro)] })).toEqual({
       ok: true,
-      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [], recusadas: [], substituidas: [] },
+      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [], recusadas: [], substituidas: [], agora: expect.any(Number) },
     });
     expect(pedir(armazem, 'puxar', { desde: 0 })).toMatchObject({
       ok: true,
@@ -376,6 +379,7 @@ describe('ações pelo tratar', () => {
         conflitos: [],
         recusadas: [{ colecao: 'tarefas', id: 'mal formado' }],
         substituidas: [],
+        agora: expect.any(Number),
       },
     });
     expect(puxar({ desde: 0 }, armazem).registros).toEqual([item(tarefa('t1', 'a', T0))]);
@@ -544,5 +548,24 @@ describe('substituidas (corrida entre puxar e enviar)', () => {
     const armazem = servidorCom(tarefa('t1', 'celular', T0, 'celular'));
     const resposta = enviar({ mudancas: [item(tarefa('t1', 'notebook', T0 + MINUTO))] }, armazem);
     expect(resposta.substituidas).toEqual([]);
+  });
+});
+
+describe('fix 2: enviar devolve o relógio do servidor', () => {
+  it('agora de enviar é o relógio do servidor e nunca menor que o maior carimbo', () => {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
+    const { agora: ultimo } = puxar({ desde: 0 }, armazem);
+    armazem.relogio -= 5 * MINUTO;
+
+    const resposta = enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem);
+    expect(resposta.agora).toBeGreaterThanOrEqual(ultimo + 1);
+    armazem.relogio += 60 * MINUTO;
+    expect(enviar({ mudancas: [item(tarefa('t3', 'c', T0))] }, armazem).agora).toBe(armazem.relogio);
+  });
+
+  it('sem nada válido para gravar, agora é o relógio do servidor', () => {
+    const armazem = armazemNaMemoria();
+    expect(enviar({ mudancas: [] }, armazem).agora).toBe(armazem.relogio);
   });
 });
