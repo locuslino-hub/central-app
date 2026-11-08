@@ -30,15 +30,12 @@ interface BlobFalso {
   getContentType(): string;
 }
 
-type FormaDaLeitura = 'texto' | 'blob' | 'objeto' | 'excecao-200';
-
 /** Drive avançado (v3) na memória, só com o que o script usa. */
 function driveFalso() {
   const arquivos = new Map<string, ArquivoNoDrive>();
   const listas: string[] = [];
   let proximo = 0;
-  // 'texto' é o que os tipos (@types) prometem; 'excecao-200' é o que o Drive real faz (ver fix 3).
-  let formaDaLeitura: FormaDaLeitura = 'texto';
+  let atualizacoes = 0;
   const Files = {
     create(recurso: { name: string; mimeType?: string }, midia: BlobFalso) {
       proximo += 1;
@@ -55,21 +52,22 @@ function driveFalso() {
     get(id: string, opcoes?: { alt?: string }): unknown {
       const arquivo = arquivos.get(id);
       if (!arquivo) throw new Error('File not found');
-      if (opcoes?.alt !== 'media') return { id, name: arquivo.name, trashed: arquivo.trashed };
-      if (formaDaLeitura === 'texto') return arquivo.conteudo;
-      if (formaDaLeitura === 'objeto') return JSON.parse(arquivo.conteudo);
-      if (formaDaLeitura === 'excecao-200') {
-        const erro = new Error(`Response Code: 200. Message: ${arquivo.conteudo}`);
-        erro.name = 'HttpResponseException';
-        throw erro;
+      if (opcoes?.alt !== 'media') {
+        return { id, name: arquivo.name, trashed: arquivo.trashed, size: String(arquivo.conteudo.length), mimeType: arquivo.mimeType };
       }
-      return { getDataAsString: () => arquivo.conteudo, getContentType: () => 'application/json' };
+      // Como o Drive real (issue 149104685): alt=media no serviço avançado lança.
+      const erro = new Error(`Response Code: 200. Message: ${arquivo.conteudo}`);
+      erro.name = 'HttpResponseException';
+      throw erro;
     },
     update(recurso: { trashed?: boolean }, id: string, midia?: BlobFalso): unknown {
       const arquivo = arquivos.get(id);
       if (!arquivo) throw new Error('File not found');
       if (recurso.trashed !== undefined) arquivo.trashed = recurso.trashed;
-      if (midia) arquivo.conteudo = midia.getDataAsString();
+      if (midia) {
+        atualizacoes += 1;
+        arquivo.conteudo = midia.getDataAsString();
+      }
       return { id };
     },
     list(opcoes: { q: string }) {
@@ -87,10 +85,54 @@ function driveFalso() {
     arquivos,
     listas,
     servico: { Files },
-    lerComo(forma: FormaDaLeitura) {
-      formaDaLeitura = forma;
+    get atualizacoes() {
+      return atualizacoes;
     },
   };
+}
+
+const TOKEN_FICTICIO = 'token-ficticio-ya29-0123456789abcdefghijklmnopqrstuvwxyz';
+
+interface ChamadaDeRede {
+  url: string;
+  params: { method?: string; muteHttpExceptions?: boolean; headers?: Record<string, string> };
+  charset?: string;
+}
+
+/** API REST do Drive (GET files/{id}?alt=media) por UrlFetchApp, sobre o mesmo Drive falso. */
+function redeFalsa(drive: ReturnType<typeof driveFalso>) {
+  const rede = {
+    chamadas: [] as ChamadaDeRede[],
+    tokens: 0,
+    status: 200,
+    corpoDoErro: '',
+    falharCom: '',
+    ScriptApp: {
+      getOAuthToken() {
+        rede.tokens += 1;
+        return TOKEN_FICTICIO;
+      },
+    },
+    UrlFetchApp: {
+      fetch(url: string, params: ChamadaDeRede['params']) {
+        const chamada: ChamadaDeRede = { url, params };
+        rede.chamadas.push(chamada);
+        if (rede.falharCom) throw new Error(rede.falharCom);
+        const casado = /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/([^?]+)\?alt=media$/.exec(url);
+        const autorizado = params?.headers?.Authorization === `Bearer ${TOKEN_FICTICIO}`;
+        const arquivo = casado ? drive.arquivos.get(decodeURIComponent(casado[1])) : undefined;
+        const status = rede.status !== 200 ? rede.status : !autorizado ? 401 : !arquivo ? 404 : 200;
+        return {
+          getResponseCode: () => status,
+          getContentText(charset?: string) {
+            chamada.charset = charset;
+            return status === 200 ? arquivo!.conteudo : rede.corpoDoErro;
+          },
+        };
+      },
+    },
+  };
+  return rede;
 }
 
 /** Roda o pacote como o Apps Script roda: sem módulos, serviços como globais. */
@@ -100,6 +142,7 @@ function carregar() {
   const registros: string[] = [];
   const erros: string[] = [];
   const drive = driveFalso();
+  const rede = redeFalsa(drive);
   const cache = { valores: new Map<string, string>(), quebrado: false, putQuebrado: false, prazos: [] as number[] };
   const cacheDoScript = () => {
     if (cache.quebrado) throw new Error('CacheService fora do ar');
@@ -117,6 +160,8 @@ function carregar() {
   let uuids = 0;
   const contexto = vm.createContext({
     Drive: drive.servico,
+    UrlFetchApp: rede.UrlFetchApp,
+    ScriptApp: rede.ScriptApp,
     CacheService: { getScriptCache: () => cacheDoScript() },
     LockService: {
       getScriptLock: () => ({
@@ -183,7 +228,7 @@ function carregar() {
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, leituras, registros, erros, postar, drive, trava, cache };
+  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache };
 }
 
 // O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
@@ -274,13 +319,6 @@ describe('dados no Drive pelo pacote', () => {
     propriedades.delete(guardado![0]);
 
     expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'Aula da Aurora')]);
-  });
-
-  it('lê o conteúdo também quando o Drive devolve um blob', () => {
-    const { pedir, drive } = conectado();
-    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
-    drive.lerComo('blob');
-    expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'a')]);
   });
 
   it('arquivo guardado que sumiu do Drive dá interno e não cria outro vazio', () => {
@@ -425,8 +463,11 @@ describe('manifesto publicado', () => {
     });
   });
 
-  it('declara os escopos explicitamente: só arquivos do Drive criados pelo próprio script', () => {
-    expect(manifesto().oauthScopes).toEqual(['https://www.googleapis.com/auth/drive.file']);
+  it('declara os escopos explicitamente: arquivos do próprio script no Drive e chamada externa (R24)', () => {
+    expect(manifesto().oauthScopes).toEqual([
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/script.external_request',
+    ]);
   });
 
   it('liga o serviço avançado do Drive na v3', () => {
@@ -524,19 +565,103 @@ describe('fix 2: cache do código', () => {
 });
 
 // Forma real documentada (issue 149104685 do Google, aberta; confirmada em 2026):
-// no serviço avançado, Files.get(id, {alt: 'media'}) LANÇA HttpResponseException
-// com "Response Code: 200. Message: <conteúdo>", em vez de devolver o conteúdo.
-describe('fix 3: Drive real (alt=media lança com Response Code 200)', () => {
-  it('puxar dá interno e o registro diz por quê, sem conteúdo nem id', () => {
-    const { pedir, drive, erros } = conectado();
+// no serviço avançado, Files.get(id, {alt: 'media'}) LANÇA HttpResponseException.
+// Por isso a leitura vai pela API REST do Drive, com UrlFetchApp (R24).
+const ENDPOINT = 'https://www.googleapis.com/drive/v3/files/';
+
+describe('R24: leitura pela API do Drive', () => {
+  it('a única URL no pacote é o endpoint de arquivos do Drive', () => {
+    const urls = new Set(pacote.match(/https?:\/\/[^\s'"`)]+/g) ?? []);
+    expect([...urls]).toEqual([ENDPOINT]);
+  });
+
+  it('puxar lê o conteúdo por GET no endpoint, com o token, alt=media e muteHttpExceptions', () => {
+    const { pedir, rede } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'Ler com Marina')] });
+
+    expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'Ler com Marina')]);
+    const ultima = rede.chamadas.at(-1)!;
+    expect(ultima.url).toBe(`${ENDPOINT}arquivo-1?alt=media`);
+    expect(ultima.params).toMatchObject({
+      method: 'get',
+      muteHttpExceptions: true,
+      headers: { Authorization: `Bearer ${TOKEN_FICTICIO}` },
+    });
+    expect(ultima.charset).toBe('UTF-8');
+  });
+
+  it('o id vai codificado na URL', () => {
+    const { pedir, rede, drive, propriedades } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    const original = drive.arquivos.get('arquivo-1')!;
+    drive.arquivos.set('a b/c?d', { ...original, id: 'a b/c?d' });
+    propriedades.set('ID_DO_ARQUIVO_DE_DADOS', 'a b/c?d');
+
+    expect(pedir('puxar', { desde: 0 }).ok).toBe(true);
+    expect(rede.chamadas.at(-1)!.url).toBe(`${ENDPOINT}a%20b%2Fc%3Fd?alt=media`);
+  });
+
+  it('acentos voltam iguais', () => {
+    const { pedir } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'Orientações às 15h')] });
+    expect(pedir('puxar', { desde: 0 }).dados.registros[0].registro.titulo).toBe('Orientações às 15h');
+  });
+
+  it('todas as chamadas de rede vão só ao endpoint, e só para ler', () => {
+    const { pedir, rede } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
+    pedir('puxar', { desde: 0 });
+    expect(rede.chamadas.length).toBeGreaterThan(0);
+    for (const { url, params } of rede.chamadas) {
+      expect(url.startsWith(ENDPOINT)).toBe(true);
+      expect(url.endsWith('?alt=media')).toBe(true);
+      expect(params.method).toBe('get');
+    }
+  });
+
+  it('gravações continuam no serviço avançado', () => {
+    const { pedir, drive, rede } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
+    expect(drive.atualizacoes).toBeGreaterThan(0);
+    expect(JSON.parse(drive.arquivos.get('arquivo-1')!.conteudo).registros).toHaveLength(2);
+    expect(rede.chamadas.every((c) => c.params.method === 'get')).toBe(true);
+  });
+
+  it.each([403, 404, 500, 302])('HTTP %i dá interno, sem gravar, e o registro não leva token, URL, id nem corpo', (status) => {
+    const { pedir, rede, erros, drive } = conectado();
     pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
-    drive.lerComo('excecao-200');
+    const antes = drive.arquivos.get('arquivo-1')!.conteudo;
+    rede.status = status;
+    rede.corpoDoErro = `{"error":{"message":"Segredo da Marina arquivo-1 ${TOKEN_FICTICIO}"}}`;
+
+    expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
+    expect(pedir('enviar', { mudancas: [tarefa('t2', 'b')] })).toEqual({ ok: false, erro: 'interno' });
+    expect(drive.arquivos.get('arquivo-1')!.conteudo).toBe(antes);
+    const registrado = erros.join('\n');
+    expect(registrado).toContain(`HTTP ${status}`);
+    for (const proibido of [TOKEN_FICTICIO, ENDPOINT, 'arquivo-1', 'Segredo']) {
+      expect(registrado).not.toContain(proibido);
+    }
+  });
+
+  it('falha de rede dá interno, e a mensagem original (com URL e token) não vai ao registro', () => {
+    const { pedir, rede, erros } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    rede.falharCom = `Address unavailable: ${ENDPOINT}arquivo-1?alt=media Bearer ${TOKEN_FICTICIO}`;
 
     expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
     const registrado = erros.join('\n');
-    expect(registrado).toContain('HttpResponseException: Response Code: 200. Message: …');
-    expect(registrado).not.toContain('Segredo');
-    expect(registrado).not.toContain('arquivo-1');
+    expect(registrado).toMatch(/Leitura do Drive falhou na rede/);
+    for (const proibido of [TOKEN_FICTICIO, ENDPOINT, 'arquivo-1']) expect(registrado).not.toContain(proibido);
+  });
+
+  it('o serviço avançado com alt=media nunca é usado para ler', () => {
+    const { pedir } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    // O falso do Drive lança como o real em alt=media: se fosse usado, puxar daria interno.
+    expect(pedir('puxar', { desde: 0 }).ok).toBe(true);
   });
 
   it('erro do Drive com id longo na mensagem não leva o id ao registro', () => {
@@ -554,11 +679,44 @@ describe('fix 3: Drive real (alt=media lança com Response Code 200)', () => {
   });
 });
 
-describe('fix 3: diagnosticarDrive', () => {
+describe('R24: autorizarDrive usa os dois escopos', () => {
+  it('com o arquivo criado, lê pela API uma vez e registra só o tamanho', () => {
+    const { pedir, globais, registros, rede, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
+    const antes = rede.chamadas.length;
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+
+    expect(rede.chamadas.length).toBe(antes + 1);
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Permissão do Drive aprovada/);
+    expect(mensagem).toContain(`${drive.arquivos.get('arquivo-1')!.conteudo.length} caracteres`);
+    for (const proibido of ['Segredo', 'arquivo-1', TOKEN_FICTICIO, ENDPOINT]) expect(mensagem).not.toContain(proibido);
+  });
+
+  it('sem arquivo, pede o token (os dois escopos) e não chama a rede', () => {
+    const { globais, registros, rede } = carregar();
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    expect(rede.tokens).toBeGreaterThan(0);
+    expect(rede.chamadas).toEqual([]);
+    expect(registros.at(-1)).toMatch(/Permissão do Drive aprovada/);
+  });
+
+  it('leitura recusada aparece no registro, sem token nem id', () => {
+    const { pedir, globais, registros, rede } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    rede.status = 403;
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/HTTP 403/);
+    for (const proibido of ['arquivo-1', TOKEN_FICTICIO]) expect(mensagem).not.toContain(proibido);
+  });
+});
+
+describe('diagnosticarDrive (leitura pela API)', () => {
   function preparado() {
     const carregado = conectado();
     carregado.pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
-    const principal = [...carregado.drive.arquivos.values()].find((a) => a.name === 'central-dados.json')!;
+    const principal = carregado.drive.arquivos.get('arquivo-1')!;
     const diagnosticar = () => {
       const antes = carregado.registros.length;
       (carregado.globais as unknown as { diagnosticarDrive(): void }).diagnosticarDrive();
@@ -571,29 +729,17 @@ describe('fix 3: diagnosticarDrive', () => {
     expect(pacote).toMatch(/^function diagnosticarDrive\(/m);
   });
 
-  it.each([
-    ['texto', /alt=media devolveu: texto/],
-    ['blob', /alt=media devolveu: Blob/],
-    ['objeto', /alt=media devolveu: objeto/],
-    ['excecao-200', /alt=media lançou HttpResponseException; começa com "Response Code: 200": sim/],
-  ] as const)('com o Drive devolvendo %s, registra tipo, tamanho e se o JSON abre, sem conteúdo nem id', (forma, tipo) => {
-    const { drive, principal, diagnosticar } = preparado();
-    drive.lerComo(forma);
+  it('registra tamanho e se o JSON abre, sem conteúdo, id nem token', () => {
+    const { principal, diagnosticar } = preparado();
     const relatorio = diagnosticar();
-
-    expect(relatorio).toMatch(tipo);
-    expect(relatorio).toContain(`${principal.conteudo.length} caracteres`);
-    expect(relatorio).toMatch(/JSON\.parse: ok/);
-    expect(relatorio).not.toContain('Segredo');
-    expect(relatorio).not.toContain(principal.id);
+    expect(relatorio).toContain(`Leitura pela API do Drive: ok, ${principal.conteudo.length} caracteres, JSON.parse: ok`);
+    for (const proibido of ['Segredo', 'arquivo-1', TOKEN_FICTICIO, ENDPOINT]) expect(relatorio).not.toContain(proibido);
   });
 
-  it('registra também o resultado do caminho de leitura do app', () => {
-    const { drive, diagnosticar } = preparado();
-    drive.lerComo('excecao-200');
-    expect(diagnosticar()).toMatch(/Leitura do app: falhou \(HttpResponseException: Response Code: 200\. Message: …\)/);
-    drive.lerComo('texto');
-    expect(diagnosticar()).toMatch(/Leitura do app: ok, \d+ caracteres, JSON\.parse: ok/);
+  it('leitura recusada mostra o status HTTP', () => {
+    const { rede, diagnosticar } = preparado();
+    rede.status = 404;
+    expect(diagnosticar()).toMatch(/Leitura pela API do Drive: falhou \(Error: Leitura do Drive respondeu HTTP 404\)/);
   });
 
   it('conteúdo que não é JSON aparece como JSON.parse: falhou', () => {
@@ -609,7 +755,6 @@ describe('fix 3: diagnosticarDrive', () => {
     const conteudo = principal.conteudo;
     const quantos = drive.arquivos.size;
     const props = new Map(propriedades);
-    drive.lerComo('excecao-200');
     diagnosticar();
     expect(principal.conteudo).toBe(conteudo);
     expect(drive.arquivos.size).toBe(quantos);

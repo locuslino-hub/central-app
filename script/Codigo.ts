@@ -1,6 +1,6 @@
 // Pontos de entrada do Apps Script. Cada função exportada aqui vira uma função
 // global no pacote (ver build.mjs). O resto fica em api.ts e dados.ts, sem serviços do Google.
-import { novoCodigo, partesDoErro, resumoDoErro, tratarCorpo, type Ambiente } from './api';
+import { novoCodigo, resumoDoErro, tratarCorpo, type Ambiente } from './api';
 import { NOME_DO_ARQUIVO, Ocupado, type Armazem } from './dados';
 
 const CHAVE_DO_CODIGO = 'CODIGO_DO_APARELHO';
@@ -54,11 +54,36 @@ function blobJson(conteudo: string) {
   return Utilities.newBlob(conteudo, TIPO_JSON);
 }
 
-function comoTexto(conteudo: unknown): string {
-  if (typeof conteudo === 'string') return conteudo;
-  const blob = conteudo as { getDataAsString?: () => string } | null;
-  if (blob && typeof blob.getDataAsString === 'function') return blob.getDataAsString();
-  throw new Error('Conteúdo do Drive em formato inesperado');
+/**
+ * A única URL que o script chama (R24). Ler pelo serviço avançado não
+ * funciona: Files.get com alt=media lança mesmo com resposta 200 (issue
+ * 149104685 do Google). A API REST com o token do próprio script lê; o
+ * escopo drive.file basta, porque o arquivo foi criado por este script.
+ */
+const ENDPOINT_DO_DRIVE = 'https://www.googleapis.com/drive/v3/files/';
+
+/**
+ * Conteúdo do arquivo pela API do Drive. Só HTTP 200 vale. Erros dizem só o
+ * status: nunca o token, a URL com o id nem o corpo da resposta.
+ */
+function lerConteudo(id: string): string {
+  const url = `${ENDPOINT_DO_DRIVE}${encodeURIComponent(id)}?alt=media`;
+  const parametros: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
+    method: 'get',
+    headers: { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` },
+    muteHttpExceptions: true,
+  };
+  let resposta: GoogleAppsScript.URL_Fetch.HTTPResponse;
+  try {
+    resposta = UrlFetchApp.fetch(url, parametros);
+  } catch {
+    // A mensagem original pode trazer a URL com o id: não segue adiante.
+    throw new Error('Leitura do Drive falhou na rede');
+  }
+  const status = resposta.getResponseCode();
+  if (status !== 200) throw new Error(`Leitura do Drive respondeu HTTP ${status}`);
+  // Gravado em UTF-8 (Utilities.newBlob): lido em UTF-8.
+  return resposta.getContentText('UTF-8');
 }
 
 function procurar(consulta: string) {
@@ -92,7 +117,7 @@ const armazem: Armazem = {
     const id = idDoArquivo();
     // Id guardado que não abre lança aqui (vira `interno`): nunca se cria um
     // arquivo vazio no lugar dos dados do dono.
-    return id === null ? null : comoTexto(drive().Files.get(id, { alt: 'media' }));
+    return id === null ? null : lerConteudo(id);
   },
   gravar(conteudo) {
     const id = idDoArquivo();
@@ -142,20 +167,29 @@ export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
 }
 
 /**
- * O dono roda uma vez pelo editor depois de publicar: o Google pede a
- * permissão do Drive (só arquivos criados por este script). Não grava nada e
- * não troca o código do aparelho.
+ * O dono roda uma vez pelo editor depois de publicar: o Google pede as duas
+ * permissões (arquivos do Drive criados por este script e chamada externa,
+ * usada só para ler esse arquivo pela API do Drive). Usa as duas: procura o
+ * arquivo pelo serviço avançado e, se ele existe, lê pela API. Não grava nada
+ * e não troca o código do aparelho. Registra só tamanhos e status.
  */
 export function autorizarDrive() {
-  const existe = idDoArquivo() !== null;
-  Logger.log(
-    existe
-      ? 'Permissão do Drive aprovada. O arquivo central-dados.json já existe.'
-      : 'Permissão do Drive aprovada. O arquivo central-dados.json será criado na primeira sincronia.',
-  );
+  ScriptApp.getOAuthToken();
+  const id = idDoArquivo();
+  if (id === null) {
+    Logger.log(
+      'Permissão do Drive aprovada. O arquivo central-dados.json será criado na primeira sincronia.',
+    );
+    return;
+  }
+  let leitura: string;
+  try {
+    leitura = `leitura pela API do Drive: ok, ${lerConteudo(id).length} caracteres`;
+  } catch (erro) {
+    leitura = `leitura pela API do Drive falhou (${resumoDoErro(erro)})`;
+  }
+  Logger.log(`Permissão do Drive aprovada. O arquivo central-dados.json já existe; ${leitura}.`);
 }
-
-const PREFIXO_DA_EXCECAO = 'Response Code: 200. Message: ';
 
 function jsonAbre(texto: string): string {
   try {
@@ -171,20 +205,11 @@ function medir(texto: string): string {
   return `${texto.length} caracteres, ${jsonAbre(texto)}`;
 }
 
-function descreverRetorno(bruto: unknown): string {
-  if (typeof bruto === 'string') return `texto, ${medir(bruto)}`;
-  const blob = bruto as { getDataAsString?: () => string } | null;
-  if (blob && typeof blob.getDataAsString === 'function') return `Blob, ${medir(blob.getDataAsString())}`;
-  if (bruto !== null && typeof bruto === 'object') {
-    return `objeto (JSON já interpretado pelo serviço), ${medir(JSON.stringify(bruto))} ao reconverter`;
-  }
-  return bruto === null ? 'null' : typeof bruto;
-}
-
 /**
- * O dono roda pelo editor quando a sincronia falha. Mostra no registro como o
- * Drive entrega o arquivo de dados: tipo, tamanho em caracteres e se o JSON
- * abre. Nunca registra o conteúdo nem ids, e não grava nada.
+ * O dono roda pelo editor quando a sincronia falha. Mostra no registro se o
+ * arquivo de dados existe, seu tamanho e tipo, e o resultado da leitura pela
+ * API do Drive: tamanho em caracteres e se o JSON abre, ou o status HTTP.
+ * Nunca registra o conteúdo, ids nem o token, e não grava nada.
  */
 export function diagnosticarDrive() {
   const linhas = ['Diagnóstico do Drive (sem conteúdo nem ids):'];
@@ -206,24 +231,9 @@ export function diagnosticarDrive() {
     linhas.push(`Arquivo: metadados falharam (${resumoDoErro(erro)})`);
   }
   try {
-    linhas.push(`Files.get alt=media devolveu: ${descreverRetorno(drive().Files.get(id, { alt: 'media' }))}`);
+    linhas.push(`Leitura pela API do Drive: ok, ${medir(lerConteudo(id))}`);
   } catch (erro) {
-    const partes = partesDoErro(erro);
-    const mensagem = partes?.mensagem ?? '';
-    const nome = partes?.nome ?? typeof erro;
-    const comPrefixo = mensagem.startsWith(PREFIXO_DA_EXCECAO);
-    linhas.push(
-      `Files.get alt=media lançou ${nome}; começa com "Response Code: 200": ${comPrefixo ? 'sim' : 'não'}; ` +
-        (comPrefixo
-          ? `conteúdo na mensagem: ${medir(mensagem.slice(PREFIXO_DA_EXCECAO.length))}`
-          : `mensagem: ${mensagem.length} caracteres`),
-    );
-  }
-  try {
-    const conteudo = armazem.ler();
-    linhas.push(conteudo === null ? 'Leitura do app: sem arquivo' : `Leitura do app: ok, ${medir(conteudo)}`);
-  } catch (erro) {
-    linhas.push(`Leitura do app: falhou (${resumoDoErro(erro)})`);
+    linhas.push(`Leitura pela API do Drive: falhou (${resumoDoErro(erro)})`);
   }
   Logger.log(linhas.join('\n'));
 }
