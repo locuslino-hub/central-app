@@ -98,13 +98,13 @@ const MESES = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho
   'setembro', 'outubro', 'novembro', 'dezembro'];
 const SEMANA = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
-/** "1/2 kg" é fração, não 1º de fevereiro. */
+/** "1/2 kg" é fração, não 1º de fevereiro (e "R$ 12/11", logo antes, é dinheiro). */
 const SEM_UNIDADE =
   '(?!\\s*(?:kg|g|mg|l|ml|litros?|xicaras?|colher(?:es)?|copos?|duzias?|metros?|m|cm|mm|km|pacotes?|unidades?|porcao|porcoes|doses?)(?![a-z]))';
 
 const RE_ISO = new RegExp(`${L}${PREP}(\\d{4})-(\\d{2})-(\\d{2})${R}`, 'g');
 const RE_BARRA = new RegExp(
-  `${L}${PREP}(?:o\\s+)?(?:dia\\s+)?(\\d{1,2})/(\\d{1,2})(?:/(\\d{4}|\\d{2}))?(?![\\d/])${SEM_UNIDADE}`, 'g');
+  `${L}${PREP}(?:o\\s+)?(?:dia\\s+)?(?<!\\$\\s*)(\\d{1,2})/(\\d{1,2})(?:/(\\d{4}|\\d{2}))?(?![\\d/])${SEM_UNIDADE}`, 'g');
 const RE_TRACO = new RegExp(`${L}${PREP}(?:o\\s+)?(?:dia\\s+)?(\\d{1,2})[-.](\\d{1,2})[-.](\\d{4})${R}`, 'g');
 const RE_MES = new RegExp(
   `${L}${PREP}(?:o\\s+)?(?:dia\\s+)?(\\d{1,2})(?:º|o)?\\s+de\\s+(${MESES.join('|')})(?:\\s+de\\s+(\\d{4}))?${R}`, 'g');
@@ -121,9 +121,12 @@ const RE_DAQUI = new RegExp(`${L}(?:daqui\\s+a|em|dentro\\s+de)\\s+(\\d{1,3})\\s
 const RE_SEMANA = new RegExp(
   `${L}(?:(?:ate|para|pra|em)\\s+)?(?:(n?esta|n?essa)\\s+semana|(?:n?a\\s+)?proxima\\s+semana|(?:n?a\\s+)?semana\\s+que\\s+vem)${R}`,
   'g');
-/** O que pode vir logo depois de "sexta" para ela ser dia: hora, vírgula, fim da frase. */
+/**
+ * O que pode vir logo depois de "sexta" para ela ser dia: hora, vírgula, fim da frase.
+ * "à 15h" (crase por engano) chega aqui como "a 15h", porque o texto já está sem acento.
+ */
 const DEPOIS_DE_DIA =
-  /^\s*(?:$|[,.;!?)]|\d|(?:as|das|de\s+\d+|pelas|ate|a\s+partir|por\s+volta|(?:com\s+)?inicio|comec[a-z]*|ao\s+meio|meio[\s-]dia|de\s+manha|a\s+tarde|a\s+noite|que\s+vem)(?![a-z]))/;
+  /^\s*(?:$|[,.;!?)]|\d|(?:as|a\s+\d|das|de\s+\d+|pelas|ate|a\s+partir|por\s+volta|(?:com\s+)?inicio|comec[a-z]*|ao\s+meio|meio[\s-]dia|de\s+manha|a\s+tarde|a\s+noite|que\s+vem)(?![a-z]))/;
 
 /** Dia do mês sem mês: este mês, se ainda não passou; senão o próximo mês que tem esse dia. */
 function proximoDiaDoMes(dia: number, hoje: string): string | undefined {
@@ -222,7 +225,8 @@ export function semSobreposicao<T extends Trecho>(xs: T[]): T[] {
 
 // --------------------------------------------------------------------- horas
 
-export type AchadoHora = Trecho & { hora: string; papel: 'inicio' | 'fim' };
+/** `semTarde`: a mesma hora sem a regra de 1–7 = tarde ("das 5 às 8" é de manhã). */
+export type AchadoHora = Trecho & { hora: string; papel: 'inicio' | 'fim'; semTarde?: string };
 
 /**
  * Hora: "15:30", "15h", "15h30", "15 horas", "meio-dia", "3 da tarde" e, com
@@ -239,6 +243,7 @@ const MARCAS: [RegExp, AchadoHora['papel'], TipoMarca][] = [
   [/(?<![a-z])(?:por\s+volta\s+d(?:as?|e)|pelas|pela)\s*$/, 'inicio', 'livre'],
   [/(?:(?<![a-z])e\s+)?(?<![a-z])(?:termino|terminando|termina|terminar|final|fim)(?:\s*:)?(?:\s+(?:as|a|das))?\s*$/, 'fim', 'livre'],
   [/(?<![a-z])ate(?:\s+(?:as|a|o))?\s*$/, 'fim', 'ambigua'],
+  // "a" cobre também "à" (crase por engano: "à 15h"), já sem acento.
   [/(?<![a-z])(?:as|a|ao)\s*$/, 'inicio', 'ambigua'],
   [/(?<![a-z])(?:das|de)\s*$/, 'inicio', 'faixa'],
   [/[-–]\s*$/, 'fim', 'faixa'],
@@ -251,8 +256,8 @@ const DEPOIS_DE_HORA =
 
 type Candidata = AchadoHora & { num: number; nua: boolean; marca?: TipoMarca; pendente?: boolean; temFim?: boolean };
 
-function valor(m: RegExpMatchArray): string | undefined {
-  if (m[1]) return m[1].startsWith('meio') ? '12:00' : '00:00';
+function valor(m: RegExpMatchArray): { hora: string; semTarde?: string } | undefined {
+  if (m[1]) return { hora: m[1].startsWith('meio') ? '12:00' : '00:00' };
   let h = Number(m[2]);
   const minutos = m[4] ?? m[6];
   const mm = minutos === undefined ? 0 : Number(minutos);
@@ -262,16 +267,20 @@ function valor(m: RegExpMatchArray): string | undefined {
     if (h < 12) h += 12;
     else if (h === 12 && periodo === 'noite') h = 0;
   } else if (!periodo && minutos === undefined && h >= 1 && h <= 7) {
-    h += 12; // "às 3" é de tarde
+    // "às 3" é de tarde
+    return { hora: `${dois(h + 12)}:${dois(mm)}`, semTarde: `${dois(h)}:${dois(mm)}` };
   }
-  return `${dois(h)}:${dois(mm)}`;
+  return { hora: `${dois(h)}:${dois(mm)}` };
 }
 
 /**
  * Horas da frase normalizada, fora dos trechos `ocupados` (as datas). Devolve
- * também as `ligacoes` ("até" entre duas horas), que não valem como prazo.
+ * também as `ligacoes` ("até" entre duas horas), que não valem como prazo, e
+ * quantas horas escritas com "h" ou ":" não existem ("25h", "15:60").
  */
-export function acharHoras(n: string, ocupados: Trecho[]): { horas: AchadoHora[]; ligacoes: Trecho[] } {
+export function acharHoras(
+  n: string, ocupados: Trecho[],
+): { horas: AchadoHora[]; ligacoes: Trecho[]; invalidas: number } {
   const cruza = (a: number, b: number) => ocupados.some((o) => a < o.fim && b > o.ini);
   const comecaOcupado = (i: number) => {
     const j = i + (n.slice(i).match(/^\s*/)?.[0].length ?? 0);
@@ -279,13 +288,18 @@ export function acharHoras(n: string, ocupados: Trecho[]): { horas: AchadoHora[]
   };
   const aceitas: Candidata[] = [];
   const ligacoes: Trecho[] = [];
+  let invalidas = 0;
 
   for (const m of n.matchAll(RE_HORA)) {
     const num = m.index!;
     const fim = num + m[0].length;
     if (cruza(num, fim)) continue;
-    const hora = valor(m);
-    if (!hora) continue;
+    const v = valor(m);
+    if (!v) {
+      if (m[3] || m[5]) invalidas++;
+      continue;
+    }
+    const { hora, semTarde } = v;
     const nua = !m[1] && !m[3] && !m[5] && !m[7];
     const antes = n.slice(Math.max(0, num - 40), num);
     let ini = num, papel: AchadoHora['papel'] = 'inicio', marca: TipoMarca | undefined;
@@ -298,7 +312,7 @@ export function acharHoras(n: string, ocupados: Trecho[]): { horas: AchadoHora[]
         break;
       }
     }
-    const c: Candidata = { ini, fim, hora, papel, num, nua, marca };
+    const c: Candidata = { ini, fim, hora, semTarde, papel, num, nua, marca };
     const anterior = aceitas[aceitas.length - 1];
     if (anterior && anterior.papel === 'inicio' && !anterior.temFim && LIGACAO.test(n.slice(anterior.fim, num))) {
       // Segunda ponta de uma faixa: "das 14 às 16".
@@ -324,6 +338,6 @@ export function acharHoras(n: string, ocupados: Trecho[]): { horas: AchadoHora[]
   }
   const horas = aceitas
     .filter((c) => !c.pendente)
-    .map(({ ini, fim, hora, papel }) => ({ ini, fim, hora, papel }));
-  return { horas, ligacoes };
+    .map(({ ini, fim, hora, papel, semTarde }) => (semTarde ? { ini, fim, hora, papel, semTarde } : { ini, fim, hora, papel }));
+  return { horas, ligacoes, invalidas };
 }

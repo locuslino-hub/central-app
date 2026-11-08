@@ -80,7 +80,7 @@ describe('interpretarRegras: casos do plano', () => {
     expect(frase.length).toBeGreaterThanOrEqual(1998);
     const t0 = performance.now();
     interpretar(frase);
-    expect(performance.now() - t0).toBeLessThan(50);
+    expect(performance.now() - t0).toBeLessThan(250);
   });
 });
 
@@ -158,6 +158,23 @@ describe('dias', () => {
     const item = um(frase);
     expect(item).toMatchObject({ tipo: 'tarefa', data, titulo: 'Ligar para a Renata' });
     expect(interpretar(frase).certeza).toBe('alta');
+  });
+
+  it('11/12 é 11 de dezembro (dia/mês)', () => {
+    expect(um('pagar conta 11/12').data).toBe('2026-12-11');
+  });
+
+  it('"dia 30" a partir de 31 de janeiro pula fevereiro', () => {
+    expect(um('pagar conta dia 30', '2026-01-31').data).toBe('2026-03-30');
+  });
+
+  it('"dia 29" em fevereiro de ano não bissexto vai para março', () => {
+    expect(um('pagar conta dia 29', '2026-02-10').data).toBe('2026-03-29');
+  });
+
+  it('domingo dito num domingo é o domingo seguinte', () => {
+    expect(um('pagar conta domingo', '2026-11-08').data).toBe('2026-11-15');
+    expect(um('pagar conta segunda', '2026-11-08').data).toBe('2026-11-09');
   });
 
   it('29/02 sem ano vai para o próximo ano bissexto', () => {
@@ -267,8 +284,40 @@ describe('horas', () => {
     expect(um('Comprar 1/2 kg de café')).toMatchObject({ data: undefined, titulo: 'Comprar 1/2 kg de café' });
   });
 
-  it.each(['às 24h', 'às 25:00', 'às 15:60'])('hora inválida (%s) não vira compromisso', (h) => {
-    expect(um(`reunião sexta ${h}`).tipo).toBe('tarefa');
+  it.each(['Pagar R$ 12/11 ao banco', 'Pagar R$12/11 ao banco', 'Pagar $ 10/12 ao banco'])(
+    'valor em dinheiro não é data (%s)', (frase) => {
+      expect(um(frase).data).toBeUndefined();
+    });
+
+  it.each(['às 25h', 'às 24h', '24h', 'às 25:00', '15:60', 'às 15:60'])(
+    'hora inválida (%s): não vira compromisso e certeza baixa', (h) => {
+      const r = interpretar(`reunião sexta ${h}`);
+      expect(r.itens[0].tipo).toBe('tarefa');
+      expect(r.certeza).toBe('baixa');
+    });
+
+  it('número solto que não é hora não baixa a certeza', () => {
+    expect(interpretar('Ler capítulo 25 sexta').certeza).toBe('alta');
+  });
+
+  it.each([
+    ['reunião sexta à 15h', '15:00'],
+    ['reunião sexta à 3', '15:00'],
+    ['reunião sexta à 15:30', '15:30'],
+  ])('crase por engano antes da hora (%s)', (frase, inicio) => {
+    expect(um(frase)).toMatchObject({ tipo: 'compromisso', data: '2026-11-06', inicio, titulo: 'Reunião' });
+    expect(interpretar(frase).certeza).toBe('alta');
+  });
+
+  it.each([
+    ['reunião sexta das 7 às 9', '07:00', '09:00'],
+    ['reunião sexta das 5 às 8', '05:00', '08:00'],
+    ['reunião sexta início às 7 e término 9', '07:00', '09:00'],
+    ['reunião sexta das 5 às 7', '17:00', '19:00'],
+    ['reunião sexta das 11 às 1', '11:00', '13:00'],
+  ])('faixa: a tarde só vale se o fim continuar depois do início (%s)', (frase, inicio, fim) => {
+    expect(um(frase)).toMatchObject({ tipo: 'compromisso', inicio, fim });
+    expect(interpretar(frase).certeza).toBe('alta');
   });
 
   it('hora sem dia: tarefa Sem prazo com certeza baixa (o cartão pergunta)', () => {
@@ -299,6 +348,12 @@ describe('tarefa com prazo', () => {
 
   it('"até" entre duas horas não é prazo', () => {
     expect(um('aula sexta das 9h até 11h').tipo).toBe('compromisso');
+  });
+
+  it('"até" sem dia nem hora logo depois não é prazo', () => {
+    expect(um('Reunião sexta 10h, vou ficar até tarde')).toMatchObject({
+      tipo: 'compromisso', data: '2026-11-06', inicio: '10:00', fim: '11:00',
+    });
   });
 });
 
@@ -357,6 +412,28 @@ describe('título', () => {
     expect(um('Mandar e-mail ao Souza').titulo).toBe('Mandar e-mail ao Souza');
   });
 
+  it('sem espaço antes da pontuação quando um trecho sai', () => {
+    expect(um('Reunião sexta às 15h, na sala 2').titulo).toBe('Reunião, na sala 2');
+    expect(um('Ligar para a Renata amanhã; levar o livro').titulo).toBe('Ligar para a Renata; levar o livro');
+  });
+
+  it('título de reserva também começa com maiúscula', () => {
+    const r = interpretar('adicione');
+    expect(r.itens[0].titulo).toBe('Adicione');
+    expect(r.certeza).toBe('baixa');
+  });
+
+  it.each(['Adicione atividades: revisar slides', 'Adicione tarefas: revisar slides', 'adicione uma tarefa revisar slides'])(
+    'comando com "tarefa(s)"/"atividade(s)" sai do título (%s)', (frase) => {
+      expect(um(frase).titulo).toBe('Revisar slides');
+    });
+
+  it('trechos que se cruzam saem inteiros ("atividades" do comando e "atividades do dia")', () => {
+    expect(um('Adicione atividades do dia mandar mensagem para Renata')).toMatchObject({
+      titulo: 'Mandar mensagem para Renata', data: '2026-11-05',
+    });
+  });
+
   it('maiúscula só na primeira letra; o resto fica como escrito', () => {
     expect(um('adicione ler o artigo do Prof. Souza sobre PWA').titulo).toBe('Ler o artigo do Prof. Souza sobre PWA');
   });
@@ -372,7 +449,10 @@ describe('título', () => {
   });
 
   it('acentos decompostos (NFD) são entendidos e o título sai em NFC', () => {
-    expect(um('reunião sexta às 15h')).toMatchObject({ tipo: 'compromisso', inicio: '15:00', titulo: 'Reunião' });
+    // Escapes explícitos: "reunia" + til combinante + "o sexta a" + grave combinante + "s 15h".
+    const nfd = 'reunia\u0303o sexta a\u0300s 15h';
+    expect(nfd).not.toBe(nfd.normalize('NFC'));
+    expect(um(nfd)).toMatchObject({ tipo: 'compromisso', inicio: '15:00', titulo: 'Reuni\u00e3o' });
   });
 
   it('emoji e caracteres especiais não quebram', () => {

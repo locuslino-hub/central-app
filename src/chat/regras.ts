@@ -58,7 +58,7 @@ const RE_SALA_COMUM = SALAS_COMUNS.map(([t, id]) => [new RegExp(`${L}(?:${t})${R
 
 /** Comando para o app no começo da frase: sai do título. */
 const RE_COMANDO =
-  /^\s*(?:adicione|adiciona|acrescente|acrescenta|inclua|anote|anota)(?![a-z])(?:\s*[:,])?(?:\s+(?:uma\s+|a\s+)?(?:tarefa|atividade)(?![a-z])\s*:?)?/;
+  /^\s*(?:adicione|adiciona|acrescente|acrescenta|inclua|anote|anota)(?![a-z])(?:\s*[:,])?(?:\s+(?:uma\s+|a\s+|as\s+)?(?:tarefas?|atividades?)(?![a-z])\s*:?)?/;
 const LISTA = '(?:(?:em|nas?|nos?|para\\s+(?:as?|os?)|pra)\\s+)?(?:minhas?\\s+)?(?:tarefas?|atividades?|lista|pendencias)\\s+';
 /** "nas tarefas do doutoramento", "na sala de aulas": decide a sala e sai do título. */
 const RE_LISTA_SALA = new RegExp(
@@ -67,7 +67,9 @@ const RE_LISTA_SALA = new RegExp(
 /** "em atividades do dia", "nas tarefas de hoje": é hoje e sai do título. */
 const RE_LISTA_HOJE = new RegExp(`${L}${LISTA}(?:d[aoe]s?\\s+)?(?:dia|hoje)${R}(?!\\s*\\d)`, 'g');
 
-const RE_PRAZO = /(?<![a-z])(?:entregar?|entregas|entregue|prazos?|ate)(?![a-z])/g;
+const RE_PRAZO = /(?<![a-z])(?:entregar?|entregas|entregue|prazos?)(?![a-z])/g;
+/** "até" só é prazo quando começa um dia ou uma hora ("até sexta", "até 17h"), não em "até tarde". */
+const RE_ATE = /(?<![a-z])ate(?![a-z])/g;
 const RE_MARCAR = /^marcar(?![a-z])/;
 /** Palavras que, sozinhas, já mostram um pedido. */
 const RE_CHAVE =
@@ -102,22 +104,27 @@ function idDaSala(termo: string): string {
 
 /** Frase sem os trechos tirados; conectores soltos nas pontas também saem. */
 function montarTitulo(o: string, tirar: Trecho[]): string {
-  const trechos = semSobreposicao(tirar);
+  // União dos trechos: um trecho que cruza outro também sai inteiro.
+  const trechos = [...tirar].sort((a, b) => a.ini - b.ini);
   let t = '';
   let p = 0;
   for (const x of trechos) {
-    t += o.slice(p, x.ini) + ' ';
+    if (x.ini > p) t += o.slice(p, x.ini) + ' ';
     p = Math.max(p, x.fim);
   }
   t += o.slice(p);
   const tirouNoFim = trechos.length > 0 && o.slice(p).trim() === '';
-  t = t.replace(/\s+/g, ' ').trim();
+  t = t.replace(/\s+/g, ' ').trim().replace(/\s+([,;:.!?)])/g, '$1');
   t = t.replace(/^[\s,;:.\-–]+/, '').replace(/[\s,;:\-–]+$/, '');
   if (tirouNoFim) {
     for (let i = 0; i < 5 && CONECTORES.test(normalizar(t)); i++) {
       t = t.replace(/\s+\S+$/, '').replace(/[\s,;:\-–]+$/, '');
     }
   }
+  return capitalizar(t);
+}
+
+function capitalizar(t: string): string {
   return t ? t.charAt(0).toLocaleUpperCase('pt-BR') + t.slice(1) : '';
 }
 
@@ -151,7 +158,8 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
 
   // Datas, depois horas fora das datas.
   const datas = semSobreposicao([...acharDatas(n, hoje), ...listasHoje]);
-  const { horas, ligacoes } = acharHoras(n, [...datas, ...listasSala]);
+  const { horas, ligacoes, invalidas } = acharHoras(n, [...datas, ...listasSala]);
+  if (invalidas > 0) baixa = true; // "25h", "15:60": o dono quis dizer uma hora
   tirar.push(...datas, ...horas);
 
   const fortes = datas.filter((d) => d.forca === 'forte' && (d.data || d.invalida));
@@ -166,7 +174,10 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   if (data && semanas.length && segundaDaSemana(data) !== semanas[0]) baixa = true;
 
   const fora = (i: number) => !ligacoes.some((x) => i >= x.ini && i < x.fim);
-  const prazo = [...n.matchAll(RE_PRAZO)].some((m) => fora(m.index!));
+  const comeca = (i: number) => [...datas, ...horas].some((x) => i >= x.ini && i < x.fim);
+  const prazo =
+    [...n.matchAll(RE_PRAZO)].length > 0 ||
+    [...n.matchAll(RE_ATE)].some((m) => fora(m.index!) && comeca(m.index!));
   const inicios = horas.filter((h) => h.papel === 'inicio');
   const fins = horas.filter((h) => h.papel === 'fim');
   if (inicios.length > 1 || fins.length > 1) baixa = true;
@@ -175,7 +186,7 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   let titulo = montarTitulo(o, tirar);
   if (!titulo) {
     baixa = true;
-    titulo = montarTitulo(o, comando ? [{ ini: 0, fim: comando[0].length }] : []) || o.trim();
+    titulo = montarTitulo(o, comando ? [{ ini: 0, fim: comando[0].length }] : []) || capitalizar(o.trim());
   }
 
   // Pessoa e sala.
@@ -192,8 +203,10 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   let item: Item;
   const hora = inicios[0] ?? fins[0];
   if (!prazo && data && hora) {
-    const inicio = hora.hora;
+    let inicio = hora.hora;
     const fimDito = inicios[0] ? fins.find((f) => f.ini >= inicios[0].fim)?.hora : undefined;
+    // "das 5 às 8": a tarde do início deixaria o fim antes dele, então é de manhã.
+    if (fimDito && fimDito <= inicio && hora.semTarde && fimDito > hora.semTarde) inicio = hora.semTarde;
     let fim = fimDito ?? somarMinutos(inicio, 60);
     if (fim <= inicio) { baixa = true; fim = somarMinutos(inicio, 60); }
     item = { tipo: 'compromisso', titulo, salaId, data, inicio, fim, marcar: false };
