@@ -9,7 +9,8 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 .casca[data-tela='computador'] {
-  grid-template-columns: 15.5rem minmax(0, 1fr) 24rem;
+  /* O painel direito encolhe com a janela: perto de 1100 px a página ainda tem espaço. */
+  grid-template-columns: 14rem minmax(0, 1fr) clamp(16rem, 24vw, 24rem);
   height: 100dvh;
   overflow: hidden;
 }
@@ -56,6 +57,7 @@
   justify-content: flex-end;
   gap: 12px;
   min-height: var(--toque);
+  margin-bottom: 10px;
 }
 .voltar {
   display: inline-flex;
@@ -70,7 +72,7 @@
   text-decoration: none;
 }
 .voltar:hover {
-  background: rgb(255 255 255 / 0.6);
+  background: rgb(var(--som-rgb) / 0.08);
 }
 
 .pagina h1 {
@@ -87,20 +89,13 @@
 .pagina h1:focus {
   outline: none;
 }
-.pagina h2 {
-  margin: 0 0 12px;
-  font-family: var(--titulo);
-  font-size: 1.8rem;
-  line-height: 1.15;
-}
-
 .aviso {
   color: var(--tinta2);
 }
 
+/* Cartão branco. A largura de cada página é de quem usa (.conectar, .prova). */
 .painel {
   position: relative;
-  max-width: 44rem;
   padding: 22px 24px 24px;
   border-radius: var(--r-g);
   background: var(--folha);
@@ -109,9 +104,22 @@
 .painel h1 {
   margin-top: 0;
 }
+.painel h2 {
+  margin: 0 0 12px;
+  font-family: var(--titulo);
+  font-size: 1.8rem;
+  line-height: 1.15;
+}
+.conectar,
+.prova {
+  max-width: 44rem;
+}
 
-/* Campos e botões das páginas (Conectar e a prova da sincronia). */
-.pagina input:not([type='checkbox']) {
+/* Campos e botões: por classe, para não mudar sozinhos as páginas futuras. */
+.painel label {
+  font-weight: 500;
+}
+.campo {
   width: min(100%, 34rem);
   min-height: var(--toque);
   padding: 0 18px;
@@ -122,16 +130,13 @@
   color: var(--tinta);
   font: inherit;
 }
-.pagina input[type='checkbox'] {
+.caixa {
   width: 22px;
   height: 22px;
   margin: 0 10px 0 0;
   accent-color: var(--acao);
 }
-.pagina label {
-  font-weight: 500;
-}
-.pagina button,
+.botao,
 .botao-link {
   display: inline-flex;
   align-items: center;
@@ -147,28 +152,28 @@
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
-.pagina button:hover,
+.botao:hover,
 .botao-link:hover {
   background: var(--poco);
 }
-.pagina button[type='submit'] {
+.botao.primario {
   border-color: transparent;
   background: var(--coral);
   color: var(--coral-t);
   font-weight: 600;
   box-shadow: 0 10px 16px -10px rgb(var(--som2-rgb) / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.35);
 }
-.pagina button[type='submit']:hover {
+.botao.primario:hover {
   background: var(--coral2);
 }
-.pagina button:disabled {
+.botao:disabled {
   opacity: 0.6;
   cursor: default;
 }
-.pagina ul {
+.prova ul {
   padding-left: 1.2rem;
 }
-.pagina ul li {
+.prova li {
   min-height: 1.6rem;
 }
 
@@ -179,7 +184,7 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  min-height: 36px;
+  height: var(--toque); /* a mesma altura em todos os estados, com ou sem link */
   padding: 0 14px;
   border-radius: 99px;
   background: var(--folha);
@@ -195,8 +200,8 @@
   color: var(--tinta);
   font-weight: 600;
 }
-.sync[data-estado='erro-codigo'] {
-  padding-right: 6px;
+.sync a {
+  height: 100%;
 }
 /* O formato do ponto muda com o estado, para não depender só da cor. */
 .ponto {
@@ -218,7 +223,8 @@
   background: var(--ambar);
   border-radius: 3px;
 }
-.sync[data-estado='erro-codigo'] .ponto {
+.sync[data-estado='erro-codigo'] .ponto,
+.sync[data-estado='nao-conectado'] .ponto {
   background: var(--alerta);
   border-radius: 2px;
   transform: rotate(45deg) scale(0.9);
@@ -235,15 +241,14 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 18px 8px 18px 14px;
-  overflow-y: auto;
+  padding: 18px 8px 10px 14px;
 }
 .marca {
   display: flex;
   align-items: center;
   gap: 9px;
   margin: 0;
-  padding: 2px 10px 18px;
+  padding: 2px 10px 14px;
   font-family: var(--titulo);
   font-size: 1.95rem;
   line-height: 1;
@@ -257,9 +262,16 @@
   background: var(--coral);
   border-radius: 50% 50% 50% 5px;
 }
+/* Só o meio rola: com 44 px por linha, tudo junto não cabe em 800 px de altura. */
+.menu-rolagem {
+  flex: 1;
+  min-height: 0;
+  padding-right: 6px;
+  overflow-y: auto;
+}
 .menu h2 {
   margin: 0;
-  padding: 18px 12px 4px;
+  padding: 14px 12px 2px;
   color: var(--tinta3);
   font: 500 0.9rem/1.3 var(--ui);
 }
@@ -270,8 +282,10 @@
   list-style: none;
 }
 .rodape-do-menu {
-  margin-top: auto;
-  padding-top: 18px;
+  flex: none;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--linha);
 }
 
 .item {
@@ -285,7 +299,7 @@
   text-decoration: none;
 }
 .item:hover {
-  background: rgb(255 255 255 / 0.6);
+  background: rgb(var(--som-rgb) / 0.08);
 }
 .item:focus-visible {
   outline-offset: -3px;
@@ -350,7 +364,9 @@
 .atalhos button.mais:focus-visible {
   outline-offset: -3px;
 }
-.atalhos [aria-current] {
+.atalhos a[aria-current],
+.atalhos button.mais[aria-current],
+.atalhos button.mais[aria-expanded='true'] {
   background: var(--agua);
   color: var(--tinta);
   font-weight: 700;
@@ -379,9 +395,14 @@
 .atalhos[data-variante='trilho'] ul {
   flex-direction: column;
   gap: 4px;
+  min-height: 100%;
 }
 .atalhos[data-variante='trilho'] li {
   flex: none;
+}
+/* Mais embaixo no trilho: a folha abre ao lado dele, não solta no meio da tela. */
+.atalhos[data-variante='trilho'] li:last-child {
+  margin-top: auto;
 }
 .atalhos[data-variante='trilho'] a,
 .atalhos[data-variante='trilho'] button.mais {
@@ -423,6 +444,10 @@
   padding: 14px 12px 2px;
   color: var(--tinta3);
   font: 500 0.9rem/1.3 var(--ui);
+}
+.folha .item[aria-current='page'] {
+  background: var(--agua);
+  box-shadow: none;
 }
 .folha .fechar {
   width: 100%;

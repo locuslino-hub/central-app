@@ -90,6 +90,7 @@ export function Conectar() {
           <br />
           <input
             id="conectar-url"
+            class="campo"
             type="url"
             required
             autocomplete="off"
@@ -103,6 +104,7 @@ export function Conectar() {
           <br />
           <input
             id="conectar-codigo"
+            class="campo"
             type={tipoDoCodigo}
             required
             autocomplete="new-password"
@@ -119,6 +121,7 @@ export function Conectar() {
         <p>
           <label style={{ ...TOQUE_MINIMO, display: 'inline-flex', alignItems: 'center' }}>
             <input
+              class="caixa"
               type="checkbox"
               checked={mostrarCodigo}
               onChange={(e) => setMostrarCodigo(e.currentTarget.checked)}
@@ -126,7 +129,7 @@ export function Conectar() {
             Mostrar código
           </label>
         </p>
-        <button type="submit" disabled={testando} style={TOQUE_MINIMO}>
+        <button type="submit" class="botao primario" disabled={testando} style={TOQUE_MINIMO}>
           Testar e salvar
         </button>
       </form>
@@ -134,7 +137,7 @@ export function Conectar() {
         {situacao}
       </p>
       {aConfirmar && (
-        <button type="button" style={TOQUE_MINIMO} onClick={() => void testarESalvar(true)}>
+        <button type="button" class="botao" style={TOQUE_MINIMO} onClick={() => void testarESalvar(true)}>
           Substituir conexão
         </button>
       )}

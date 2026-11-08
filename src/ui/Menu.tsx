@@ -1,6 +1,6 @@
 // Navegação: menu completo (computador) e atalhos (barra no celular, trilho no tablet).
 import type { ComponentChildren } from 'preact';
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { hrefDe, nomeDoMes, type IdDaRota, type RotaAtual } from '../rotas';
 import { Icone, type NomeDoIcone } from './icones';
 import { useSalas } from './hooks';
@@ -80,26 +80,29 @@ export function MenuLateral({ rota, hoje }: Props) {
   return (
     <nav class="menu" aria-label="Principal">
       <p class="marca">Central</p>
-      <Item rota={rota} id="hoje" icone="painel" rotulo="Painel do dia" />
-      <Grupo titulo="Calendário">
-        {item('semana', 'semana')}
-        {item('mes', 'mes')}
-        {item('ano', 'ano')}
-      </Grupo>
-      <Grupo titulo="Ver">
-        {item('salas', 'salas')}
-        {item('caixa', 'caixa')}
-        {item('quadro', 'quadro')}
-        {item('atividades', 'atividades')}
-        {item('sem-prazo', 'sem-prazo')}
-      </Grupo>
-      <Grupo titulo="Minhas salas">
-        {salas.map((sala) => (
-          <li key={sala.id}>
-            <Item rota={rota} id="sala" param={sala.id} rotulo={sala.nome} cor={corDaSala(sala.id)} />
-          </li>
-        ))}
-      </Grupo>
+      {/* O meio rola; a marca e o rodapé ficam sempre à vista. */}
+      <div class="menu-rolagem">
+        <Item rota={rota} id="hoje" icone="painel" rotulo="Painel do dia" />
+        <Grupo titulo="Calendário">
+          {item('semana', 'semana')}
+          {item('mes', 'mes')}
+          {item('ano', 'ano')}
+        </Grupo>
+        <Grupo titulo="Ver">
+          {item('salas', 'salas')}
+          {item('caixa', 'caixa')}
+          {item('quadro', 'quadro')}
+          {item('atividades', 'atividades')}
+          {item('sem-prazo', 'sem-prazo')}
+        </Grupo>
+        <Grupo titulo="Minhas salas">
+          {salas.map((sala) => (
+            <li key={sala.id}>
+              <Item rota={rota} id="sala" param={sala.id} rotulo={sala.nome} cor={corDaSala(sala.id)} />
+            </li>
+          ))}
+        </Grupo>
+      </div>
       <div class="rodape-do-menu">
         <Item rota={rota} id="conectar" icone="conectar" rotulo="Conectar aparelho" />
       </div>
@@ -119,6 +122,11 @@ const ATALHOS: { id: IdComHref; icone: NomeDoIcone; rotulo: string; contem?: IdD
 export function Atalhos({ rota, hoje, variante }: Props & { variante: 'barra' | 'trilho' }) {
   const [aberto, setAberto] = useState(false);
   const botao = useRef<HTMLButtonElement | null>(null);
+
+  // A página mudou (link, voltar do navegador): a folha não fica aberta sobre ela.
+  useEffect(() => {
+    setAberto(false);
+  }, [rota.id, rota.param]);
 
   function fechar(devolverFoco: boolean) {
     setAberto(false);

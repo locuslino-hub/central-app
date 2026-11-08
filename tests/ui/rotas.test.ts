@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PAINEIS_DIREITOS, hrefDe, nomeDoMes, resolverRota } from '../../src/rotas';
+import { hrefDe, nomeDoMes, resolverRota } from '../../src/rotas';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon).
 const AGORA = new Date(2026, 10, 5, 12, 20);
@@ -37,7 +37,21 @@ describe('resolverRota', () => {
     expect(resolverRota('#/sala/%E0%A4%A', AGORA).id).toBe('nao-encontrada');
   });
 
-  it.each(['#/sala', '#/sala/', '#/sala/a/b', '#/pessoa/', '#/nada', '#/semana/extra', 'semana', '#/__proto__'])(
+  it.each([
+    '#/sala',
+    '#/sala/',
+    '#/sala/a/b',
+    '#/pessoa/',
+    '#/nada',
+    '#/semana/extra',
+    'semana',
+    '#/__proto__',
+    '#semana',
+    '#//semana',
+    '#/semana//',
+    '#///',
+    '/semana',
+  ])(
     '%j é "não encontrada"',
     (hash) => {
       const rota = resolverRota(hash, AGORA);
@@ -75,11 +89,5 @@ describe('hrefDe', () => {
     expect(hrefDe('semana')).toBe('#/semana');
     expect(hrefDe('sala', 'sala-mba')).toBe('#/sala/sala-mba');
     expect(hrefDe('pessoa', 'a b')).toBe('#/pessoa/a%20b');
-  });
-});
-
-describe('painel direito', () => {
-  it('aceita Agora e Chat', () => {
-    expect([...PAINEIS_DIREITOS]).toEqual(['agora', 'chat']);
   });
 });

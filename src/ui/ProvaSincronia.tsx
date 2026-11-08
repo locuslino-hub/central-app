@@ -53,17 +53,18 @@ export function ProvaSincronia() {
   }
 
   return (
-    <section class="painel">
+    <section class="painel prova">
       <h2>Prova da sincronia</h2>
       <form onSubmit={criar}>
         <label for="nova-tarefa">Nova tarefa</label>{' '}
         <input
           id="nova-tarefa"
+          class="campo"
           value={titulo}
           onInput={(e) => setTitulo((e.target as HTMLInputElement).value)}
           style={TOQUE_MINIMO}
         />{' '}
-        <button type="submit" style={TOQUE_MINIMO}>
+        <button type="submit" class="botao primario" style={TOQUE_MINIMO}>
           Criar
         </button>
       </form>

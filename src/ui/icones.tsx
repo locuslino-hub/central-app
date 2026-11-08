@@ -6,7 +6,8 @@ const TRACOS = {
   caixa: 'M4 13.5 6.5 5h11l2.5 8.5V19H4zM4 13.5h4.5a3.5 3.5 0 0 0 7 0H20',
   salas: 'M6 20V4.5h12V20M4 20h16M14.5 12.5v.01',
   chat: 'M20 12a8 7 0 0 1-11.6 6.5L4 19.5l1.3-3.6A7 7 0 0 1 4 12a8 7 0 0 1 16 0',
-  mais: 'M5.5 12h.01M12 12h.01M18.5 12h.01',
+  // Três pontos desenhados como círculos pequenos: o traço é o mesmo dos outros ícones.
+  mais: 'M5.5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0-2 0M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0-2 0M18.5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0-2 0',
   semana: 'M5 5.5h14V19H5zM5 9.5h14M9 3.5v4M15 3.5v4M8.5 13h2M13.5 13h2M8.5 16h2',
   mes: 'M5 5.5h14V19H5zM5 9.5h14M9 3.5v4M15 3.5v4M9 14l2 2 4-4',
   ano: 'M5 5.5h14V19H5zM5 9.5h14M9 3.5v4M15 3.5v4M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16h.01M12 16h.01',
@@ -28,7 +29,7 @@ export function Icone({ nome }: { nome: NomeDoIcone }) {
       height="22"
       fill="none"
       stroke="currentColor"
-      stroke-width={nome === 'mais' ? 3 : 1.7}
+      stroke-width="1.7"
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true"

@@ -109,7 +109,8 @@ export function FolhaMais({ rotulo, rotaAtual, aoFechar }: FolhaProps) {
                     class="item"
                     href={hrefDe(destino.id)}
                     aria-current={rotaAtual === destino.id ? 'page' : undefined}
-                    onClick={() => aoFechar(false)}
+                    // Se já está nessa página não há página nova para receber o foco: volta ao Mais.
+                    onClick={() => aoFechar(rotaAtual === destino.id)}
                   >
                     <Icone nome={destino.icone} />
                     <span>{rotulo(destino.id)}</span>

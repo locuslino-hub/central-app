@@ -1,5 +1,6 @@
 // Estado da sincronia sempre em texto (o ponto colorido só reforça).
 import { useEffect, useState } from 'preact/hooks';
+import { lerConexao } from '../conexao/guarda';
 import { assinarEstado, estadoAtual, type EstadoSync } from '../dados/sincronia';
 
 export const TEXTO_DO_ESTADO: Record<EstadoSync, string> = {
@@ -10,19 +11,59 @@ export const TEXTO_DO_ESTADO: Record<EstadoSync, string> = {
   'erro-codigo': 'Problema com o código do aparelho',
 };
 
+/** Sem conexão guardada neste aparelho, "sem internet" seria enganoso: falta conectar. */
+export const TEXTO_NAO_CONECTADO = 'Aparelho não conectado';
+
+type Mostrado = EstadoSync | 'nao-conectado';
+
+const TEXTO: Record<Mostrado, string> = { ...TEXTO_DO_ESTADO, 'nao-conectado': TEXTO_NAO_CONECTADO };
+
+/** Só o que pede atenção vai para o leitor de tela; voltar ao normal fica em silêncio. */
+const ANUNCIADOS = new Set<Mostrado>(['sem-internet', 'por-enviar', 'erro-codigo', 'nao-conectado']);
+
+/** Estados que levam a Conectar aparelho. */
+const LEVAM_A_CONECTAR = new Set<Mostrado>(['erro-codigo', 'nao-conectado']);
+
+/** `undefined` enquanto não leu. Relê a cada mudança de estado e a cada troca de página. */
+function useAparelhoConectado(estado: EstadoSync): boolean | undefined {
+  const [conectado, setConectado] = useState<boolean>();
+  useEffect(() => {
+    let ativo = true;
+    const ler = () =>
+      lerConexao()
+        .then((conexao) => ativo && setConectado(conexao !== null && conexao !== undefined))
+        .catch(() => ativo && setConectado(undefined));
+    void ler();
+    window.addEventListener('hashchange', ler);
+    return () => {
+      ativo = false;
+      window.removeEventListener('hashchange', ler);
+    };
+  }, [estado]);
+  return conectado;
+}
+
 export function EstadoDaSincronia() {
   const [estado, setEstado] = useState<EstadoSync>(estadoAtual);
   useEffect(() => {
     setEstado(estadoAtual());
     return assinarEstado(setEstado);
   }, []);
+  const conectado = useAparelhoConectado(estado);
 
-  const texto = TEXTO_DO_ESTADO[estado];
+  const mostrado: Mostrado = conectado === false && estado !== 'atualizando' ? 'nao-conectado' : estado;
+  const texto = TEXTO[mostrado];
   return (
-    <p class="sync" role="status" data-estado={estado}>
-      <span class="ponto" aria-hidden="true" />
-      <span class="so-leitor">Sincronização: </span>
-      {estado === 'erro-codigo' ? <a href="#/conectar">{texto}</a> : <span>{texto}</span>}
-    </p>
+    <>
+      <div class="sync" data-estado={mostrado}>
+        <span class="ponto" aria-hidden="true" />
+        <span class="so-leitor">Sincronização: </span>
+        {LEVAM_A_CONECTAR.has(mostrado) ? <a href="#/conectar">{texto}</a> : <span>{texto}</span>}
+      </div>
+      {/* Região viva à parte: o leitor recebe só o texto, e só nos estados que pedem atenção. */}
+      <p class="so-leitor" role="status">
+        {ANUNCIADOS.has(mostrado) ? texto : ''}
+      </p>
+    </>
   );
 }

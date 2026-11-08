@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErroConexao, ErroScript } from '../../src/conexao/cliente';
-import { salvar, semear } from '../../src/dados/loja';
+import { salvarConexao } from '../../src/conexao/guarda';
+import { apagar, salvar, semear } from '../../src/dados/loja';
 import { sincronizar, type EstadoSync } from '../../src/dados/sincronia';
 import { App } from '../../src/App';
-import { TEXTO_DO_ESTADO } from '../../src/ui/EstadoSync';
+import { PAINEIS_DIREITOS } from '../../src/rotas';
+import { TEXTO_DO_ESTADO, TEXTO_NAO_CONECTADO } from '../../src/ui/EstadoSync';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa: o resto
 // do relógio (timers do IndexedDB) segue real.
@@ -95,6 +97,21 @@ describe('computador (1280 px): menu à esquerda, página, painel direito', () =
     expect(grupo.queryAllByRole('link')).toHaveLength(0);
     await salvar('salas', { id: 'sala-nova', nome: 'Aurora', ordem: 9 });
     await waitFor(() => expect(grupo.getByRole('link', { name: 'Aurora' })).toBeTruthy());
+
+    await salvar('salas', { id: 'sala-nova', nome: 'Aurora 2', ordem: 9 });
+    await waitFor(() => expect(grupo.getByRole('link', { name: 'Aurora 2' })).toBeTruthy());
+    expect(grupo.queryByRole('link', { name: 'Aurora' })).toBeNull();
+
+    await apagar('salas', 'sala-nova');
+    await waitFor(() => expect(grupo.queryAllByRole('link')).toHaveLength(0));
+  });
+
+  it('a página da sala já aberta acompanha o novo nome da sala', async () => {
+    await salvar('salas', { id: 'sala-x', nome: 'Antes', ordem: 1 });
+    await mostrar('#/sala/sala-x', 1280);
+    await screen.findByRole('heading', { level: 1, name: 'Antes' });
+    await salvar('salas', { id: 'sala-x', nome: 'Depois', ordem: 1 });
+    await screen.findByRole('heading', { level: 1, name: 'Depois' });
   });
 
   it('só a rota ativa tem aria-current="page", e ele acompanha a navegação', async () => {
@@ -126,8 +143,9 @@ describe('computador (1280 px): menu à esquerda, página, painel direito', () =
   it('o painel direito tem Agora e Chat', async () => {
     await mostrar('#/', 1280);
     const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
-    expect(within(painel).getByRole('heading', { name: 'Agora' })).toBeTruthy();
-    expect(within(painel).getByRole('heading', { name: 'Chat' })).toBeTruthy();
+    const titulos = within(painel).getAllByRole('heading').map((h: HTMLElement) => h.textContent);
+    // Um cartão para cada painel que a rota diz aceitar, na mesma ordem.
+    expect(titulos).toEqual(PAINEIS_DIREITOS.map((p) => (p === 'agora' ? 'Agora' : 'Chat')));
   });
 
   it('não mostra a barra inferior nem o botão Mais', async () => {
@@ -374,8 +392,44 @@ describe('Conectar dentro da casca', () => {
   });
 });
 
+describe('Mais: foco e fechamento', () => {
+  it('escolher a página em que já está devolve o foco ao botão Mais', async () => {
+    await mostrar('#/quadro', 390);
+    const botao = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(botao);
+    const atual = within(screen.getByRole('dialog')).getByRole('link', { name: 'Quadro' });
+    expect(atual.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(atual); // o hash não muda: nenhuma página nova para receber o foco
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(botao);
+  });
+
+  it('a folha fecha quando a página muda por outro caminho (voltar do navegador)', async () => {
+    await mostrar('#/', 390);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    navegar('#/caixa');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mais' }).getAttribute('aria-expanded')).toBe('false');
+    const titulo = screen.getByRole('heading', { level: 1, name: 'Caixa' });
+    await waitFor(() => expect(document.activeElement).toBe(titulo));
+  });
+});
+
 describe('estado da sincronia, sempre em texto', () => {
   const esperarSemRede = async () => {};
+  const conectarAparelho = () =>
+    salvarConexao({ url: 'https://script.google.com/macros/s/ID-FICTICIO/exec', codigo: 'codigo-ficticio-0123456789' });
+  const chip = () => document.querySelector<HTMLElement>('.sync')!;
+  /** O que o leitor de tela recebe: só o texto, sem prefixo. */
+  const anuncio = () => screen.getByRole('status');
+  const semRede = () => sincronizar({ chamar: () => Promise.reject(new ErroConexao()), esperar: esperarSemRede });
+  const tudoCerto = () =>
+    sincronizar({
+      chamar: ((acao: string) =>
+        Promise.resolve(acao === 'puxar' ? { registros: [], agora: 0 } : { aceitas: [], conflitos: [] })) as never,
+      esperar: esperarSemRede,
+    });
 
   it('todo estado tem um texto curto em português', () => {
     expect(TEXTO_DO_ESTADO).toEqual({
@@ -385,19 +439,16 @@ describe('estado da sincronia, sempre em texto', () => {
       'por-enviar': 'Por enviar',
       'erro-codigo': 'Problema com o código do aparelho',
     });
+    expect(TEXTO_NAO_CONECTADO).toBe('Aparelho não conectado');
   });
 
-  const regiao = () => screen.getByRole('status');
-
   it('mostra o estado atual ao abrir e acompanha cada mudança', async () => {
-    const resposta = { registros: [], agora: 0 };
-
-    // sem-internet
+    await conectarAparelho();
     await mostrar('#/', 1280);
     await act(async () => {
-      await sincronizar({ chamar: () => Promise.reject(new ErroConexao()), esperar: esperarSemRede });
+      await semRede();
     });
-    expect(regiao().textContent).toContain('Sem internet');
+    expect(chip().textContent).toContain('Sem internet');
 
     // atualizando (a chamada fica aberta até a gente soltar)
     let soltar!: (valor: unknown) => void;
@@ -412,24 +463,23 @@ describe('estado da sincronia, sempre em texto', () => {
         esperar: esperarSemRede,
       });
     });
-    await waitFor(() => expect(regiao().textContent).toContain('Atualizando…'));
+    await waitFor(() => expect(chip().textContent).toContain('Atualizando…'));
     await waitFor(() => expect(soltar).toBeTypeOf('function'));
 
-    // atualizado
     await act(async () => {
-      soltar(resposta);
+      soltar({ registros: [], agora: 0 });
       await rodada;
     });
-    expect(regiao().textContent).toContain('Atualizado');
+    expect(chip().textContent).toContain('Atualizado');
 
-    // erro-codigo
     await act(async () => {
       await sincronizar({ chamar: () => Promise.reject(new ErroScript('codigo-invalido')), esperar: esperarSemRede });
     });
-    expect(regiao().textContent).toContain('Problema com o código do aparelho');
+    expect(chip().textContent).toContain('Problema com o código do aparelho');
   });
 
   it('por-enviar: sem rede e com alteração guardada', async () => {
+    await conectarAparelho();
     await salvar('tarefas', {
       titulo: 'Ligar para Renata',
       salaId: null,
@@ -441,27 +491,101 @@ describe('estado da sincronia, sempre em texto', () => {
     });
     await mostrar('#/', 1280);
     await act(async () => {
-      await sincronizar({ chamar: () => Promise.reject(new ErroConexao()), esperar: esperarSemRede });
+      await semRede();
     });
-    expect(regiao().textContent).toContain('Por enviar');
+    expect(chip().textContent).toContain('Por enviar');
+  });
+
+  it('sem conexão guardada, a falha de rede não vira "Sem internet": diz que o aparelho não está conectado', async () => {
+    await mostrar('#/', 1280);
+    await act(async () => {
+      await semRede();
+    });
+    await waitFor(() => expect(chip().textContent).toContain('Aparelho não conectado'));
+    expect(chip().textContent).not.toContain('Sem internet');
+    expect(within(chip()).getByRole('link', { name: 'Aparelho não conectado' }).getAttribute('href')).toBe('#/conectar');
+    expect(anuncio().textContent).toBe('Aparelho não conectado');
+  });
+
+  it('o mesmo vale com alterações na fila: sem conexão não é "Por enviar"', async () => {
+    await salvar('tarefas', { titulo: 'Ligar para Renata', salaId: null } as never);
+    await mostrar('#/', 1280);
+    await act(async () => {
+      await semRede();
+    });
+    await waitFor(() => expect(chip().textContent).toContain('Aparelho não conectado'));
+  });
+
+  it('enquanto atualiza, mesmo sem conexão, mostra "Atualizando…"', async () => {
+    await mostrar('#/', 1280);
+    let soltar!: () => void;
+    let rodada!: Promise<EstadoSync>;
+    act(() => {
+      rodada = sincronizar({
+        chamar: () => new Promise<never>((_, rejeitar) => (soltar = () => rejeitar(new ErroConexao()))),
+        esperar: esperarSemRede,
+      });
+    });
+    await waitFor(() => expect(chip().textContent).toContain('Atualizando…'));
+    await waitFor(() => expect(soltar).toBeTypeOf('function'));
+    await act(async () => {
+      soltar();
+      await rodada;
+    });
+  });
+
+  it('ao conectar o aparelho e voltar, o texto deixa de dizer "não conectado"', async () => {
+    await mostrar('#/conectar', 1280);
+    await act(async () => {
+      await semRede();
+    });
+    await waitFor(() => expect(chip().textContent).toContain('Aparelho não conectado'));
+    await conectarAparelho();
+    navegar('#/');
+    await waitFor(() => expect(chip().textContent).toContain('Sem internet'));
   });
 
   it('o problema com o código leva a Conectar aparelho; os outros estados não são link', async () => {
+    await conectarAparelho();
     await mostrar('#/', 1280);
     await act(async () => {
       await sincronizar({ chamar: () => Promise.reject(new ErroScript('interno')), esperar: esperarSemRede });
     });
-    const alvo = within(regiao()).getByRole('link', { name: /Problema com o código do aparelho/ });
+    const alvo = within(chip()).getByRole('link', { name: /Problema com o código do aparelho/ });
     expect(alvo.getAttribute('href')).toBe('#/conectar');
 
     await act(async () => {
-      await sincronizar({
-        chamar: ((acao: string) =>
-          Promise.resolve(acao === 'puxar' ? { registros: [], agora: 0 } : { aceitas: [], conflitos: [] })) as never,
-        esperar: esperarSemRede,
-      });
+      await tudoCerto();
     });
-    expect(within(regiao()).queryByRole('link')).toBeNull();
+    expect(within(chip()).queryByRole('link')).toBeNull();
+  });
+
+  it('o leitor de tela só recebe o texto, e só quando o estado pede atenção', async () => {
+    await conectarAparelho();
+    await mostrar('#/', 1280);
+    const regiao = anuncio();
+
+    await act(async () => {
+      await semRede();
+    });
+    expect(regiao.textContent).toBe('Sem internet');
+
+    await act(async () => {
+      await tudoCerto();
+    });
+    expect(chip().textContent).toContain('Atualizado');
+    expect(regiao.textContent).toBe(''); // voltar ao normal não é anunciado
+
+    await act(async () => {
+      await sincronizar({ chamar: () => Promise.reject(new ErroScript('codigo-invalido')), esperar: esperarSemRede });
+    });
+    expect(regiao.textContent).toBe('Problema com o código do aparelho');
+  });
+
+  it('o chip em si não é região viva (só a região de aviso é)', async () => {
+    await mostrar('#/', 1280);
+    expect(chip().getAttribute('role')).toBeNull();
+    expect(chip().querySelector('[aria-live]')).toBeNull();
   });
 
   it('aparece em todos os tamanhos, uma vez só', async () => {
@@ -469,12 +593,13 @@ describe('estado da sincronia, sempre em texto', () => {
       irPara('#/', largura);
       const { unmount } = render(<App />);
       expect(screen.getAllByRole('status')).toHaveLength(1);
+      expect(document.querySelectorAll('.sync')).toHaveLength(1);
       unmount();
     }
   });
 
   it('o texto não depende só de cor: o ponto é decorativo (aria-hidden)', async () => {
     await mostrar('#/', 1280);
-    expect(regiao().querySelector('.ponto')?.getAttribute('aria-hidden')).toBe('true');
+    expect(chip().querySelector('.ponto')?.getAttribute('aria-hidden')).toBe('true');
   });
 });

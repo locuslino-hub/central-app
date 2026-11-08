@@ -182,11 +182,10 @@ test.describe('computador, 1280 px', () => {
 
   test('o estado da sincronia aparece em texto', async ({ page }) => {
     await page.goto('/central-app/');
-    const estado = page.getByRole('status').first();
+    const estado = page.locator('.sync');
     await expect(estado).toBeVisible();
-    // Sem aparelho conectado, a sincronia não consegue falar com o script.
     await expect(estado).toContainText(
-      /Atualizado|Atualizando…|Sem internet|Por enviar|Problema com o código do aparelho/,
+      /Atualizado|Atualizando…|Sem internet|Por enviar|Problema com o código do aparelho|Aparelho não conectado/,
     );
   });
 
@@ -220,5 +219,151 @@ test.describe('computador, 1280 px', () => {
         }),
     );
     expect(bloqueado).toBe(true);
+  });
+});
+
+const URL_FICTICIA = 'https://script.google.com/macros/s/ID-FICTICIO/exec';
+const TRANSPARENTE = 'rgba(0, 0, 0, 0)';
+const BRANCO = 'rgb(255, 255, 255)';
+
+const fundo = (alvo: import('@playwright/test').Locator) =>
+  alvo.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+/** Guarda uma conexão fictícia no navegador, como a tela Conectar faria. */
+async function guardarConexao(page: Page) {
+  await page.evaluate(
+    (url) =>
+      new Promise<void>((resolver, rejeitar) => {
+        const abrir = indexedDB.open('central-conexao');
+        abrir.onerror = () => rejeitar(abrir.error);
+        abrir.onsuccess = () => {
+          const escrita = abrir.result.transaction('conexao', 'readwrite');
+          escrita.objectStore('conexao').put({ url, codigo: 'codigo-ficticio-0123456789' }, 'atual');
+          escrita.oncomplete = () => resolver();
+        };
+      }),
+    URL_FICTICIA,
+  );
+}
+
+test.describe('acabamento da casca', () => {
+  test.describe('celular', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('o Mais mostra que a página aberta está dentro dele, e que a folha está aberta', async ({ page }) => {
+      await page.goto('/central-app/#/quadro');
+      const mais = page.getByRole('button', { name: 'Mais' });
+      expect(await fundo(mais)).not.toBe(TRANSPARENTE);
+      // Painel não está dentro do Mais: sem fundo.
+      await page.goto('/central-app/#/');
+      expect(await fundo(mais)).toBe(TRANSPARENTE);
+      await mais.click();
+      expect(await fundo(mais)).not.toBe(TRANSPARENTE);
+    });
+
+    test('na folha, o item da página atual se destaca do fundo branco', async ({ page }) => {
+      await page.goto('/central-app/#/quadro');
+      await page.getByRole('button', { name: 'Mais' }).click();
+      const cor = await fundo(page.getByRole('dialog').getByRole('link', { name: 'Quadro' }));
+      expect(cor).not.toBe(BRANCO);
+      expect(cor).not.toBe(TRANSPARENTE);
+    });
+
+    test('o texto respeita o tamanho de fonte do aparelho (raiz em porcentagem)', async ({ page }) => {
+      await page.goto('/central-app/');
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('15px');
+      expect(await page.evaluate(() => document.styleSheets[0] && [...document.styleSheets].some((f) =>
+        [...f.cssRules].some((r) => r instanceof CSSStyleRule && r.selectorText === 'html' && r.style.fontSize === '93.75%'),
+      ))).toBe(true);
+    });
+  });
+
+  test.describe('tablet', () => {
+    test.use({ viewport: { width: 800, height: 1024 } });
+
+    test('a folha do Mais abre ao lado do botão, que fica marcado como aberto', async ({ page }) => {
+      await page.goto('/central-app/');
+      const mais = page.getByRole('button', { name: 'Mais' });
+      await mais.click();
+      const botao = (await mais.boundingBox())!;
+      const folha = (await page.getByRole('dialog').boundingBox())!;
+      // A altura do botão cai dentro da altura da folha, e ela começa à direita do trilho.
+      expect(botao.y + botao.height / 2).toBeGreaterThan(folha.y);
+      expect(botao.y + botao.height / 2).toBeLessThan(folha.y + folha.height);
+      expect(folha.x).toBeGreaterThanOrEqual(botao.x + botao.width);
+      expect(await fundo(mais)).not.toBe(TRANSPARENTE);
+    });
+  });
+
+  test.describe('computador', () => {
+    for (const [largura, altura] of [
+      [1280, 800],
+      [1280, 720],
+      [1366, 768],
+    ]) {
+      test(`${largura}x${altura}: o rodapé do menu fica à vista e toda sala é alcançável`, async ({ page }) => {
+        await page.setViewportSize({ width: largura, height: altura });
+        await page.goto('/central-app/');
+        const menu = page.getByRole('navigation', { name: 'Principal' });
+        await expect(menu.getByRole('link', { name: 'Casa' })).toHaveCount(1);
+        const conectar = (await menu.getByRole('link', { name: 'Conectar aparelho' }).boundingBox())!;
+        expect(conectar.y).toBeGreaterThanOrEqual(0);
+        expect(conectar.y + conectar.height).toBeLessThanOrEqual(altura);
+
+        const casa = menu.getByRole('link', { name: 'Casa' });
+        await casa.scrollIntoViewIfNeeded();
+        const caixa = (await casa.boundingBox())!;
+        expect(caixa.y + caixa.height).toBeLessThanOrEqual(conectar.y); // acima do rodapé, sem ficar escondida
+        expect(await semRolagemDeLado(page)).toBe(true);
+      });
+    }
+
+    test('perto de 1100 px a página ainda tem espaço, e cresce com a janela', async ({ page }) => {
+      const larguras: number[] = [];
+      for (const largura of [1101, 1200, 1280]) {
+        await page.setViewportSize({ width: largura, height: 800 });
+        await page.goto('/central-app/');
+        larguras.push((await page.locator('main').boundingBox())!.width);
+      }
+      expect(larguras[0]).toBeGreaterThanOrEqual(600);
+      expect(larguras[1]).toBeGreaterThan(larguras[0]);
+      expect(larguras[2]).toBeGreaterThan(larguras[1]);
+    });
+
+    test('o chip da sincronia tem 44 px de altura em qualquer estado', async ({ page }) => {
+      const chip = page.locator('.sync');
+      const altura = async () => Math.round((await chip.boundingBox())!.height);
+
+      // Sem conexão guardada.
+      await page.goto('/central-app/');
+      await expect(chip).toContainText('Aparelho não conectado');
+      expect(await altura()).toBe(44);
+
+      // Com conexão, o script recusa o código.
+      let resposta: object = { ok: false, erro: 'codigo-invalido' };
+      await page.route(URL_FICTICIA, (rota) =>
+        rota.fulfill({
+          headers: { 'access-control-allow-origin': '*' },
+          contentType: 'application/json',
+          body: JSON.stringify(resposta),
+        }),
+      );
+      await guardarConexao(page);
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await expect(chip).toContainText('Problema com o código do aparelho');
+      expect(await altura()).toBe(44);
+
+      // Com o script respondendo bem.
+      resposta = { ok: true, dados: { registros: [], agora: 0 } };
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await expect(chip).toContainText('Atualizado');
+      expect(await altura()).toBe(44);
+    });
+
+    test('sem conexão guardada o chip leva a Conectar aparelho', async ({ page }) => {
+      await page.goto('/central-app/');
+      const link = page.locator('.sync').getByRole('link', { name: 'Aparelho não conectado' });
+      await expect(link).toHaveAttribute('href', '#/conectar');
+    });
   });
 });

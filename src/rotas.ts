@@ -87,11 +87,17 @@ function decodificar(texto: string): string | undefined {
   }
 }
 
-/** Entende `location.hash`. Endereço que não existe vira "não encontrada". */
+/**
+ * Entende `location.hash`. Só valem `''`, `#` e `#/…`: `#semana` e `#//semana`
+ * não existem. Endereço que não existe vira "não encontrada".
+ */
 export function resolverRota(hash: string, agora: Date = new Date()): RotaAtual {
-  if (hash !== '' && !hash.startsWith('#')) return NAO_ENCONTRADA;
-  // Sem o `#`, sem texto depois de `?`, sem a barra do início e do fim.
-  const caminho = hash.slice(1).split('?')[0].replace(/^\/+/, '').replace(/\/+$/, '');
+  const semConsulta = hash.split('?')[0];
+  if (semConsulta !== '' && semConsulta !== '#' && !semConsulta.startsWith('#/')) return NAO_ENCONTRADA;
+  const resto = semConsulta.slice(2);
+  if (resto.startsWith('/')) return NAO_ENCONTRADA; // `#//semana`
+  // Uma barra no fim é aceita (`#/semana/`); duas não.
+  const caminho = resto.replace(/\/$/, '');
 
   for (const [id, definicao] of Object.entries(ROTAS) as [Exclude<IdDaRota, 'nao-encontrada'>, Definicao][]) {
     if (!definicao.caminho.endsWith(':id')) {
