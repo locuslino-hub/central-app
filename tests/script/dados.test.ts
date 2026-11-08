@@ -16,7 +16,7 @@ const T0 = Date.parse('2026-11-05T12:20:00Z');
 const MINUTO = 60_000;
 
 function tarefa(id: string, titulo: string, atualizadoEm: number, aparelho = 'notebook'): RegistroBase {
-  return { id, titulo, atualizadoEm, aparelho };
+  return { id, titulo, salaId: null, atualizadoEm, aparelho };
 }
 
 function item(registro: RegistroBase, colecao = 'tarefas'): Item {
@@ -117,7 +117,12 @@ describe('enviar', () => {
     const armazem = armazemNaMemoria();
     const resposta = enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
 
-    expect(resposta).toEqual({ aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [] });
+    expect(resposta).toEqual({
+      aceitas: [{ colecao: 'tarefas', id: 't1' }],
+      conflitos: [],
+      recusadas: [],
+      substituidas: [],
+    });
     expect(armazem.gravacoes).toHaveLength(1);
     expect(armazem.gravacoes[0].naTrava).toBe(true);
   });
@@ -131,6 +136,8 @@ describe('enviar', () => {
     expect(enviar({ mudancas: [item(velha)] }, armazem)).toEqual({
       aceitas: [],
       conflitos: [item(nova)],
+      recusadas: [],
+      substituidas: [],
     });
     expect(puxar({ desde: 0 }, armazem).registros).toEqual([item(nova)]);
   });
@@ -159,7 +166,12 @@ describe('enviar', () => {
   it('mesmo id em coleções diferentes são registros diferentes', () => {
     const armazem = armazemNaMemoria();
     enviar(
-      { mudancas: [item(tarefa('x', 'tarefa', T0)), item(tarefa('x', 'sala', T0), 'salas')] },
+      {
+        mudancas: [
+          item(tarefa('x', 'tarefa', T0)),
+          item({ id: 'x', nome: 'Sala', ordem: 0, atualizadoEm: T0, aparelho: 'notebook' }, 'salas'),
+        ],
+      },
       armazem,
     );
     expect(puxar({ desde: 0 }, armazem).registros).toHaveLength(2);
@@ -167,7 +179,12 @@ describe('enviar', () => {
 
   it('lista vazia não grava', () => {
     const armazem = armazemNaMemoria();
-    expect(enviar({ mudancas: [] }, armazem)).toEqual({ aceitas: [], conflitos: [] });
+    expect(enviar({ mudancas: [] }, armazem)).toEqual({
+      aceitas: [],
+      conflitos: [],
+      recusadas: [],
+      substituidas: [],
+    });
     expect(armazem.gravacoes).toEqual([]);
   });
 
@@ -237,7 +254,7 @@ describe('ações pelo tratar', () => {
     const registro = tarefa('t1', 'Aula da Aurora', T0);
     expect(pedir(armazem, 'enviar', { mudancas: [item(registro)] })).toEqual({
       ok: true,
-      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [] },
+      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [], recusadas: [], substituidas: [] },
     });
     expect(pedir(armazem, 'puxar', { desde: 0 })).toMatchObject({
       ok: true,
@@ -278,29 +295,90 @@ describe('ações pelo tratar', () => {
     ['mudancas ausente', 'enviar', {}],
     ['mudancas não é lista', 'enviar', { mudancas: { 0: 1 } }],
     ['mudança nula', 'enviar', { mudancas: [null] }],
-    ['registro sem id', 'enviar', { mudancas: [{ colecao: 'tarefas', registro: { atualizadoEm: 1, aparelho: 'a' } }] }],
-    ['id vazio', 'enviar', { mudancas: [item(tarefa('', 'a', T0))] }],
-    ['id gigante', 'enviar', { mudancas: [item(tarefa('x'.repeat(201), 'a', T0))] }],
-    ['atualizadoEm texto', 'enviar', { mudancas: [{ colecao: 'tarefas', registro: { id: 't', atualizadoEm: '1', aparelho: 'a' } }] }],
-    ['atualizadoEm negativo', 'enviar', { mudancas: [item(tarefa('t', 'a', -1))] }],
-    ['aparelho ausente', 'enviar', { mudancas: [{ colecao: 'tarefas', registro: { id: 't', atualizadoEm: 1 } }] }],
     ['registro lista', 'enviar', { mudancas: [{ colecao: 'tarefas', registro: [] }] }],
-    ['coleção __proto__', 'enviar', { mudancas: [item(tarefa('t', 'a', T0), '__proto__')] }],
-    ['coleção com barra', 'enviar', { mudancas: [item(tarefa('t', 'a', T0), 'a/b')] }],
-    ['coleção vazia', 'enviar', { mudancas: [item(tarefa('t', 'a', T0), '')] }],
+    ['desde de enviar texto', 'enviar', { mudancas: [], desde: '5' }],
+    ['desde de enviar negativo', 'enviar', { mudancas: [], desde: -1 }],
   ])('pedido malformado (%s) responde interno sem gravar', (_nome, acao, dados) => {
     const armazem = armazemNaMemoria();
     expect(pedir(armazem, acao, dados)).toStrictEqual({ ok: false, erro: 'interno' });
     expect(armazem.gravacoes).toEqual([]);
   });
 
-  it('um item malformado recusa o pedido inteiro, sem gravar os bons', () => {
+  it.each([
+    ['registro sem id', { colecao: 'tarefas', registro: { titulo: 'a', salaId: null, atualizadoEm: 1, aparelho: 'a' } }],
+    ['id vazio', item(tarefa('', 'a', T0))],
+    ['id com 65 caracteres', item(tarefa('x'.repeat(65), 'a', T0))],
+    ['id com espaço', item(tarefa('id com espaço', 'a', T0))],
+    ['id com barra', item(tarefa('a/b', 'a', T0))],
+    ['aparelho com ponto', item(tarefa('t', 'a', T0, 'note.book'))],
+    ['aparelho ausente', { colecao: 'tarefas', registro: { id: 't', titulo: 'a', salaId: null, atualizadoEm: 1 } }],
+    ['atualizadoEm texto', { colecao: 'tarefas', registro: { ...tarefa('t', 'a', T0), atualizadoEm: '1' } }],
+    ['atualizadoEm negativo', item(tarefa('t', 'a', -1))],
+    ['atualizadoEm mais de 10 min no futuro', item(tarefa('t', 'a', T0 + 10 * MINUTO + 1))],
+    ['coleção __proto__', item(tarefa('t', 'a', T0), '__proto__')],
+    ['coleção constructor', item(tarefa('t', 'a', T0), 'constructor')],
+    ['coleção toString', item(tarefa('t', 'a', T0), 'toString')],
+    ['coleção desconhecida', item(tarefa('t', 'a', T0), 'naoExiste')],
+    ['coleção avisos (só local)', item(tarefa('t', 'a', T0), 'avisos')],
+    ['coleção vazia', item(tarefa('t', 'a', T0), '')],
+    ['tarefa sem titulo', { colecao: 'tarefas', registro: { id: 't', salaId: null, atualizadoEm: T0, aparelho: 'a' } }],
+    ['titulo número', { colecao: 'tarefas', registro: { ...tarefa('t', 'a', T0), titulo: 5 } }],
+    ['salaId ausente na tarefa', { colecao: 'tarefas', registro: { id: 't', titulo: 'a', atualizadoEm: T0, aparelho: 'a' } }],
+    ['apagado texto', { colecao: 'tarefas', registro: { ...tarefa('t', 'a', T0), apagado: 'sim' } }],
+    ['palavra com salaId nulo', { colecao: 'palavras', registro: { id: 'p', termo: 'tese', salaId: null, atualizadoEm: T0, aparelho: 'a' } }],
+    ['sala sem nome', { colecao: 'salas', registro: { id: 's', ordem: 0, atualizadoEm: T0, aparelho: 'a' } }],
+    ['documento com url javascript', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'javascript:alert(1)', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
+    ['documento com url sem esquema', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'exemplo.invalid/x', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
+    ['config sem fimDoDia', { colecao: 'config', registro: { id: 'geral', atualizadoEm: T0, aparelho: 'a' } }],
+  ])('item inválido (%s) vai para recusadas e nada é gravado', (_nome, mudanca) => {
+    const armazem = armazemNaMemoria();
+    const resposta = pedir(armazem, 'enviar', { mudancas: [mudanca] }) as {
+      ok: boolean;
+      dados: { aceitas: unknown[]; recusadas: unknown[] };
+    };
+    expect(resposta.ok).toBe(true);
+    expect(resposta.dados.aceitas).toEqual([]);
+    const { colecao, registro } = mudanca as { colecao: unknown; registro: { id?: unknown } };
+    if (typeof colecao === 'string' && typeof registro.id === 'string') {
+      expect(resposta.dados.recusadas).toEqual([{ colecao, id: registro.id }]);
+    }
+    expect(armazem.gravacoes).toEqual([]);
+  });
+
+  it.each([
+    ['tarefa com prazo e sala', item({ ...tarefa('t', 'a', T0), salaId: 'sala-aulas', data: '2026-11-05' })],
+    ['atualizadoEm exatamente 10 min no futuro', item(tarefa('t', 'a', T0 + 10 * MINUTO))],
+    ['lápide', item({ ...tarefa('t', 'a', T0), apagado: true })],
+    ['documento https', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'https://exemplo.invalid/plano', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
+    ['documento http', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'HTTP://exemplo.invalid/plano', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
+    ['sala semeada', { colecao: 'salas', registro: { id: 'sala-mba', nome: 'MBA', ordem: 4, atualizadoEm: 0, aparelho: 'semente' } }],
+    ['config', { colecao: 'config', registro: { id: 'geral', fimDoDia: '21:00', atualizadoEm: T0, aparelho: 'a' } }],
+    ['rascunho sem sala', { colecao: 'rascunhos', registro: { id: 'r', texto: '', atualizadoEm: T0, aparelho: 'a' } }],
+    ['id de UUID', item(tarefa('0b6f6a8e-3c1d-4c55-9a51-2f7c1d2e3f40', 'a', T0, '9d1c2b3a-0000-4000-8000-000000000000'))],
+  ])('item válido (%s) é aceito', (_nome, mudanca) => {
+    const armazem = armazemNaMemoria();
+    const resposta = pedir(armazem, 'enviar', { mudancas: [mudanca] }) as {
+      dados: { aceitas: unknown[]; recusadas: unknown[] };
+    };
+    expect(resposta.dados.recusadas).toEqual([]);
+    expect(resposta.dados.aceitas).toHaveLength(1);
+  });
+
+  it('um item recusado não impede os outros', () => {
     const armazem = armazemNaMemoria();
     const resposta = pedir(armazem, 'enviar', {
-      mudancas: [item(tarefa('t1', 'a', T0)), item(tarefa('', 'b', T0))],
+      mudancas: [item(tarefa('t1', 'a', T0)), item(tarefa('mal formado', 'b', T0))],
     });
-    expect(resposta).toEqual({ ok: false, erro: 'interno' });
-    expect(armazem.gravacoes).toEqual([]);
+    expect(resposta).toEqual({
+      ok: true,
+      dados: {
+        aceitas: [{ colecao: 'tarefas', id: 't1' }],
+        conflitos: [],
+        recusadas: [{ colecao: 'tarefas', id: 'mal formado' }],
+        substituidas: [],
+      },
+    });
+    expect(puxar({ desde: 0 }, armazem).registros).toEqual([item(tarefa('t1', 'a', T0))]);
   });
 
   it('id __proto__ não contamina nada e volta igual', () => {
@@ -342,5 +420,129 @@ describe('tratarCorpo e tamanho', () => {
     });
     expect(corpo.length).toBe(256 * 1024);
     expect(tratarCorpo(corpo, ambienteCom(armazemNaMemoria())).ok).toBe(true);
+  });
+});
+
+describe('limites do arquivo', () => {
+  function arquivoCom(registros: { colecao: string; recebidoEm: number; registro: RegistroBase }[]) {
+    return JSON.stringify({ versao: 1, ultimo: 1, registros });
+  }
+
+  it('com 50 000 registros, registro novo é recusado com interno e nada é gravado', () => {
+    const cheios = Array.from({ length: 50_000 }, (_, i) => ({
+      colecao: 'tarefas',
+      recebidoEm: 1,
+      registro: tarefa(`t${i}`, '', 1),
+    }));
+    const armazem = armazemNaMemoria({ conteudo: arquivoCom(cheios) });
+
+    expect(pedir(armazem, 'enviar', { mudancas: [item(tarefa('nova', 'a', T0))] })).toEqual({
+      ok: false,
+      erro: 'interno',
+    });
+    expect(armazem.gravacoes).toEqual([]);
+    expect(armazem.copias.size).toBe(0);
+  });
+
+  it('com 50 000 registros, atualizar um existente ainda é aceito', () => {
+    const cheios = Array.from({ length: 50_000 }, (_, i) => ({
+      colecao: 'tarefas',
+      recebidoEm: 1,
+      registro: tarefa(`t${i}`, '', 1),
+    }));
+    const armazem = armazemNaMemoria({ conteudo: arquivoCom(cheios) });
+    expect(pedir(armazem, 'enviar', { mudancas: [item(tarefa('t7', 'nova', T0))] }).ok).toBe(true);
+    expect(armazem.gravacoes).toHaveLength(1);
+  });
+
+  it('arquivo que passaria de 10 MB é recusado com interno e nada é gravado', () => {
+    const grande = { colecao: 'tarefas', recebidoEm: 1, registro: tarefa('g', 'x'.repeat(10 * 1024 * 1024), 1) };
+    const armazem = armazemNaMemoria({ conteudo: arquivoCom([grande]) });
+
+    expect(pedir(armazem, 'enviar', { mudancas: [item(tarefa('nova', 'a', T0))] })).toEqual({
+      ok: false,
+      erro: 'interno',
+    });
+    expect(armazem.gravacoes).toEqual([]);
+  });
+});
+
+describe('leitura única por envio', () => {
+  it('enviar lê o arquivo do Drive uma vez só', () => {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
+    let leituras = 0;
+    const ler = armazem.ler.bind(armazem);
+    armazem.ler = () => {
+      leituras += 1;
+      return ler();
+    };
+    enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem);
+    expect(leituras).toBe(1);
+  });
+});
+
+describe('cópia diária idempotente', () => {
+  it('se a cópia do dia já existe (marca perdida), não copia de novo e marca o dia', () => {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
+    armazem.copias.set('ja-feita', { nome: 'central-dados-2026-11-05.json', conteudo: 'antes' });
+    armazem.marcada = null;
+
+    enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem);
+
+    expect([...armazem.copias.values()]).toEqual([{ nome: 'central-dados-2026-11-05.json', conteudo: 'antes' }]);
+    expect(armazem.marcada).toBe('2026-11-05');
+  });
+
+  it('marca o dia logo depois de copiar, antes da limpeza de cópias velhas', () => {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
+    armazem.copias.set('velha', { nome: 'central-dados-2026-09-01.json', conteudo: '' });
+    armazem.descartar = () => {
+      throw new Error('Drive fora do ar');
+    };
+
+    expect(() => enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem)).toThrow();
+    expect(armazem.marcada).toBe('2026-11-05');
+  });
+});
+
+describe('substituidas (corrida entre puxar e enviar)', () => {
+  function servidorCom(registro: RegistroBase) {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(registro)] }, armazem);
+    return armazem;
+  }
+
+  it('versão de outro aparelho recebida depois do desde do cliente volta em substituidas', () => {
+    const armazem = armazemNaMemoria();
+    const { agora: desde } = puxar({ desde: 0 }, armazem);
+    armazem.relogio += MINUTO;
+    const doCelular = tarefa('t1', 'celular', T0 + MINUTO, 'celular');
+    enviar({ mudancas: [item(doCelular)] }, armazem);
+
+    const resposta = enviar({ desde, mudancas: [item(tarefa('t1', 'notebook', T0 + 2 * MINUTO))] }, armazem);
+    expect(resposta.aceitas).toEqual([{ colecao: 'tarefas', id: 't1' }]);
+    expect(resposta.substituidas).toEqual([item(doCelular)]);
+  });
+
+  it('versão que o cliente já tinha visto (recebida até o desde) não volta', () => {
+    const armazem = servidorCom(tarefa('t1', 'celular', T0, 'celular'));
+    const { agora: desde } = puxar({ desde: 0 }, armazem);
+    const resposta = enviar({ desde, mudancas: [item(tarefa('t1', 'notebook', T0 + MINUTO))] }, armazem);
+    expect(resposta.substituidas).toEqual([]);
+  });
+
+  it('versão do mesmo aparelho não volta', () => {
+    const armazem = servidorCom(tarefa('t1', 'primeira', T0));
+    const resposta = enviar({ desde: 0, mudancas: [item(tarefa('t1', 'segunda', T0 + MINUTO))] }, armazem);
+    expect(resposta.substituidas).toEqual([]);
+  });
+
+  it('sem desde, nada volta em substituidas', () => {
+    const armazem = servidorCom(tarefa('t1', 'celular', T0, 'celular'));
+    const resposta = enviar({ mudancas: [item(tarefa('t1', 'notebook', T0 + MINUTO))] }, armazem);
+    expect(resposta.substituidas).toEqual([]);
   });
 });

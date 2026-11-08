@@ -1,5 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
+import { NOMES_DAS_COLECOES } from '../../script/colecoes';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { criarDesfazer } from '../../src/dados/desfazer';
 import {
@@ -544,5 +545,50 @@ describe('migração do banco', () => {
     expect(await listarAvisos()).toEqual([]);
     expect(await lerDesde()).toBe(0);
     expect((await salvar('tarefas', guardada)).aparelho).toBe('notebook');
+  });
+});
+
+describe('fix 1: carimbo local sempre sobe', () => {
+  it('salvar com o relógio atrasado ainda dá carimbo maior que o anterior', async () => {
+    const primeira = await salvar('tarefas', tarefa('Primeira'));
+    vi.setSystemTime(AGORA - CINCO_MIN);
+    const segunda = await salvar('tarefas', { ...primeira, titulo: 'Segunda' });
+    expect(segunda.atualizadoEm).toBe(AGORA + 1);
+  });
+
+  it('apagar com o relógio atrasado ainda dá carimbo maior que o anterior', async () => {
+    const primeira = await salvar('tarefas', tarefa('Primeira'));
+    vi.setSystemTime(AGORA - CINCO_MIN);
+    await apagar('tarefas', primeira.id);
+    const [lapide] = await listar('tarefas', { comApagados: true });
+    expect(lapide.atualizadoEm).toBe(AGORA + 1);
+  });
+
+  it('editar registro recebido com relógio adiantado do outro aparelho vence a versão recebida', async () => {
+    await gravarDoServidor([
+      {
+        colecao: 'tarefas',
+        registro: { id: 't1', ...tarefa('Recebida'), atualizadoEm: AGORA + CINCO_MIN, aparelho: 'outro' },
+      },
+    ]);
+    const [recebida] = await listar('tarefas');
+    const editada = await salvar('tarefas', { ...recebida, titulo: 'Editada aqui' });
+    expect(editada.atualizadoEm).toBe(AGORA + CINCO_MIN + 1);
+  });
+
+  it('com o relógio certo, usa a hora atual', async () => {
+    const primeira = await salvar('tarefas', tarefa('Primeira'));
+    vi.setSystemTime(AGORA + CINCO_MIN);
+    expect((await salvar('tarefas', { ...primeira, titulo: 'b' })).atualizadoEm).toBe(AGORA + CINCO_MIN);
+  });
+});
+
+describe('fix 1: coleções vêm do módulo compartilhado', () => {
+  it('a loja tem um armazenamento para cada coleção de script/colecoes.ts', async () => {
+    await listar('tarefas');
+    const banco = await openDB('central-dados');
+    const nomes = [...banco.objectStoreNames];
+    banco.close();
+    for (const nome of NOMES_DAS_COLECOES) expect(nomes).toContain(nome);
   });
 });

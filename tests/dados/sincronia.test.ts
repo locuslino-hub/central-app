@@ -686,3 +686,150 @@ describe('iniciarSincronia', () => {
     expect(ouvinteDaLoja).toBeUndefined();
   });
 });
+
+describe('fix 1: validação do que chega do servidor', () => {
+  const valida = { id: 't1', ...tarefa('Válida'), atualizadoEm: AGORA, aparelho: 'outro' };
+
+  it.each([
+    ['atualizadoEm mais de 10 min no futuro', { ...valida, atualizadoEm: AGORA + 10 * MINUTO + 1 }],
+    ['id com espaço', { ...valida, id: 'id com espaço' }],
+    ['id com 65 caracteres', { ...valida, id: 'x'.repeat(65) }],
+    ['aparelho com barra', { ...valida, aparelho: 'a/b' }],
+    ['tarefa sem titulo', { ...valida, titulo: undefined }],
+    ['titulo número', { ...valida, titulo: 5 }],
+    ['apagado texto', { ...valida, apagado: 'sim' }],
+  ])('tarefa remota com %s é ignorada', async (_nome, registro) => {
+    no(notebook);
+    await gravarDoServidor([{ colecao: 'tarefas', registro }]);
+    expect(await listar('tarefas', { comApagados: true })).toEqual([]);
+  });
+
+  it('documento remoto com url que não é http(s) é ignorado; https entra', async () => {
+    no(notebook);
+    const documento = { titulo: 'Plano de aula', arquivado: false, atualizadoEm: AGORA, aparelho: 'outro' };
+    await gravarDoServidor([
+      { colecao: 'documentos', registro: { ...documento, id: 'd1', url: 'javascript:alert(1)' } },
+      { colecao: 'documentos', registro: { ...documento, id: 'd2', url: 'https://exemplo.invalid/plano' } },
+    ]);
+    expect((await listar('documentos')).map((d) => d.id)).toEqual(['d2']);
+  });
+
+  it('exatamente 10 min no futuro ainda entra', async () => {
+    no(notebook);
+    await gravarDoServidor([{ colecao: 'tarefas', registro: { ...valida, atualizadoEm: AGORA + 10 * MINUTO } }]);
+    expect(await listar('tarefas')).toHaveLength(1);
+  });
+});
+
+describe('fix 1: recusadas pelo servidor', () => {
+  it('registro recusado fica na fila e os outros seguem', async () => {
+    no(notebook);
+    await salvar('tarefas', { id: 'id com espaço', ...tarefa('Recusada') });
+    const boa = await salvar('tarefas', tarefa('Boa'));
+
+    expect(await sincronizarAqui()).toBe('por-enviar');
+    const [envio] = servidor.de('enviar');
+    expect(envio.dados.mudancas).toHaveLength(2);
+    expect((await listarPendentes()).map((p) => p.id)).toEqual(['id com espaço']);
+    no(celular);
+    await sincronizarAqui();
+    expect((await listar('tarefas')).map((t) => t.id)).toEqual([boa.id]);
+  });
+});
+
+describe('fix 1: corrida entre puxar e enviar (substituidas)', () => {
+  it('enviar leva o desde do puxar da mesma rodada', async () => {
+    no(notebook);
+    await salvar('tarefas', tarefa('a'));
+    await sincronizarAqui();
+    const depoisDoPrimeiro = JSON.parse(servidor.armazem.conteudo!).ultimo as number;
+    horario(1);
+    await salvar('tarefas', tarefa('b'));
+    await sincronizarAqui();
+
+    const [primeiro, segundo] = servidor.de('enviar');
+    expect(primeiro.dados.desde).toBe(0);
+    expect(segundo.dados.desde).toBe(depoisDoPrimeiro);
+  });
+
+  it('versão de outro aparelho sobrescrita no envio vira aviso aqui', async () => {
+    const criada = await tarefaNosDois('Orientação com Renata');
+    horario(2);
+    no(celular);
+    await salvar('tarefas', { ...criada, titulo: 'Orientação com Renata (celular)' });
+
+    // Entre o puxar e o enviar do celular, outro aparelho grava uma versão mais
+    // nova que a base, mas mais velha que a edição do celular.
+    servidor.aoResponder((acao) => {
+      if (acao !== 'puxar') return;
+      servidor.aoResponder(undefined);
+      enviar(
+        {
+          mudancas: [
+            {
+              colecao: 'tarefas',
+              registro: {
+                ...criada,
+                titulo: 'Orientação com Renata (notebook)',
+                atualizadoEm: AGORA + MINUTO,
+                aparelho: 'outro-aparelho',
+              },
+            },
+          ],
+        },
+        servidor.armazem,
+      );
+    });
+    horario(3);
+    expect(await sincronizarAqui()).toBe('atualizado');
+
+    expect((await listar('tarefas')).map((t) => t.titulo)).toEqual(['Orientação com Renata (celular)']);
+    const avisos = await listarAvisos();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatchObject({
+      registroId: criada.id,
+      perdedora: { titulo: 'Orientação com Renata (notebook)' },
+      vencedora: { titulo: 'Orientação com Renata (celular)' },
+    });
+  });
+
+  it('substituidas malformadas são ignoradas', async () => {
+    no(notebook);
+    await salvar('tarefas', tarefa('a'));
+    const comLixo = async <T,>(acao: string, dados: object = {}): Promise<T> => {
+      const resposta = await servidor.chamar<any>(acao, dados);
+      if (acao !== 'enviar') return resposta;
+      return { ...resposta, substituidas: [null, { colecao: 'constructor', registro: {} }, 5] };
+    };
+    expect(await sincronizar({ chamar: comLixo, esperar: semEspera })).toBe('atualizado');
+    expect(await listarAvisos()).toEqual([]);
+  });
+});
+
+describe('fix 1: aviso quando a remota vence uma alteração ainda por enviar', () => {
+  it('mesmo vindo do mesmo aparelho', async () => {
+    no(notebook);
+    const local = await salvar('tarefas', { id: 't1', ...tarefa('Local por enviar') });
+    await gravarDoServidor([
+      { colecao: 'tarefas', registro: { ...local, titulo: 'Remota', atualizadoEm: local.atualizadoEm + MINUTO } },
+    ]);
+    expect(await listarAvisos()).toMatchObject([{ perdedora: { titulo: 'Local por enviar' } }]);
+  });
+});
+
+describe('fix 1: avisos limitados', () => {
+  it('guarda só os 200 mais novos', async () => {
+    no(notebook);
+    for (let i = 0; i < 205; i++) await salvar('tarefas', { id: `t${i}`, ...tarefa(`Local ${i}`) });
+    await gravarDoServidor(
+      Array.from({ length: 205 }, (_, i) => ({
+        colecao: 'tarefas',
+        registro: { id: `t${i}`, ...tarefa(`Remota ${i}`), atualizadoEm: AGORA + MINUTO, aparelho: 'outro' },
+      })),
+    );
+    const avisos = await listarAvisos();
+    expect(avisos).toHaveLength(200);
+    expect(avisos[0].registroId).toBe('t5');
+    expect(avisos.at(-1)!.registroId).toBe('t204');
+  });
+});

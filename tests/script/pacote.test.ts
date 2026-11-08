@@ -52,7 +52,7 @@ function driveFalso() {
     get(id: string, opcoes?: { alt?: string }): unknown {
       const arquivo = arquivos.get(id);
       if (!arquivo) throw new Error('File not found');
-      if (opcoes?.alt !== 'media') return { id, name: arquivo.name };
+      if (opcoes?.alt !== 'media') return { id, name: arquivo.name, trashed: arquivo.trashed };
       return formaDaLeitura === 'texto'
         ? arquivo.conteudo
         : { getDataAsString: () => arquivo.conteudo, getContentType: () => 'application/json' };
@@ -88,12 +88,23 @@ function driveFalso() {
 /** Roda o pacote como o Apps Script roda: sem módulos, serviços como globais. */
 function carregar() {
   const propriedades = new Map<string, string>();
+  const leituras = new Map<string, number>();
   const registros: string[] = [];
   const drive = driveFalso();
+  const cache = { valores: new Map<string, string>(), quebrado: false };
+  const cacheDoScript = () => {
+    if (cache.quebrado) throw new Error('CacheService fora do ar');
+    return {
+      get: (chave: string) => cache.valores.get(chave) ?? null,
+      put: (chave: string, valor: string, _segundos?: number) => void cache.valores.set(chave, valor),
+      remove: (chave: string) => void cache.valores.delete(chave),
+    };
+  };
   const trava = { livre: true, presa: false, esperas: [] as number[] };
   let uuids = 0;
   const contexto = vm.createContext({
     Drive: drive.servico,
+    CacheService: { getScriptCache: () => cacheDoScript() },
     LockService: {
       getScriptLock: () => ({
         tryLock(ms: number) {
@@ -109,7 +120,10 @@ function carregar() {
     },
     PropertiesService: {
       getScriptProperties: () => ({
-        getProperty: (chave: string) => propriedades.get(chave) ?? null,
+        getProperty: (chave: string) => {
+          leituras.set(chave, (leituras.get(chave) ?? 0) + 1);
+          return propriedades.get(chave) ?? null;
+        },
         setProperty: (chave: string, valor: string) => void propriedades.set(chave, valor),
       }),
     },
@@ -152,14 +166,14 @@ function carregar() {
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, registros, postar, drive, trava };
+  return { globais, propriedades, leituras, registros, postar, drive, trava, cache };
 }
 
 // O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
 const T0 = Date.parse('2026-11-05T12:20:00Z');
 
 function tarefa(id: string, titulo: string, atualizadoEm = T0) {
-  return { colecao: 'tarefas', registro: { id, titulo, atualizadoEm, aparelho: 'notebook' } };
+  return { colecao: 'tarefas', registro: { id, titulo, salaId: null, atualizadoEm, aparelho: 'notebook' } };
 }
 
 type RespostaDoPacote = { ok: boolean; dados?: any; erro?: string };
@@ -213,7 +227,7 @@ describe('dados no Drive pelo pacote', () => {
     const { pedir, drive } = conectado();
     expect(pedir('enviar', { mudancas: [tarefa('t1', 'Ler com Marina')] })).toEqual({
       ok: true,
-      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [] },
+      dados: { aceitas: [{ colecao: 'tarefas', id: 't1' }], conflitos: [], recusadas: [], substituidas: [] },
     });
 
     const arquivos = [...drive.arquivos.values()];
@@ -402,5 +416,70 @@ describe('manifesto publicado', () => {
     expect(manifesto().dependencies).toEqual({
       enabledAdvancedServices: [{ userSymbol: 'Drive', serviceId: 'drive', version: 'v3' }],
     });
+  });
+});
+
+describe('arquivo de dados no Drive: casos que nunca gravam', () => {
+  it('arquivo guardado que foi para a lixeira dá interno em puxar e enviar, sem gravar', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    const principal = [...drive.arquivos.values()].find((a) => a.name === 'central-dados.json')!;
+    const antes = principal.conteudo;
+    principal.trashed = true;
+
+    expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
+    expect(pedir('enviar', { mudancas: [tarefa('t2', 'b')] })).toEqual({ ok: false, erro: 'interno' });
+    expect(principal.conteudo).toBe(antes);
+    expect([...drive.arquivos.values()].filter((a) => a.name === 'central-dados.json')).toHaveLength(1);
+  });
+
+  it('dois arquivos central-dados.json sem id guardado dá interno e não cria nem grava', () => {
+    const { pedir, drive } = conectado();
+    for (const id of ['um', 'dois']) {
+      drive.arquivos.set(id, { id, name: 'central-dados.json', trashed: false, conteudo: '{"versao":1,"ultimo":0,"registros":[]}' });
+    }
+
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'a')] })).toEqual({ ok: false, erro: 'interno' });
+    expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
+    expect(drive.arquivos.size).toBe(2);
+    expect([...drive.arquivos.values()].every((a) => a.conteudo.includes('"registros":[]'))).toBe(true);
+  });
+});
+
+describe('código do aparelho em cache', () => {
+  it('depois do primeiro pedido, o código vem do cache e não das propriedades', () => {
+    const { pedir, leituras } = conectado();
+    pedir('ping', {});
+    const depoisDoPrimeiro = leituras.get('CODIGO_DO_APARELHO') ?? 0;
+    pedir('ping', {});
+    pedir('ping', {});
+    expect(leituras.get('CODIGO_DO_APARELHO') ?? 0).toBe(depoisDoPrimeiro);
+  });
+
+  it('gerar de novo invalida o cache: o código antigo para de valer na hora', () => {
+    const { globais, propriedades, postar } = carregar();
+    globais.gerarCodigo();
+    const antigo = propriedades.get('CODIGO_DO_APARELHO')!;
+    expect((postar(JSON.stringify({ codigo: antigo, acao: 'ping' })).resposta as { ok: boolean }).ok).toBe(true);
+
+    globais.gerarCodigo();
+    const novo = propriedades.get('CODIGO_DO_APARELHO')!;
+    expect(postar(JSON.stringify({ codigo: antigo, acao: 'ping' })).resposta).toEqual({
+      ok: false,
+      erro: 'codigo-invalido',
+    });
+    expect((postar(JSON.stringify({ codigo: novo, acao: 'ping' })).resposta as { ok: boolean }).ok).toBe(true);
+  });
+
+  it('sem CacheService, lê das propriedades e continua atendendo', () => {
+    const { pedir, cache } = conectado();
+    cache.quebrado = true;
+    expect(pedir('ping', {})).toEqual({ ok: true, dados: {} });
+  });
+
+  it('sem código gerado, nada vai para o cache', () => {
+    const { postar, cache } = carregar();
+    postar(JSON.stringify({ codigo: 'x'.repeat(40), acao: 'ping' }));
+    expect(cache.valores.size).toBe(0);
   });
 });

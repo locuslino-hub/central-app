@@ -15,6 +15,10 @@ export const TEXTO_DO_ESTADO: Record<EstadoSync, string> = {
   'erro-codigo': 'Problema com o código do aparelho ou com o script. Confira em Conectar aparelho.',
 };
 
+// String(…): registro sem título (dado antigo ou quebrado) não derruba a lista.
+const porTitulo = (a: Tarefa, b: Tarefa) =>
+  String(a.titulo ?? '').localeCompare(String(b.titulo ?? ''), 'pt-BR');
+
 export function ProvaSincronia() {
   const [estado, setEstado] = useState<EstadoSync>(estadoAtual());
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
@@ -24,7 +28,7 @@ export function ProvaSincronia() {
     let ativo = true;
     const recarregar = () =>
       listar('tarefas')
-        .then((lista) => ativo && setTarefas(lista.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'))))
+        .then((lista) => ativo && setTarefas(lista.sort(porTitulo)))
         .catch((erro: unknown) => console.error('Não consegui ler as tarefas', erro));
     void recarregar();
     const pararLoja = assinar((mudanca) => {
@@ -42,16 +46,22 @@ export function ProvaSincronia() {
     evento.preventDefault();
     const limpo = titulo.trim();
     if (!limpo) return;
-    setTitulo('');
-    await salvar('tarefas', {
-      titulo: limpo,
-      salaId: null,
-      duracaoMin: 60,
-      duracaoConfirmada: false,
-      feito: false,
-      fixada: false,
-      marcar: false,
-    });
+    try {
+      await salvar('tarefas', {
+        titulo: limpo,
+        salaId: null,
+        duracaoMin: 60,
+        duracaoConfirmada: false,
+        feito: false,
+        fixada: false,
+        marcar: false,
+      });
+      // Só limpa depois de gravado (se falhar, o texto fica), e só se o campo
+      // ainda tem o que foi gravado: digitação nova não é apagada.
+      setTitulo((atual) => (atual.trim() === limpo ? '' : atual));
+    } catch (erro) {
+      console.error('Não consegui salvar a tarefa', erro);
+    }
   }
 
   return (
@@ -72,7 +82,7 @@ export function ProvaSincronia() {
       </form>
       <ul>
         {tarefas.map((tarefa) => (
-          <li key={tarefa.id}>{tarefa.titulo}</li>
+          <li key={tarefa.id}>{String(tarefa.titulo ?? '')}</li>
         ))}
       </ul>
     </section>

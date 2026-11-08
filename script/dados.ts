@@ -1,16 +1,17 @@
 // Dados sincronizados: um arquivo JSON no Drive do dono. Lógica pura: o Drive,
 // a trava e o relógio chegam por `Armazem` (Codigo.ts liga aos serviços do Google).
+import { colecaoConhecida, registroValido } from './colecoes';
 
 export const NOME_DO_ARQUIVO = 'central-dados.json';
 export const DIAS_DE_COPIA = 30;
 /** Corpo de pedido maior que isso é recusado antes de qualquer trabalho (api.ts). O app envia em lotes menores. */
 export const TAMANHO_MAXIMO_DO_CORPO = 256 * 1024;
+/** Limites do arquivo no Drive: acima deles, nada é gravado. */
+export const TAMANHO_MAXIMO_DO_ARQUIVO = 10 * 1024 * 1024;
+export const REGISTROS_NO_MAXIMO = 50_000;
 
 const PREFIXO_DA_COPIA = 'central-dados-';
 const COPIA = /^central-dados-(\d{4}-\d{2}-\d{2})\.json$/;
-const COLECAO_VALIDA = /^[a-zA-Z]{1,40}$/;
-const TAMANHO_MAXIMO_DO_ID = 200;
-const TAMANHO_MAXIMO_DO_APARELHO = 200;
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /** A trava do script não saiu a tempo: quem pediu tenta de novo. */
@@ -31,6 +32,16 @@ export type RegistroBase = {
 
 export type Item = { colecao: string; registro: RegistroBase };
 export type Chave = { colecao: string; id: string };
+
+export type RespostaEnviar = {
+  aceitas: Chave[];
+  /** Versões do servidor que venceram as enviadas. */
+  conflitos: Item[];
+  /** Itens com forma inválida (ver colecoes.ts): não gravados; o resto segue. */
+  recusadas: Chave[];
+  /** Versões de outro aparelho, recebidas depois do `desde` do cliente, que o envio sobrescreveu. */
+  substituidas: Item[];
+};
 
 export interface Armazem {
   /** Conteúdo de central-dados.json, ou null se ainda não existe. */
@@ -78,20 +89,8 @@ function exigir(condicao: boolean): asserts condicao {
   if (!condicao) throw new Error('Pedido malformado');
 }
 
-function textoCurto(valor: unknown, maximo: number): valor is string {
-  return typeof valor === 'string' && valor.length > 0 && valor.length <= maximo;
-}
-
-function validarItem(valor: unknown): Item {
-  exigir(objeto(valor));
-  const { colecao, registro } = valor;
-  exigir(typeof colecao === 'string' && COLECAO_VALIDA.test(colecao));
-  exigir(objeto(registro));
-  exigir(textoCurto(registro.id, TAMANHO_MAXIMO_DO_ID));
-  exigir(textoCurto(registro.aparelho, TAMANHO_MAXIMO_DO_APARELHO));
-  const { atualizadoEm } = registro;
-  exigir(typeof atualizadoEm === 'number' && Number.isFinite(atualizadoEm) && atualizadoEm >= 0);
-  return { colecao, registro: registro as RegistroBase };
+function marcaValida(valor: unknown): valor is number {
+  return typeof valor === 'number' && Number.isFinite(valor) && valor >= 0;
 }
 
 // JSON.stringify do par: chave sem mistura entre coleção e id, e num Map,
@@ -100,8 +99,7 @@ function chaveDe(colecao: string, id: string): string {
   return JSON.stringify([colecao, id]);
 }
 
-function lerArquivo(armazem: Armazem): Arquivo {
-  const conteudo = armazem.ler();
+function analisar(conteudo: string | null): Arquivo {
   if (conteudo === null) return { versao: 1, ultimo: 0, registros: [] };
   // Conteúdo quebrado lança aqui, antes de qualquer gravação: nunca se
   // sobrescreve o arquivo do dono com um vazio.
@@ -113,10 +111,9 @@ function lerArquivo(armazem: Armazem): Arquivo {
 }
 
 export function puxar(dados: unknown, armazem: Armazem): { registros: Item[]; agora: number } {
-  exigir(objeto(dados));
+  exigir(objeto(dados) && marcaValida(dados.desde));
   const { desde } = dados;
-  exigir(typeof desde === 'number' && Number.isFinite(desde) && desde >= 0);
-  const arquivo = lerArquivo(armazem);
+  const arquivo = analisar(armazem.ler());
   // `agora` sai do arquivo lido, não do relógio: toda escrita posterior recebe
   // carimbo maior que ele, então nada escapa do próximo `desde`.
   return {
@@ -127,34 +124,54 @@ export function puxar(dados: unknown, armazem: Armazem): { registros: Item[]; ag
   };
 }
 
-export function enviar(
-  dados: unknown,
-  armazem: Armazem,
-): { aceitas: Chave[]; conflitos: Item[] } {
+export function enviar(dados: unknown, armazem: Armazem): RespostaEnviar {
+  // Envelope quebrado recusa o pedido inteiro; item com forma inválida vai
+  // para `recusadas` e o resto segue.
   exigir(objeto(dados) && Array.isArray(dados.mudancas));
-  // Tudo validado antes de abrir a trava: um item ruim recusa o pedido inteiro.
-  const mudancas = dados.mudancas.map(validarItem);
-  if (mudancas.length === 0) return { aceitas: [], conflitos: [] };
+  const { desde } = dados;
+  exigir(desde === undefined || marcaValida(desde));
+  const agora = armazem.agora();
+  const validas: Item[] = [];
+  const recusadas: Chave[] = [];
+  for (const mudanca of dados.mudancas as unknown[]) {
+    exigir(objeto(mudanca) && objeto(mudanca.registro));
+    const { colecao, registro } = mudanca;
+    if (colecaoConhecida(colecao) && registroValido(colecao, registro, agora)) {
+      validas.push({ colecao, registro: registro as RegistroBase });
+    } else if (typeof colecao === 'string' && typeof registro.id === 'string') {
+      recusadas.push({ colecao, id: registro.id });
+    }
+  }
+  const resposta: RespostaEnviar = { aceitas: [], conflitos: [], recusadas, substituidas: [] };
+  if (validas.length === 0) return resposta;
 
   return armazem.comTrava(() => {
     const conteudoAntes = armazem.ler();
-    const arquivo = lerArquivo(armazem);
+    const arquivo = analisar(conteudoAntes);
     const indice = new Map<string, number>();
     arquivo.registros.forEach((guardado, posicao) => {
       indice.set(chaveDe(guardado.colecao, guardado.registro.id), posicao);
     });
 
-    const aceitas: Chave[] = [];
-    const conflitos: Item[] = [];
     let mudou = false;
-    for (const { colecao, registro } of mudancas) {
+    for (const { colecao, registro } of validas) {
       const chave = chaveDe(colecao, registro.id);
       const posicao = indice.get(chave);
       const atual = posicao === undefined ? undefined : arquivo.registros[posicao];
       if (atual && mesmaVersao(atual.registro, registro)) {
         // Reenvio (resposta anterior perdida): já está lá, sem carimbo novo.
-        aceitas.push({ colecao, id: registro.id });
+        resposta.aceitas.push({ colecao, id: registro.id });
       } else if (!atual || vence(registro, atual.registro)) {
+        // Versão de outro aparelho que o cliente ainda não tinha visto: ele
+        // precisa saber que ela foi sobrescrita.
+        if (
+          atual &&
+          desde !== undefined &&
+          atual.recebidoEm > desde &&
+          atual.registro.aparelho !== registro.aparelho
+        ) {
+          resposta.substituidas.push({ colecao, registro: atual.registro });
+        }
         arquivo.ultimo = Math.max(armazem.agora(), arquivo.ultimo + 1);
         const guardado: Guardado = { colecao, recebidoEm: arquivo.ultimo, registro };
         if (posicao === undefined) {
@@ -163,31 +180,39 @@ export function enviar(
         } else {
           arquivo.registros[posicao] = guardado;
         }
-        aceitas.push({ colecao, id: registro.id });
+        resposta.aceitas.push({ colecao, id: registro.id });
         mudou = true;
       } else {
-        conflitos.push({ colecao, registro: atual.registro });
+        resposta.conflitos.push({ colecao, registro: atual.registro });
       }
     }
 
     if (mudou) {
+      const conteudo = JSON.stringify(arquivo);
+      if (conteudo.length > TAMANHO_MAXIMO_DO_ARQUIVO || arquivo.registros.length > REGISTROS_NO_MAXIMO) {
+        throw new Error('Arquivo de dados passaria do limite');
+      }
       if (conteudoAntes !== null) copiaDoDia(armazem, conteudoAntes);
-      armazem.gravar(JSON.stringify(arquivo));
+      armazem.gravar(conteudo);
     }
-    return { aceitas, conflitos };
+    return resposta;
   });
 }
 
-/** Na primeira gravação do dia, guarda o arquivo como estava e descarta cópias com mais de 30 dias. */
+/**
+ * Na primeira gravação do dia, guarda o arquivo como estava e descarta cópias
+ * com mais de 30 dias. Se a cópia de hoje já existe (marca perdida), não copia de novo.
+ */
 function copiaDoDia(armazem: Armazem, conteudo: string) {
   const hoje = armazem.hoje();
   if (armazem.ultimaCopia() === hoje) return;
-  armazem.copiar(nomeDaCopia(hoje), conteudo);
+  const copias = armazem.listarCopias();
+  if (!copias.some(({ nome }) => nome === nomeDaCopia(hoje))) armazem.copiar(nomeDaCopia(hoje), conteudo);
   armazem.marcarCopia(hoje);
   const limite = new Date(Date.parse(`${hoje}T00:00:00Z`) - DIAS_DE_COPIA * DIA_MS)
     .toISOString()
     .slice(0, 10);
-  for (const { id, nome } of armazem.listarCopias()) {
+  for (const { id, nome } of copias) {
     const dia = COPIA.exec(nome)?.[1];
     if (dia !== undefined && dia < limite) armazem.descartar(id);
   }

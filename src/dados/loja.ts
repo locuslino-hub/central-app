@@ -1,4 +1,5 @@
 import { openDB, type IDBPDatabase, type IDBPTransaction } from 'idb';
+import { NOMES_DAS_COLECOES, colecaoConhecida, registroValido, type NomeDaColecao } from '../../script/colecoes';
 import { vence } from '../../script/dados';
 import type {
   Aviso,
@@ -25,18 +26,16 @@ const CHAVE_APARELHO = 'aparelho';
 /** Carimbo do servidor até onde este aparelho já puxou (R5). */
 const CHAVE_DESDE = 'desde';
 
-// Nova coleção: acrescentar aqui e em `Colecoes`, e subir VERSAO.
-const COLECOES: Record<Colecao, true> = {
-  salas: true,
-  pessoas: true,
-  tarefas: true,
-  palavras: true,
-  documentos: true,
-  paginas: true,
-  estadosEmail: true,
-  rascunhos: true,
-  config: true,
-};
+// Nova coleção: acrescentar em script/colecoes.ts (o script valida pela mesma
+// lista) e em `Colecoes`, e subir VERSAO. As duas linhas abaixo não compilam se
+// as listas divergirem.
+const _todasNoModulo: Record<Colecao, unknown> = {} as Record<NomeDaColecao, unknown>;
+const _nadaAMais: Record<NomeDaColecao, unknown> = {} as Record<Colecao, unknown>;
+void _todasNoModulo;
+void _nadaAMais;
+
+/** Avisos guardados no máximo; os mais velhos saem. */
+export const AVISOS_NO_MAXIMO = 200;
 
 /** Quem gravou as sementes: igual em todo aparelho, para as cópias serem idênticas. */
 const SEMENTE = 'semente';
@@ -62,7 +61,7 @@ function abrir(): Promise<IDBPDatabase> {
   return openDB(BANCO, VERSAO, {
     // Só cria o que falta: nada que já existe é apagado na subida de versão.
     upgrade(banco, versaoAntiga, _versaoNova, tx) {
-      for (const colecao of Object.keys(COLECOES)) {
+      for (const colecao of NOMES_DAS_COLECOES) {
         if (!banco.objectStoreNames.contains(colecao)) banco.createObjectStore(colecao, { keyPath: 'id' });
       }
       if (!banco.objectStoreNames.contains(PENDENTES)) {
@@ -131,20 +130,26 @@ export async function salvar<C extends Colecao>(
   const salvo = await comBanco(async (banco) => {
     const tx = escrever(banco, [colecao, PENDENTES, LOCAL]);
     const aparelho = await aparelhoNa(tx);
-    const novo = {
-      ...registro,
-      // Config é um registro só, sempre 'geral': é esse que lerConfig lê.
-      id: colecao === 'config' ? ID_CONFIG : registro.id || crypto.randomUUID(),
-      atualizadoEm: Date.now(),
-      aparelho,
-    } as Colecoes[C];
-    await tx.objectStore(colecao).put(novo);
+    const loja = tx.objectStore(colecao);
+    // Config é um registro só, sempre 'geral': é esse que lerConfig lê.
+    const id = colecao === 'config' ? ID_CONFIG : registro.id || crypto.randomUUID();
+    const atual: Registro | undefined = id === registro.id || colecao === 'config' ? await loja.get(id) : undefined;
+    const novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
+    await loja.put(novo);
     await enfileirar(tx, colecao, novo.id);
     await tx.done;
     return novo;
   });
   notificar({ colecao, id: salvo.id });
   return salvo;
+}
+
+/**
+ * Hora atual, mas sempre acima do carimbo que o registro já tem: relógio que
+ * voltou ou versão recebida de aparelho adiantado não fazem a edição nova perder.
+ */
+function carimbo(atual: Registro | undefined): number {
+  return Math.max(Date.now(), atual ? atual.atualizadoEm + 1 : 0);
 }
 
 function enfileirar(tx: Escrita, colecao: Colecao, id: string) {
@@ -176,7 +181,7 @@ export async function apagar<C extends Colecao>(colecao: C, id: string): Promise
       return undefined;
     }
     const aparelho = await aparelhoNa(tx);
-    await loja.put({ ...atual, apagado: true, atualizadoEm: Date.now(), aparelho });
+    await loja.put({ ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho });
     await enfileirar(tx, colecao, id);
     await tx.done;
     return atual;
@@ -272,15 +277,15 @@ function objeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/** Aceita só o que tem forma de registro e é de uma coleção que este app conhece. */
+/**
+ * Aceita só o que o script também aceitaria (script/colecoes.ts): coleção
+ * conhecida, ids e campos com a forma certa, carimbo até 10 min no futuro.
+ */
 function validarRemoto(valor: unknown): Remoto[] {
-  if (!objeto(valor) || !objeto(valor.registro)) return [];
+  if (!objeto(valor)) return [];
   const { colecao, registro } = valor;
-  if (typeof colecao !== 'string' || !Object.hasOwn(COLECOES, colecao)) return [];
-  const { id, atualizadoEm, aparelho } = registro;
-  if (typeof id !== 'string' || id === '' || typeof aparelho !== 'string') return [];
-  if (typeof atualizadoEm !== 'number' || !Number.isFinite(atualizadoEm) || atualizadoEm < 0) return [];
-  return [{ colecao: colecao as Colecao, registro: registro as Registro }];
+  if (!colecaoConhecida(colecao) || !registroValido(colecao, registro, Date.now())) return [];
+  return [{ colecao, registro: registro as Registro }];
 }
 
 /**
@@ -337,7 +342,8 @@ export async function gravarDoServidor(itens: readonly unknown[]): Promise<void>
         mudadas.push({ colecao, id: remoto.id, remota: true });
         if (local && temPendente) {
           for (const seq of seqs) await fila.delete(seq);
-          if (houveConflito(local, remoto)) await guardarAviso(colecao, local, remoto);
+          // Alteração por enviar perdeu: sempre avisa, mesmo do mesmo aparelho.
+          if (local.atualizadoEm > 0) await guardarAviso(colecao, local, remoto);
         }
       } else if (temPendente) {
         // A local vence e segue na fila para o servidor.
@@ -348,8 +354,46 @@ export async function gravarDoServidor(itens: readonly unknown[]): Promise<void>
         await enfileirar(tx, colecao, local.id);
       }
     }
+    await aparar(tx);
     await tx.done;
     return mudadas;
   });
   for (const mudanca of mudadas) notificar(mudanca);
+}
+
+/** Deixa só os AVISOS_NO_MAXIMO avisos mais novos (ids crescem com a chegada). */
+async function aparar(tx: Escrita) {
+  const avisos = tx.objectStore(AVISOS);
+  const chaves = await avisos.getAllKeys();
+  for (const chave of chaves.slice(0, Math.max(0, chaves.length - AVISOS_NO_MAXIMO))) {
+    await avisos.delete(chave);
+  }
+}
+
+/**
+ * Versões de outro aparelho que o envio deste sobrescreveu no servidor (a
+ * corrida entre puxar e enviar). Cada uma vira aviso, com a versão local
+ * atual como vencedora. Itens malformados são ignorados.
+ */
+export async function guardarSubstituidas(itens: readonly unknown[]): Promise<void> {
+  const remotos = itens.flatMap(validarRemoto).filter(({ registro }) => registro.atualizadoEm > 0);
+  if (remotos.length === 0) return;
+  const colecoes = [...new Set(remotos.map((remoto) => remoto.colecao))];
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [...colecoes, AVISOS]);
+    for (const { colecao, registro: perdedora } of remotos) {
+      const vencedora: Registro | undefined = await tx.objectStore(colecao).get(perdedora.id);
+      if (!vencedora) continue;
+      const aviso: Omit<Aviso, 'id'> = {
+        colecao,
+        registroId: perdedora.id,
+        perdedora,
+        vencedora,
+        criadoEm: Date.now(),
+      };
+      await tx.objectStore(AVISOS).add(aviso);
+    }
+    await aparar(tx);
+    await tx.done;
+  });
 }

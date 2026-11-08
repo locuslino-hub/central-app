@@ -9,8 +9,39 @@ const CHAVE_DA_COPIA = 'ULTIMA_COPIA';
 const FUSO = 'Europe/Lisbon';
 const TIPO_JSON = 'application/json';
 const ESPERA_DA_TRAVA_MS = 10_000;
+/** O máximo do CacheService: 6 h. */
+const SEGUNDOS_NO_CACHE = 6 * 60 * 60;
 
 const propriedades = () => PropertiesService.getScriptProperties();
+
+// O código é lido a cada pedido: o cache poupa a cota das propriedades. Se o
+// cache falhar, as propriedades continuam valendo.
+function cacheDoScript() {
+  try {
+    return CacheService.getScriptCache();
+  } catch {
+    return null;
+  }
+}
+
+function lerCodigo(): string | null {
+  const cache = cacheDoScript();
+  try {
+    const emCache = cache?.get(CHAVE_DO_CODIGO);
+    if (emCache) return emCache;
+  } catch {
+    // segue para as propriedades
+  }
+  const codigo = propriedades().getProperty(CHAVE_DO_CODIGO);
+  if (codigo) {
+    try {
+      cache?.put(CHAVE_DO_CODIGO, codigo, SEGUNDOS_NO_CACHE);
+    } catch {
+      // sem cache, só fica mais lento
+    }
+  }
+  return codigo;
+}
 
 // Serviço avançado do Drive (v3), com o escopo drive.file: o script só enxerga
 // os arquivos que ele mesmo criou, nunca o resto do Drive do dono.
@@ -35,11 +66,22 @@ function procurar(consulta: string) {
   return (files ?? []).filter((arquivo) => arquivo.id && arquivo.name) as { id: string; name: string }[];
 }
 
-/** Id do arquivo principal: guardado nas propriedades, ou achado pelo nome. */
+/**
+ * Id do arquivo principal: guardado nas propriedades, ou achado pelo nome.
+ * Lança (vira `interno`, nada é gravado) se o guardado foi para a lixeira ou
+ * se há mais de um com o nome: o dono decide qual vale, o script não adivinha.
+ */
 function idDoArquivo(): string | null {
   const guardado = propriedades().getProperty(CHAVE_DO_ARQUIVO);
-  if (guardado) return guardado;
-  const [achado] = procurar(`name = '${NOME_DO_ARQUIVO}' and trashed = false`);
+  if (guardado) {
+    if (drive().Files.get(guardado, { fields: 'id,trashed' }).trashed) {
+      throw new Error('Arquivo de dados na lixeira');
+    }
+    return guardado;
+  }
+  const achados = procurar(`name = '${NOME_DO_ARQUIVO}' and trashed = false`);
+  if (achados.length > 1) throw new Error('Mais de um arquivo de dados');
+  const [achado] = achados;
   if (!achado) return null;
   propriedades().setProperty(CHAVE_DO_ARQUIVO, achado.id);
   return achado.id;
@@ -88,7 +130,7 @@ const armazem: Armazem = {
 };
 
 const ambiente: Ambiente = {
-  lerCodigo: () => propriedades().getProperty(CHAVE_DO_CODIGO),
+  lerCodigo,
   armazem,
 };
 
@@ -117,5 +159,13 @@ export function autorizarDrive() {
 export function gerarCodigo() {
   const codigo = novoCodigo(() => Utilities.getUuid());
   propriedades().setProperty(CHAVE_DO_CODIGO, codigo);
+  // O cache passa a ter o código novo: o antigo para de valer na hora.
+  try {
+    const cache = cacheDoScript();
+    if (!cache) throw new Error('sem cache');
+    cache.put(CHAVE_DO_CODIGO, codigo, SEGUNDOS_NO_CACHE);
+  } catch {
+    Logger.log('Aviso: o cache não respondeu; o código antigo pode valer por até 6 horas.');
+  }
   Logger.log('Código do aparelho (copie e cole na tela Conectar aparelho): ' + codigo);
 }

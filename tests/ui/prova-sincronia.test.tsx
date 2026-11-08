@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
-import { describe, expect, it } from 'vitest';
-import { gravarDoServidor, listar, listarPendentes } from '../../src/dados/loja';
+import { describe, expect, it, vi } from 'vitest';
+import { gravarDoServidor, listar, listarPendentes, salvar } from '../../src/dados/loja';
+import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { sincronizar } from '../../src/dados/sincronia';
 import { ProvaSincronia, TEXTO_DO_ESTADO } from '../../src/ui/ProvaSincronia';
 import { ErroConexao } from '../../src/conexao/cliente';
@@ -74,5 +75,28 @@ describe('página inicial', () => {
     const { App } = await import('../../src/App');
     render(<App />);
     expect(screen.getByRole('heading', { name: 'Prova da sincronia' })).toBeTruthy();
+  });
+});
+
+describe('fix 1: ProvaSincronia robusta', () => {
+  it('tarefa sem título na loja não quebra a lista', async () => {
+    // Ids fixos: o sem título fica dos dois lados da comparação ao ordenar.
+    for (const [id, titulo] of [['a', undefined], ['b', 'Com título'], ['c', undefined], ['d', 'Outro']]) {
+      await salvar('tarefas', { id, titulo, salaId: null } as unknown as ParaSalvar<Tarefa>);
+    }
+    render(<ProvaSincronia />);
+    await screen.findByText('Com título');
+  });
+
+  it('falha ao salvar mantém o texto no campo e registra o erro, sem rejeição solta', async () => {
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw new Error('disco cheio');
+    });
+    render(<ProvaSincronia />);
+    criar('Ligar para Renata');
+
+    await waitFor(() => expect(erro).toHaveBeenCalled());
+    expect((screen.getByLabelText('Nova tarefa') as HTMLInputElement).value).toBe('Ligar para Renata');
   });
 });

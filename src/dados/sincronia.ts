@@ -6,6 +6,7 @@ import { ErroConexao, ErroScript, chamar as chamarScript } from '../conexao/clie
 import {
   assinar as assinarLoja,
   gravarDoServidor,
+  guardarSubstituidas,
   lerDesde,
   lerRegistros,
   listarPendentes,
@@ -33,7 +34,13 @@ export const INTERVALO_MS = 60_000;
 const LIMITE_DO_LOTE = TAMANHO_MAXIMO_DO_CORPO - 4 * 1024;
 
 type RespostaPuxar = { registros: unknown[]; agora: number };
-type RespostaEnviar = { aceitas: { colecao: string; id: string }[]; conflitos: unknown[] };
+type RespostaEnviar = {
+  aceitas: { colecao: string; id: string }[];
+  conflitos: unknown[];
+  /** Forma inválida para o script: ficam na fila (sem tela ainda; Tarefa 6). */
+  recusadas: unknown[];
+  substituidas: unknown[];
+};
 
 // ---- Estado, para a tela (Tarefa 6) ----
 
@@ -95,7 +102,8 @@ function respostaEnviar(valor: unknown): RespostaEnviar {
   if (!resposta || !Array.isArray(resposta.aceitas) || !Array.isArray(resposta.conflitos)) {
     throw new ErroScript('interno');
   }
-  return resposta;
+  const lista = (valor: unknown) => (Array.isArray(valor) ? valor : []);
+  return { ...resposta, recusadas: lista(resposta.recusadas), substituidas: lista(resposta.substituidas) };
 }
 
 async function puxar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
@@ -156,13 +164,17 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
     else semRegistro.push(...grupo.seqs); // nada a enviar: a loja nunca apaga sem lápide
   });
   await removerPendentes(semRegistro);
+  // O desde deste puxar: o servidor devolve em `substituidas` o que sobrescrever
+  // de outro aparelho e que este ainda não tinha visto.
+  const desde = await lerDesde();
 
   for (const lote of emLotes(envios)) {
     const mudancas = lote.map(({ colecao, registro }) => ({ colecao, registro }));
     const resposta = await comTentativas(
-      async () => respostaEnviar(await chamar('enviar', { mudancas })),
+      async () => respostaEnviar(await chamar('enviar', { desde, mudancas })),
       esperar,
     );
+    await guardarSubstituidas(resposta.substituidas);
     // Conflitos: o servidor tinha versão mais nova. A mesclagem grava a dele,
     // guarda a nossa em avisos e tira os pendentes desse registro.
     await gravarDoServidor(resposta.conflitos);
