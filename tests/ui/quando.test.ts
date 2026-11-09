@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Tarefa } from '../../src/dados/tipos';
 import { formatarDuracao, quandoDaTarefa, rotuloDaDuracao } from '../../src/ui/quando';
+import { quandoNaLista } from '../../src/ui/tarefas-lista';
 
 const HOJE = '2026-11-05'; // quinta
 
@@ -61,5 +62,25 @@ describe('quandoDaTarefa', () => {
   });
   it('sem nada, Sem prazo', () => {
     expect(quandoDaTarefa(t(), HOJE)).toBe('Sem prazo');
+  });
+});
+
+describe('quandoNaLista (o que a linha mostra)', () => {
+  it('tarefa de hoje sem prazo não repete "Hoje"', () => {
+    expect(quandoNaLista(t({ data: HOJE }), HOJE)).toBeUndefined();
+    expect(quandoNaLista(t(), HOJE)).toBeUndefined();
+  });
+  it('compromisso de hoje mostra só a hora', () => {
+    expect(quandoNaLista(t({ data: HOJE, inicio: '11:00' }), HOJE)).toBe('11:00');
+  });
+  it('compromisso de outro dia mostra o dia e a hora', () => {
+    expect(quandoNaLista(t({ data: '2026-11-13', inicio: '11:00' }), HOJE)).toBe('Sexta, 13/11 · 11:00');
+    expect(quandoNaLista(t({ data: '2026-11-03', inicio: '09:30' }), HOJE)).toBe('Terça, 3/11 · 09:30');
+  });
+  it('tarefa marcada para outro dia mostra o dia', () => {
+    expect(quandoNaLista(t({ data: '2026-11-13' }), HOJE)).toBe('Sexta, 13/11');
+  });
+  it('prazo mostra o dia e a hora do prazo', () => {
+    expect(quandoNaLista(t({ data: '2026-11-13', prazoHora: '17:00' }), HOJE)).toBe('Até sexta, 13/11, às 17:00');
   });
 });

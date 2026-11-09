@@ -10,7 +10,7 @@
 }
 .casca[data-tela='computador'] {
   /* O painel direito encolhe com a janela: perto de 1100 px a página ainda tem espaço. */
-  grid-template-columns: 14rem minmax(0, 1fr) clamp(16rem, 24vw, 24rem);
+  grid-template-columns: 15.5rem minmax(0, 1fr) clamp(16rem, 24vw, 24rem);
   height: 100dvh;
   overflow: hidden;
 }
@@ -525,4 +525,52 @@
 .cartao-chat .foco-vazio {
   padding: 0;
   color: var(--tinta2);
+}
+
+/* ---- "Em breve": telas que ainda não existem ---- */
+
+.em-breve {
+  display: inline-block;
+  margin: 0;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: var(--poco);
+  color: var(--tinta2);
+  font: 600 0.7rem/1.5 var(--ui);
+  white-space: nowrap;
+}
+/* A marca fica à direita do link, sem entrar no nome dele nem tirar a área de toque. */
+.com-marca {
+  position: relative;
+}
+.com-marca .item {
+  gap: 8px;
+  padding-right: 66px;
+  line-height: 1.2;
+}
+.com-marca .icone {
+  flex: none;
+}
+.com-marca .em-breve {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.menu-nota {
+  padding: 2px 12px 6px;
+  color: var(--tinta3);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.em-breve-cartao {
+  max-width: 30rem;
+}
+.em-breve-texto {
+  margin: 8px 0 14px;
+  font-size: 1.05rem;
+}
+.cartao-agora .em-breve {
+  margin-bottom: 6px;
 }

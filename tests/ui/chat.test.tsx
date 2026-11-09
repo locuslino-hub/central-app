@@ -707,3 +707,35 @@ describe('descreverQuando', () => {
     expect(descreverQuando(item(extra), HOJE)).toBe(texto);
   });
 });
+
+describe('resposta para compromisso (até a agenda do Google chegar)', () => {
+  const compromisso: ItemDoChat = {
+    tipo: 'compromisso',
+    titulo: 'Reunião sobre o projeto',
+    salaId: 'sala-investigacao',
+    data: '2026-11-06',
+    inicio: '11:00',
+    fim: '12:00',
+    marcar: false,
+    certeza: 'alta',
+  };
+  const tarefaSimples: ItemDoChat = { tipo: 'tarefa', titulo: 'Comprar pão', salaId: null, marcar: false, certeza: 'alta' };
+
+  it('diz que foi anotado como tarefa com hora e que a agenda chega depois', async () => {
+    const { fala } = await import('../../src/chat/conversa');
+    expect(fala([compromisso])).toBe('Anotei como tarefa com hora. A agenda do Google chega depois.');
+  });
+
+  it('tarefa comum segue com "Anotei."; incerteza continua pedindo conferência', async () => {
+    const { fala } = await import('../../src/chat/conversa');
+    expect(fala([tarefaSimples])).toBe('Anotei.');
+    expect(fala([{ ...compromisso, certeza: 'baixa' }])).toBe('Não tenho certeza. Confira o cartão.');
+  });
+
+  it('compromisso junto de pessoa nova: as duas informações', async () => {
+    const { fala } = await import('../../src/chat/conversa');
+    expect(fala([{ ...compromisso, pessoaNova: 'Renata' }])).toBe(
+      'Anotei como tarefa com hora. A agenda do Google chega depois. Ainda não conheço Renata.',
+    );
+  });
+});

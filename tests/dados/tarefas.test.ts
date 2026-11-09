@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { desfazer } from '../../src/dados/desfazer';
 import { apagar, listar, listarPendentes, salvar } from '../../src/dados/loja';
 import {
+  apagarTarefa,
   concluirTarefa,
+  criarTarefa,
+  editarTarefa,
   confirmarDuracao,
   darCiencia,
   moverParaDia,
@@ -168,5 +171,146 @@ describe('duração', () => {
       expect(await confirmarDuracao(t.id, ruim)).toBe(false);
     }
     expect(await unica()).toMatchObject({ duracaoMin: 60, duracaoConfirmada: false });
+  });
+});
+
+describe('criar tarefa à mão', () => {
+  it('sem dia: Sem prazo, com os padrões (60 min não confirmados, sem sala)', async () => {
+    const t = await criarTarefa('  Comprar café  ');
+    expect(t).toMatchObject({
+      titulo: 'Comprar café',
+      salaId: null,
+      duracaoMin: 60,
+      duracaoConfirmada: false,
+      feito: false,
+      fixada: false,
+      marcar: false,
+    });
+    const salva = await unica();
+    expect('data' in salva).toBe(false);
+    expect('semana' in salva).toBe(false);
+    expect(await listarPendentes()).toMatchObject([{ colecao: 'tarefas', id: t!.id }]);
+  });
+
+  it('para hoje: grava a data', async () => {
+    await criarTarefa('Validar dados', { data: HOJE });
+    expect((await unica()).data).toBe(HOJE);
+  });
+
+  it('título vazio ou só espaços não cria nada', async () => {
+    expect(await criarTarefa('')).toBeUndefined();
+    expect(await criarTarefa('    ')).toBeUndefined();
+    expect(await listar('tarefas')).toEqual([]);
+  });
+
+  it('dia inválido não cria', async () => {
+    expect(await criarTarefa('X', { data: '2026-02-30' })).toBeUndefined();
+    expect(await listar('tarefas')).toEqual([]);
+  });
+});
+
+describe('editar tarefa', () => {
+  it('muda título e sala e deixa o resto como está', async () => {
+    const t = await salvar('tarefas', tarefa('Rever capitulo', { data: HOJE, duracaoMin: 90, duracaoConfirmada: true, fixada: true }));
+    expect(await editarTarefa(t.id, { titulo: ' Rever capítulo 3 ', salaId: 'sala-orientacoes' })).toBe(true);
+    expect(await unica()).toMatchObject({
+      titulo: 'Rever capítulo 3',
+      salaId: 'sala-orientacoes',
+      data: HOJE,
+      duracaoMin: 90,
+      duracaoConfirmada: true,
+      fixada: true,
+    });
+  });
+
+  it('sala "nenhuma" volta para null', async () => {
+    const t = await salvar('tarefas', tarefa('X', { salaId: 'sala-aulas' }));
+    await editarTarefa(t.id, { salaId: null });
+    expect((await unica()).salaId).toBeNull();
+  });
+
+  it('título vazio é recusado sem escrever', async () => {
+    const t = await salvar('tarefas', tarefa('X'));
+    const pendentes = await listarPendentes();
+    expect(await editarTarefa(t.id, { titulo: '   ' })).toBe(false);
+    expect(await listarPendentes()).toEqual(pendentes);
+    expect((await unica()).titulo).toBe('X');
+  });
+
+  it('quando: Hoje, Esta semana, Dia e Sem prazo, limpando o que sobra', async () => {
+    const t = await salvar('tarefas', tarefa('X', { semana: '2026-10-26', semanaVencida: '2026-10-19' }));
+    await editarTarefa(t.id, { quando: { tipo: 'hoje', hoje: HOJE } });
+    let salva = await unica();
+    expect(salva.data).toBe(HOJE);
+    expect('semana' in salva || 'semanaVencida' in salva).toBe(false);
+
+    await editarTarefa(t.id, { quando: { tipo: 'semana', hoje: HOJE } });
+    salva = await unica();
+    expect(salva.semana).toBe('2026-11-02');
+    expect('data' in salva).toBe(false);
+
+    await editarTarefa(t.id, { quando: { tipo: 'dia', dia: '2026-11-12' } });
+    salva = await unica();
+    expect(salva.data).toBe('2026-11-12');
+    expect('semana' in salva).toBe(false);
+
+    await editarTarefa(t.id, { quando: { tipo: 'sem-prazo' } });
+    salva = await unica();
+    expect('data' in salva || 'semana' in salva).toBe(false);
+  });
+
+  it('dia inválido no "quando" recusa tudo, sem escrever', async () => {
+    const t = await salvar('tarefas', tarefa('X'));
+    const pendentes = await listarPendentes();
+    expect(await editarTarefa(t.id, { titulo: 'Novo', quando: { tipo: 'dia', dia: '2026-13-01' } })).toBe(false);
+    expect(await listarPendentes()).toEqual(pendentes);
+    expect((await unica()).titulo).toBe('X');
+  });
+
+  it('compromisso e prazo: o dia não muda por aqui (a hora está ligada a ele)', async () => {
+    const c = await salvar('tarefas', tarefa('Reunião', { data: '2026-11-06', inicio: '11:00' }));
+    const p = await salvar('tarefas', tarefa('Entrega', { data: '2026-11-06', prazoHora: '17:00' }));
+    await editarTarefa(c.id, { titulo: 'Reunião do projeto', quando: { tipo: 'sem-prazo' } });
+    await editarTarefa(p.id, { quando: { tipo: 'hoje', hoje: HOJE } });
+    const todas = Object.fromEntries((await listar('tarefas')).map((x) => [x.id, x]));
+    expect(todas[c.id]).toMatchObject({ titulo: 'Reunião do projeto', data: '2026-11-06', inicio: '11:00' });
+    expect(todas[p.id]).toMatchObject({ data: '2026-11-06', prazoHora: '17:00' });
+  });
+
+  it('tarefa que sumiu: false, e não recria', async () => {
+    const t = await salvar('tarefas', tarefa('X'));
+    await apagar('tarefas', t.id);
+    expect(await editarTarefa(t.id, { titulo: 'Y' })).toBe(false);
+    expect(await listar('tarefas')).toEqual([]);
+  });
+});
+
+describe('apagar tarefa', () => {
+  it('apaga pela loja (lápide, pendente) e devolve o desfazer, que traz a tarefa de volta igual', async () => {
+    const t = await salvar('tarefas', tarefa('Rever', { data: HOJE, salaId: 'sala-aulas', duracaoMin: 30, duracaoConfirmada: true }));
+    vi.setSystemTime(AGORA + 1000);
+    const entrada = await apagarTarefa(t.id);
+    expect(await listar('tarefas')).toEqual([]);
+    expect((await listar('tarefas', { comApagados: true }))[0].apagado).toBe(true);
+    expect(entrada?.rotulo).toBe('Tarefa apagada: Rever');
+    expect(desfazer.ultimo()).toBe(entrada);
+
+    vi.setSystemTime(AGORA + 2000);
+    await entrada!.reverter();
+    expect(await unica()).toMatchObject({ id: t.id, titulo: 'Rever', data: HOJE, salaId: 'sala-aulas', duracaoMin: 30, duracaoConfirmada: true });
+    expect((await unica()).apagado).toBeUndefined();
+  });
+
+  it('desfazer duas vezes restaura uma vez só', async () => {
+    const t = await salvar('tarefas', tarefa('Uma vez'));
+    const entrada = await apagarTarefa(t.id);
+    await entrada!.reverter();
+    const pendentes = (await listarPendentes()).length;
+    await entrada!.reverter();
+    expect(await listarPendentes()).toHaveLength(pendentes);
+  });
+
+  it('tarefa que já sumiu: undefined', async () => {
+    expect(await apagarTarefa('nao-existe')).toBeUndefined();
   });
 });

@@ -140,6 +140,8 @@
 
 /* Campo e Enviar. O campo tem 16 px ou mais: o celular não aproxima a tela. */
 .chat-form {
+  /* Ao rolar o campo para a vista no celular, deixa a altura da barra de baixo livre (barra 56 px + margens). */
+  scroll-margin-bottom: calc(96px + env(safe-area-inset-bottom));
   display: flex;
   gap: 8px;
   align-items: center;

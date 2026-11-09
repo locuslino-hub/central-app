@@ -1,7 +1,8 @@
 // Navegação: menu completo (computador) e atalhos (barra no celular, trilho no tablet).
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { hrefDe, nomeDoMes, type IdDaRota, type RotaAtual } from '../rotas';
+import { hrefDe, nomeDoMes, ROTAS_EM_BREVE, type IdDaRota, type RotaAtual } from '../rotas';
+import { EmBreve } from './EmBreve';
 import { Icone, type NomeDoIcone } from './icones';
 import { useSalas } from './hooks';
 import { BotaoMais, FolhaMais, ROTAS_DO_MAIS } from './Mais';
@@ -21,6 +22,7 @@ const COR_DA_SALA: Record<string, string> = {
   'sala-casa': 'sala-casa',
 };
 export const corDaSala = (id: string) => COR_DA_SALA[id] ?? 'sala-outra';
+
 
 /** Os nomes dos destinos que mudam com a data: mês e ano atuais. */
 function rotuloDe(id: IdComHref, hoje: Date): string {
@@ -73,8 +75,9 @@ function Grupo({ titulo, children }: { titulo: string; children: ComponentChildr
 export function MenuLateral({ rota, hoje }: Props) {
   const salas = useSalas();
   const item = (id: IdComHref, icone: NomeDoIcone) => (
-    <li key={id}>
+    <li key={id} class={ROTAS_EM_BREVE.has(id) ? 'com-marca' : undefined}>
       <Item rota={rota} id={id} icone={icone} rotulo={rotuloDe(id, hoje)} />
+      {ROTAS_EM_BREVE.has(id) && <EmBreve />}
     </li>
   );
   return (
@@ -96,6 +99,7 @@ export function MenuLateral({ rota, hoje }: Props) {
           {item('sem-prazo', 'sem-prazo')}
         </Grupo>
         <Grupo titulo="Minhas salas">
+          <li class="menu-nota">As páginas das salas chegam numa próxima versão.</li>
           {salas.map((sala) => (
             <li key={sala.id}>
               <Item rota={rota} id="sala" param={sala.id} rotulo={sala.nome} cor={corDaSala(sala.id)} />
@@ -112,8 +116,8 @@ export function MenuLateral({ rota, hoje }: Props) {
 
 const ATALHOS: { id: IdComHref; icone: NomeDoIcone; rotulo: string; contem?: IdDaRota[] }[] = [
   { id: 'hoje', icone: 'painel', rotulo: 'Painel' },
-  { id: 'agora', icone: 'agora', rotulo: 'Agora' },
-  { id: 'caixa', icone: 'caixa', rotulo: 'Caixa' },
+  { id: 'atividades', icone: 'atividades', rotulo: 'Atividades' },
+  { id: 'sem-prazo', icone: 'sem-prazo', rotulo: 'Sem prazo' },
   { id: 'salas', icone: 'salas', rotulo: 'Salas', contem: ['sala', 'pessoa'] },
   { id: 'chat', icone: 'chat', rotulo: 'Chat' },
 ];
@@ -157,7 +161,8 @@ export function Atalhos({ rota, hoje, variante }: Props & { variante: 'barra' | 
           <li>
             <BotaoMais
               aberto={aberto}
-              dentro={ROTAS_DO_MAIS.has(rota.id)}
+              // O que tem atalho próprio na barra (Atividades, Sem prazo) é página atual lá, não "dentro do Mais".
+              dentro={ROTAS_DO_MAIS.has(rota.id) && !ATALHOS.some((atalho) => atalho.id === rota.id)}
               aoAlternar={() => setAberto((valor) => !valor)}
               botaoRef={botao}
             />

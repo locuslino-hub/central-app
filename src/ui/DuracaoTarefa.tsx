@@ -46,7 +46,7 @@ export function DuracaoTarefa({ tarefa }: { tarefa: Tarefa }) {
         class="duracao-botao"
         ref={botao}
         aria-expanded={aberto}
-        aria-label={`Duração: ${rotulo}`}
+        aria-label={`Duração de ${tarefa.titulo}: ${rotulo}`}
         onClick={() => (aberto ? fechar() : setAberto(true))}
       >
         {rotulo}

@@ -1,6 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apagar, listar, listarAvisos, listarPendentes, salvar } from '../../src/dados/loja';
+import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes, salvar, salvarDesde } from '../../src/dados/loja';
 import { sincronizar } from '../../src/dados/sincronia';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { iniciarVirada, virarDia } from '../../src/dados/virada';
@@ -22,6 +22,11 @@ function tarefa(titulo: string, extra: Partial<ParaSalvar<Tarefa>> = {}): ParaSa
     ...extra,
   };
 }
+
+/** Deixa o IndexedDB de teste (que usa timers reais) terminar o que estiver em andamento. */
+const esvaziar = async () => {
+  for (let i = 0; i < 40; i++) await new Promise((r) => setImmediate(r));
+};
 
 const porTitulo = async () => Object.fromEntries((await listar('tarefas')).map((t) => [t.titulo, t]));
 
@@ -369,5 +374,141 @@ describe('iniciarVirada', () => {
     parar();
     await vi.advanceTimersByTimeAsync(3 * 3600_000);
     expect((await listar('tarefas'))[0].data).toBe(HOJE);
+  });
+
+  describe('com aparelho conectado: só vira em cima de dado em dia', () => {
+    const MIN = 60_000;
+    const conectado = () => Promise.resolve(true);
+
+    it('a sincronia não terminou "atualizado": não vira, e na tentativa seguinte não desfaz a cópia mais nova do outro aparelho', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(AGORA);
+      const velha = await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+      const estados = ['sem-internet', 'atualizado'];
+      const antes = vi.fn(async () => {
+        const estado = estados.shift();
+        if (estado === 'atualizado') {
+          // Nesta rodada a sincronia traz a cópia que o outro aparelho já tinha passado para sexta.
+          await gravarDoServidor([
+            { colecao: 'tarefas', registro: { ...velha, data: '2026-11-06', atualizadoEm: AGORA + 1000, aparelho: 'outro' } },
+          ]);
+          await salvarDesde(Date.now());
+        }
+        return estado;
+      });
+      const parar = iniciarVirada({ antes, conectado });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await esvaziar();
+      expect(antes).toHaveBeenCalledTimes(1);
+      expect((await listar('tarefas'))[0].data).toBe('2026-11-04'); // não escreveu
+
+      await vi.advanceTimersByTimeAsync(5 * MIN + 1000);
+      await vi.waitFor(() => expect(antes).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(100);
+      expect((await listar('tarefas'))[0].data).toBe('2026-11-06'); // a do outro aparelho vale
+      parar();
+    });
+
+    it('sem internet e sem nada de novo: a tentativa seguinte vira o dia', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(AGORA);
+      await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+      const estados = ['sem-internet', 'atualizado'];
+      const parar = iniciarVirada({
+        antes: async () => {
+          const estado = estados.shift();
+          if (estado === 'atualizado') await salvarDesde(Date.now());
+          return estado;
+        },
+        conectado,
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      await esvaziar();
+      expect((await listar('tarefas'))[0].data).toBe('2026-11-04');
+      await vi.advanceTimersByTimeAsync(5 * MIN + 1000);
+      await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
+      parar();
+    });
+
+    it('espera esgotada também conta como "não terminou": não vira', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(AGORA);
+      await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+      const parar = iniciarVirada({ antes: () => new Promise(() => {}), conectado, esperaMaximaMs: 5000 });
+      await vi.advanceTimersByTimeAsync(7000);
+      await esvaziar();
+      expect((await listar('tarefas'))[0].data).toBe('2026-11-04');
+      parar();
+    });
+
+    it('ao voltar ao app com a virada pendente, tenta na hora', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(AGORA);
+      await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+      const estados = ['erro-codigo', 'atualizado'];
+      const parar = iniciarVirada({
+        antes: async () => {
+          const estado = estados.shift();
+          if (estado === 'atualizado') await salvarDesde(Date.now());
+          return estado;
+        },
+        conectado,
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
+      parar();
+    });
+
+    it('relógio do aparelho longe do do servidor (dias à frente): não grava nada', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(AGORA);
+      await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+      await salvar('tarefas', tarefa('Semana', { semana: '2026-11-02' }));
+      const antes = await listar('tarefas');
+      await salvarDesde(AGORA); // o servidor disse "agora" = quinta 12:20
+      vi.setSystemTime(AGORA + 3 * 24 * 3600_000); // o relógio do aparelho pulou 3 dias
+      const parar = iniciarVirada({ antes: async () => 'atualizado', conectado });
+      await vi.advanceTimersByTimeAsync(200);
+      await esvaziar();
+      expect(await listar('tarefas')).toEqual(antes);
+      parar();
+    });
+
+    it('relógio atrasado em relação ao servidor também não grava; diferença pequena (2 min) é normal', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(AGORA);
+      await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+      await salvarDesde(AGORA + 30 * MIN);
+      const parar = iniciarVirada({ antes: async () => 'atualizado', conectado });
+      await vi.advanceTimersByTimeAsync(200);
+      await esvaziar();
+      expect((await listar('tarefas'))[0].data).toBe('2026-11-04');
+      parar();
+
+      await salvarDesde(AGORA + 2 * MIN);
+      const parar2 = iniciarVirada({ antes: async () => 'atualizado', conectado });
+      await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
+      parar2();
+    });
+  });
+
+  it('se gravar falha, tenta de novo depois, e não perde a virada', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(AGORA);
+    await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(() => {
+      throw new Error('disco cheio');
+    });
+    const parar = iniciarVirada();
+    await vi.advanceTimersByTimeAsync(100);
+      await esvaziar();
+    expect(erro).toHaveBeenCalled();
+    expect((await listar('tarefas'))[0].data).toBe('2026-11-04');
+    await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000);
+    await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
+    parar();
   });
 });

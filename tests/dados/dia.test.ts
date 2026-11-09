@@ -134,4 +134,27 @@ describe('vigiarODia', () => {
     expect(dias).toEqual(['2027-03-29']);
     parar();
   });
+
+  it('dia de volta da hora (25/10/2026, 25 h): só vira na meia-noite de verdade', async () => {
+    // Lisboa volta de 02:00 para 01:00 em 25/10. Às 00:30 locais (23:30Z de 24/10) faltam 24 h 30 min.
+    relogioFalso('2026-10-24T23:30:00Z');
+    const dias: string[] = [];
+    const parar = vigiarODia((dia) => dias.push(dia));
+    await vi.advanceTimersByTimeAsync(23 * 3600_000 + 50 * 60_000);
+    expect(dias).toEqual([]); // ainda é 25/10, 23:20 locais
+    await vi.advanceTimersByTimeAsync(40 * 60_000);
+    expect(dias).toEqual(['2026-10-26']);
+    parar();
+  });
+
+  it('nada dispara antes da meia-noite, nem no último segundo', async () => {
+    relogioFalso('2026-11-05T23:00:00Z');
+    const dias: string[] = [];
+    const parar = vigiarODia((dia) => dias.push(dia));
+    await vi.advanceTimersByTimeAsync(59 * 60_000 + 59_000); // 23:59:59
+    expect(dias).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(dias).toEqual(['2026-11-06']);
+    parar();
+  });
 });

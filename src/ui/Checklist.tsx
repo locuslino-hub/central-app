@@ -1,7 +1,8 @@
 // Checklist do dia (spec, seção 7, item 4): o que é de hoje e o que ficou de
 // dias anteriores, com progresso. Cada linha tem Desfazer ao concluir.
 import { useDia, useSalas, useTarefas } from './hooks';
-import { LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
+import { AvisoDeApagada, LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
+import { NovaTarefa } from './NovaTarefa';
 import { daChecklist, porOrdem } from './tarefas-lista';
 import './tarefas.css';
 
@@ -17,6 +18,8 @@ export function Checklist() {
   return (
     <section class="painel checklist" aria-labelledby="titulo-checklist" aria-busy={tarefas === undefined}>
       <h2 id="titulo-checklist">Checklist do dia</h2>
+      <NovaTarefa rotulo="Nova tarefa para hoje" data={hoje} />
+      <AvisoDeApagada conclusoes={conclusoes} />
       {tarefas !== undefined && doDia.length === 0 && (
         <div>
           <p class="lista-vazia-titulo">Nada para hoje.</p>

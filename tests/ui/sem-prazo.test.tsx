@@ -7,7 +7,7 @@ import { criar } from '../apoio/tarefas';
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(2026, 10, 5, 12, 20));
+  vi.setSystemTime(Date.parse('2026-11-05T12:20:00Z'));
   await semear();
 });
 
@@ -159,6 +159,28 @@ describe('Sem prazo', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Sem prazo' })));
   });
 
+  it('se mover falha, o foco não é levado para outro lugar quando a tarefa sair da lista depois', async () => {
+    await criar('A primeira');
+    await criar('B segunda');
+    render(<SemPrazo />);
+    await aparecer('A primeira');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw new Error('disco cheio');
+    });
+    fireEvent.click(within(linha('A primeira')).getByRole('button', { name: 'Hoje' }));
+    expect((await screen.findAllByRole('alert'))[0].textContent).toBe('Não consegui salvar. Tente de novo.');
+    put.mockRestore();
+
+    // A tarefa sai da lista por outro caminho (apagada em outro aparelho): o foco não pula para a vizinha.
+    const [primeira] = (await listar('tarefas')).filter((t) => t.titulo === 'A primeira');
+    await apagar('tarefas', primeira.id);
+    await waitFor(() => expect(screen.queryByText('A primeira')).toBeNull());
+    await new Promise((r) => setTimeout(r, 60)); // os efeitos da tela rodam depois de desenhar
+    expect(document.activeElement).not.toBe(within(linha('B segunda')).getByRole('checkbox', { name: 'B segunda' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('heading', { name: 'Sem prazo' }));
+  });
+
   it('semana vencida: mostra o aviso na tarefa, e "Entendi" tira só o aviso', async () => {
     await criar('Ler artigo da Aurora', { semanaVencida: '2026-10-26' });
     render(<SemPrazo />);
@@ -166,7 +188,9 @@ describe('Sem prazo', () => {
 
     const item = within(linha('Ler artigo da Aurora'));
     expect(item.getByText('Saiu de Esta semana: a semana de 26/10 acabou.')).toBeTruthy();
-    fireEvent.click(item.getByRole('button', { name: 'Entendi' }));
+    const entendi = item.getByRole('button', { name: /^Entendi/ });
+    expect(entendi.getAttribute('aria-label')).toBe('Entendi: Ler artigo da Aurora');
+    fireEvent.click(entendi);
 
     await waitFor(async () => expect((await unica()).semanaVencida).toBeUndefined());
     expect(screen.queryByText(/a semana de 26\/10 acabou/)).toBeNull();

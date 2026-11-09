@@ -4,19 +4,20 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { moverParaDia, moverParaHoje, moverParaSemana } from '../dados/tarefas';
 import type { Tarefa } from '../dados/tipos';
 import { useDia, useSalas, useTarefas } from './hooks';
-import { LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
+import { AvisoDeApagada, LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
+import { NovaTarefa } from './NovaTarefa';
 import { estaSemPrazo, porOrdem } from './tarefas-lista';
 import './tarefas.css';
 
 type AcoesProps = {
   tarefa: Tarefa;
   hoje: string;
-  /** Avisa a lista antes de a tarefa sair dela, para o foco ir para a vizinha. */
-  aoMover: () => void;
+  /** Lembra a vizinha antes de a tarefa sair da lista; o que devolve confirma o foco depois de gravar. */
+  prepararFoco: () => () => void;
 };
 
 /** Hoje, Esta semana e Escolher dia, de uma tarefa. */
-function Acoes({ tarefa, hoje, aoMover }: AcoesProps) {
+function Acoes({ tarefa, hoje, prepararFoco }: AcoesProps) {
   const [escolhendo, setEscolhendo] = useState(false);
   const [dia, setDia] = useState('');
   const [erro, setErro] = useState<string | null>(null);
@@ -29,9 +30,10 @@ function Acoes({ tarefa, hoje, aoMover }: AcoesProps) {
 
   async function mover(fazer: () => Promise<boolean>) {
     setErro(null);
-    aoMover();
+    const confirmar = prepararFoco();
     try {
-      await fazer();
+      // O foco só vai para a vizinha se a tarefa de fato saiu da lista.
+      if (await fazer()) confirmar();
     } catch (falha) {
       console.error('Não consegui mover a tarefa', falha);
       setErro('Não consegui salvar. Tente de novo.');
@@ -135,9 +137,13 @@ export function SemPrazo({ semCabecalho = false }: { semCabecalho?: boolean }) {
     (linha?.querySelector<HTMLElement>('.tarefa-caixa') ?? titulo.current)?.focus();
   });
 
-  const lembrarVizinha = (id: string) => {
+  /** Calcula a vizinha agora (a lista ainda tem a linha) e devolve o que registra o pedido de foco. */
+  const prepararFoco = (id: string) => {
     const i = linhas.findIndex((t) => t.id === id);
-    focoDepois.current = { saiu: id, vizinha: (linhas[i + 1] ?? linhas[i - 1])?.id ?? null };
+    const pedido = { saiu: id, vizinha: (linhas[i + 1] ?? linhas[i - 1])?.id ?? null };
+    return () => {
+      focoDepois.current = pedido;
+    };
   };
 
   return (
@@ -152,6 +158,8 @@ export function SemPrazo({ semCabecalho = false }: { semCabecalho?: boolean }) {
           Sem prazo
         </h2>
       )}
+      <NovaTarefa rotulo="Nova tarefa sem prazo" />
+      <AvisoDeApagada conclusoes={conclusoes} />
       {tarefas !== undefined && linhas.length === 0 && (
         <div>
           <p class="lista-vazia-titulo">Nada sem prazo.</p>
@@ -161,8 +169,15 @@ export function SemPrazo({ semCabecalho = false }: { semCabecalho?: boolean }) {
       {linhas.length > 0 && (
         <ul class="tarefas" ref={lista}>
           {linhas.map((tarefa) => (
-            <LinhaDeTarefa key={tarefa.id} tarefa={tarefa} salas={salas} hoje={hoje} conclusoes={conclusoes}>
-              {!tarefa.feito && <Acoes tarefa={tarefa} hoje={hoje} aoMover={() => lembrarVizinha(tarefa.id)} />}
+            <LinhaDeTarefa
+              key={tarefa.id}
+              tarefa={tarefa}
+              salas={salas}
+              hoje={hoje}
+              conclusoes={conclusoes}
+              prepararFoco={prepararFoco}
+            >
+              {!tarefa.feito && <Acoes tarefa={tarefa} hoje={hoje} prepararFoco={() => prepararFoco(tarefa.id)} />}
             </LinhaDeTarefa>
           ))}
         </ul>

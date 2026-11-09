@@ -4,6 +4,7 @@
 import type { ComponentChildren } from 'preact';
 import { hrefDe, type RotaAtual } from '../rotas';
 import { Atividades } from './Atividades';
+import { AvisosDeConflito } from './AvisosDeConflito';
 import { Chat } from './Chat';
 import { Checklist } from './Checklist';
 import { Conectar } from './Conectar';
@@ -23,7 +24,18 @@ function Pagina({ titulo, children }: { titulo: string; children?: ComponentChil
   );
 }
 
-const AindaNaoPronta = () => <p class="aviso">Esta tela ainda não está pronta.</p>;
+/** Tela que chega numa tarefa seguinte: diz isso e leva ao que já funciona. */
+const AindaNaoPronta = () => (
+  <section class="painel em-breve-cartao">
+    <p class="em-breve">Em breve</p>
+    <p class="em-breve-texto">Esta tela chega numa próxima versão.</p>
+    <p>
+      <a class="botao-link" href="#/">
+        Voltar ao Painel do dia
+      </a>
+    </p>
+  </section>
+);
 
 /** Temporária: a Tarefa 17 traz a página de cada sala. Por ora, os atalhos e o cadastro de pessoas. */
 function Salas({ titulo }: { titulo: string }) {
@@ -102,6 +114,7 @@ export function Vista({ rota }: { rota: RotaAtual }) {
       // A Tarefa 17 monta o resto do Painel (mensagem do dia, linha do dia, caixas das salas...).
       return (
         <Pagina titulo={rota.titulo}>
+          <AvisosDeConflito />
           <div class="hoje-grade">
             <Checklist />
             <SemPrazo />

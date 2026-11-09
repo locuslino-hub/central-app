@@ -7,7 +7,7 @@
 // sem rede e a sincronia ainda não tiver chegado).
 import { segundaDaSemana } from '../chat/datas';
 import type { Tarefa } from '../dados/tipos';
-import { nomeDaSemana, quandoDaTarefa } from './quando';
+import { nomeDaSemana, nomeDoDia, quandoDaTarefa } from './quando';
 
 const DIA = /^\d{4}-\d{2}-\d{2}$/;
 const temDia = (tarefa: Tarefa): tarefa is Tarefa & { data: string } =>
@@ -15,12 +15,16 @@ const temDia = (tarefa: Tarefa): tarefa is Tarefa & { data: string } =>
 const temSemana = (tarefa: Tarefa): tarefa is Tarefa & { semana: string } =>
   tarefa.semana !== undefined && DIA.test(tarefa.semana);
 
-/** Prazo que já passou, aberto ou não (para a tarefa não mudar de grupo ao ser concluída). */
+/**
+ * Prazo ou compromisso que já passou, aberto ou não (para a tarefa não mudar de
+ * grupo ao ser concluída). Compromisso é tarefa com hora até a agenda do Google
+ * chegar: se passou sem ser concluído, não pode sumir, então vale como atrasado.
+ */
 function prazoVencido(tarefa: Tarefa, hoje: string): boolean {
-  return !!tarefa.prazoHora && !tarefa.inicio && temDia(tarefa) && tarefa.data < hoje;
+  return !!(tarefa.prazoHora || tarefa.inicio) && temDia(tarefa) && tarefa.data < hoje;
 }
 
-/** O aviso "Atrasada": prazo passado e ainda não feita. */
+/** O aviso "Atrasada": prazo ou compromisso passado e ainda não feito. */
 export function estaAtrasada(tarefa: Tarefa, hoje: string): boolean {
   return !tarefa.feito && prazoVencido(tarefa, hoje);
 }
@@ -38,13 +42,13 @@ export function porOrdem(a: Tarefa, b: Tarefa): number {
 
 /**
  * Entra na Checklist do dia: o que é de hoje, o que ficou de dias anteriores e
- * ainda está aberto, e prazos vencidos. Compromisso só no dia dele (o que
- * passou já aconteceu). Feita só se foi hoje ou se foi concluída agora, nesta
+ * ainda está aberto, prazos vencidos e compromissos passados não concluídos
+ * (como atrasados). Feita só se foi hoje ou se foi concluída agora, nesta
  * página, para o "Desfazer" não sumir debaixo do dedo.
  */
 export function daChecklist(tarefa: Tarefa, hoje: string, concluidasAgora: ReadonlySet<string>): boolean {
   if (!temDia(tarefa)) return false;
-  if (tarefa.inicio ? tarefa.data !== hoje : tarefa.data > hoje) return false;
+  if (tarefa.data > hoje) return false;
   if (!tarefa.feito) return true;
   return tarefa.data === hoje || concluidasAgora.has(tarefa.id);
 }
@@ -64,14 +68,10 @@ const PROXIMOS: GrupoDeAtividade = { chave: 'proximos', titulo: 'Próximos dias'
 const SEM_PRAZO: GrupoDeAtividade = { chave: 'sem-prazo', titulo: 'Sem prazo', ordem: 4, ordenaPorDia: false };
 
 /**
- * O grupo da tarefa em Atividades, ou `null` se não é coisa a fazer (compromisso
- * que já passou). Feita ou não, o grupo é o mesmo: concluir não muda de grupo.
+ * O grupo da tarefa em Atividades. Feita ou não, o grupo é o mesmo: concluir
+ * não muda de grupo. Compromisso passado e aberto vai para Atrasadas.
  */
-export function grupoDaAtividade(tarefa: Tarefa, hoje: string): GrupoDeAtividade | null {
-  if (tarefa.inicio) {
-    if (!temDia(tarefa) || tarefa.data < hoje) return null;
-    return tarefa.data === hoje ? HOJE : PROXIMOS;
-  }
+export function grupoDaAtividade(tarefa: Tarefa, hoje: string): GrupoDeAtividade {
   if (temDia(tarefa)) {
     if (prazoVencido(tarefa, hoje)) return ATRASADAS;
     return tarefa.data <= hoje ? HOJE : PROXIMOS;
@@ -93,7 +93,10 @@ export function diaParaOrdenar(tarefa: Tarefa): string {
  * ou o dia de uma tarefa marcada para depois. Tarefa de hoje não repete "Hoje".
  */
 export function quandoNaLista(tarefa: Tarefa, hoje: string): string | undefined {
-  if (tarefa.inicio) return tarefa.inicio;
+  if (tarefa.inicio) {
+    if (!temDia(tarefa) || tarefa.data === hoje) return tarefa.inicio;
+    return `${nomeDoDia(tarefa.data, hoje)} · ${tarefa.inicio}`;
+  }
   if (tarefa.prazoHora) return quandoDaTarefa(tarefa, hoje);
   if (temDia(tarefa) && tarefa.data > hoje) return quandoDaTarefa(tarefa, hoje);
   return undefined;

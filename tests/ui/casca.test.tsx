@@ -162,8 +162,8 @@ describe('celular (390 px): barra inferior com Mais', () => {
     expect(barra.getAttribute('data-variante')).toBe('barra');
     expect(within(barra).getAllByRole('link').map((a) => a.textContent)).toEqual([
       'Painel',
-      'Agora',
-      'Caixa',
+      'Atividades',
+      'Sem prazo',
       'Salas',
       'Chat',
     ]);
@@ -247,9 +247,10 @@ describe('celular (390 px): barra inferior com Mais', () => {
   it('o Mais marca que a página aberta está dentro dele', async () => {
     await mostrar('#/quadro', 390);
     expect(screen.getByRole('button', { name: 'Mais' }).getAttribute('aria-current')).toBe('true');
-    navegar('#/caixa');
+    navegar('#/atividades');
+    // Atividades tem atalho próprio na barra: lá é a página atual, e o Mais não a reivindica.
     expect(screen.getByRole('button', { name: 'Mais' }).hasAttribute('aria-current')).toBe(false);
-    expect(link('Caixa').getAttribute('aria-current')).toBe('page');
+    expect(link('Atividades').getAttribute('aria-current')).toBe('page');
   });
 
   it('Salas fica marcada dentro de uma sala (aria-current="true"), não "page"', async () => {
@@ -274,8 +275,8 @@ describe('tablet (800 px): trilho', () => {
     expect(trilho.getAttribute('data-variante')).toBe('trilho');
     expect(within(trilho).getAllByRole('link').map((a) => a.textContent)).toEqual([
       'Painel',
-      'Agora',
-      'Caixa',
+      'Atividades',
+      'Sem prazo',
       'Salas',
       'Chat',
     ]);
@@ -321,9 +322,35 @@ describe('páginas', () => {
     }
   });
 
-  it('a rota que ainda não foi feita diz isso em palavras simples', async () => {
+  it('a rota que ainda não foi feita diz isso em palavras simples, num cartão "Em breve"', async () => {
     await mostrar('#/quadro', 1280);
-    expect(screen.getByText('Esta tela ainda não está pronta.')).toBeTruthy();
+    const principal = within(document.querySelector('main') as HTMLElement);
+    expect(principal.getByText('Esta tela chega numa próxima versão.')).toBeTruthy();
+    expect(principal.getByText('Em breve')).toBeTruthy();
+    expect(principal.getByRole('link', { name: 'Voltar ao Painel do dia' }).getAttribute('href')).toBe('#/');
+  });
+
+  it.each([
+    '#/agora',
+    '#/semana',
+    '#/mes',
+    '#/ano',
+    '#/caixa',
+    '#/quadro',
+    '#/sala/sala-mba',
+  ])('%s é uma tela que ainda não existe e diz isso com o mesmo cartão', async (hash) => {
+    await mostrar(hash, 1280);
+    const principal = within(document.querySelector('main') as HTMLElement);
+    expect(await principal.findByText('Esta tela chega numa próxima versão.')).toBeTruthy();
+  });
+
+  it('as telas que existem não dizem "Em breve"', async () => {
+    for (const hash of ['#/', '#/atividades', '#/sem-prazo', '#/salas', '#/chat']) {
+      const { unmount } = render(<App />);
+      navegar(hash);
+      expect(within(document.querySelector('main') as HTMLElement).queryByText('Esta tela chega numa próxima versão.')).toBeNull();
+      unmount();
+    }
   });
 
   it('endereço desconhecido mostra "Página não encontrada" com o caminho de volta', async () => {
@@ -603,5 +630,63 @@ describe('estado da sincronia, sempre em texto', () => {
   it('o texto não depende só de cor: o ponto é decorativo (aria-hidden)', async () => {
     await mostrar('#/', 1280);
     expect(chip().querySelector('.ponto')?.getAttribute('aria-hidden')).toBe('true');
+  });
+});
+
+describe('"Em breve": o que ainda não existe diz isso', () => {
+  const emBreve = (li: Element | null) => li?.querySelector('.em-breve')?.textContent ?? null;
+  const itemDe = (nome: string, dentro: HTMLElement) => within(dentro).getByRole('link', { name: nome }).closest('li');
+
+  it('no menu do computador: Esta semana, mês, ano, Caixa e Quadro têm a marca; o que existe, não', async () => {
+    await mostrar('#/', 1280);
+    const menu = principal();
+    for (const nome of ['Esta semana', 'Novembro', '2026', 'Caixa', 'Quadro']) {
+      expect(emBreve(itemDe(nome, menu))).toBe('Em breve');
+    }
+    for (const nome of ['Salas', 'Atividades', 'Sem prazo']) {
+      expect(emBreve(itemDe(nome, menu))).toBeNull();
+    }
+  });
+
+  it('a marca não muda o nome do link (o leitor de tela lê o link e depois "Em breve")', async () => {
+    await mostrar('#/', 1280);
+    expect(within(principal()).getByRole('link', { name: 'Caixa' })).toBeTruthy();
+  });
+
+  it('as páginas das salas ainda não existem: o grupo Minhas salas avisa uma vez', async () => {
+    await mostrar('#/', 1280);
+    const menu = principal();
+    expect(within(menu).getByText('As páginas das salas chegam numa próxima versão.')).toBeTruthy();
+  });
+
+  it('o cartão Agora do painel direito também diz que chega depois', async () => {
+    await mostrar('#/', 1280);
+    const agora = within(screen.getByRole('complementary', { name: 'Agora e chat' }).querySelector('.cartao-agora') as HTMLElement);
+    expect(agora.getByText('Em breve')).toBeTruthy();
+  });
+
+  it('na folha Mais do celular: Esta semana, mês, ano e Quadro têm a marca; Atividades e Sem prazo, não', async () => {
+    await mostrar('#/', 390);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    const folha = screen.getByRole('dialog', { name: 'Mais' });
+    for (const nome of ['Esta semana', 'Novembro', '2026', 'Quadro']) {
+      expect(emBreve(itemDe(nome, folha))).toBe('Em breve');
+    }
+    for (const nome of ['Atividades', 'Sem prazo', 'Conectar aparelho']) {
+      expect(emBreve(itemDe(nome, folha))).toBeNull();
+    }
+  });
+
+  it('a barra do celular só leva a telas que existem: Painel, Atividades, Sem prazo, Salas e Chat', async () => {
+    await mostrar('#/', 390);
+    const barra = screen.getByRole('navigation', { name: 'Principal' });
+    expect(barra.querySelector('.em-breve')).toBeNull();
+    expect(within(barra).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
+      '#/',
+      '#/atividades',
+      '#/sem-prazo',
+      '#/salas',
+      '#/chat',
+    ]);
   });
 });

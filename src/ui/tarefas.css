@@ -128,7 +128,8 @@
 
 /* Desfazer e Entendi: botões de texto pequeno, mas com 44 px de altura para o toque. */
 .tarefa-desfazer,
-.tarefa-entendi {
+.tarefa-entendi,
+.tarefa-editar {
   min-height: var(--toque);
   padding: 0 16px;
   border: 1px solid var(--campo);
@@ -139,8 +140,99 @@
   cursor: pointer;
 }
 .tarefa-desfazer:hover,
-.tarefa-entendi:hover {
+.tarefa-entendi:hover,
+.tarefa-editar:hover,
+.tarefa-editar[aria-expanded='true'] {
   background: var(--poco);
+}
+.tarefa-editar {
+  border-color: transparent;
+  color: var(--tinta2);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tarefa-apagada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  padding: 2px 4px 2px 14px;
+  border-radius: var(--r-p);
+  background: var(--pessego);
+  font-size: 0.93rem;
+}
+
+/* ---- Aviso de conflito ---- */
+
+.avisos-de-conflito {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 4px 6px 4px 16px;
+  border-radius: var(--r-m);
+  background: var(--pessego);
+}
+.avisos-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.aviso-de-conflito {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  min-height: var(--toque);
+  font-size: 0.93rem;
+}
+.avisos-mais {
+  margin: 0 0 6px;
+  color: var(--tinta2);
+  font-size: 0.87rem;
+}
+
+/* ---- Edição e nova tarefa ---- */
+
+.tarefa-edicao {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 4px;
+  padding: 12px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+}
+.tarefa-edicao .campo,
+.nova-tarefa .campo {
+  width: 100%;
+  font-size: 16px; /* 16 px ou mais: o celular não aproxima a tela ao tocar no campo */
+}
+.tarefa-edicao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tarefa-edicao-acoes .tarefa-apagar {
+  margin-left: auto;
+  color: var(--alerta);
+}
+.nova-tarefa {
+  margin: 0 0 12px;
+}
+.nova-tarefa-rotulo {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.nova-tarefa-campos {
+  display: flex;
+  gap: 8px;
+}
+.nova-tarefa-campos .campo {
+  flex: 1;
+  min-width: 0;
 }
 .tarefa-aviso {
   display: flex;
@@ -351,4 +443,11 @@
   margin-left: auto;
   padding: 0 16px;
   font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progresso-cheio,
+  .tarefa-marca {
+    transition: none;
+  }
 }

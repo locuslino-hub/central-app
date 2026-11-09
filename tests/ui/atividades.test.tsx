@@ -7,7 +7,7 @@ import { criar } from '../apoio/tarefas';
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(2026, 10, 5, 12, 20));
+  vi.setSystemTime(Date.parse('2026-11-05T12:20:00Z'));
   await semear();
 });
 
@@ -54,15 +54,32 @@ describe('Atividades', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Hoje' })).toBeTruthy();
   });
 
-  it('não lista o que já foi feito, o que foi apagado nem compromisso que já passou', async () => {
+  it('não lista o que já foi feito nem o que foi apagado', async () => {
     await criar('Feita', { data: '2026-11-05', feito: true });
     const apagada = await criar('Apagada', { data: '2026-11-05' });
     await apagar('tarefas', apagada.id);
-    await criar('Reunião de ontem', { data: '2026-11-04', inicio: '11:00' });
+    await criar('Reunião de ontem já feita', { data: '2026-11-04', inicio: '11:00', feito: true });
     await criar('Aberta', { data: '2026-11-05' });
     render(<Atividades />);
     await screen.findByText('Aberta');
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+  });
+
+  it('compromisso que passou sem ser concluído não some: fica em Atrasadas, com o dia e a hora', async () => {
+    await criar('Reunião de ontem', { data: '2026-11-04', inicio: '11:00' });
+    render(<Atividades />);
+    await screen.findByText('Reunião de ontem');
+    const atrasadas = grupo('Atrasadas');
+    expect(atrasadas.getByText('Reunião de ontem')).toBeTruthy();
+    expect(atrasadas.getByText('Quarta, 4/11 · 11:00')).toBeTruthy();
+    expect(atrasadas.getByText('Atrasada')).toBeTruthy();
+  });
+
+  it('compromisso futuro mostra o dia e a hora', async () => {
+    await criar('Reunião de sexta', { data: '2026-11-13', inicio: '11:00' });
+    render(<Atividades />);
+    await screen.findByText('Reunião de sexta');
+    expect(grupo('Próximos dias').getByText('Sexta, 13/11 · 11:00')).toBeTruthy();
   });
 
   it('mostra o quando de cada linha onde ajuda: dia nos próximos dias, hora no compromisso', async () => {
@@ -113,6 +130,6 @@ describe('Atividades', () => {
   it('mostra a duração com "cerca de" até confirmar', async () => {
     await criar('Validar dados', { data: '2026-11-05' });
     render(<Atividades />);
-    expect(await screen.findByRole('button', { name: 'Duração: cerca de 1 h' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Duração de Validar dados: cerca de 1 h' })).toBeTruthy();
   });
 });

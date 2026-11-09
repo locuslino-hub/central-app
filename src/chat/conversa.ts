@@ -133,7 +133,11 @@ function mudarMensagem(id: string, mudanca: Partial<Extract<Mensagem, { de: 'cen
 export function fala(itens: readonly ItemDoChat[]): string {
   if (itens.some((item) => item.certeza === 'baixa')) return 'Não tenho certeza. Confira o cartão.';
   const nova = itens.find((item) => item.pessoaNova)?.pessoaNova;
-  return nova ? `Anotei. Ainda não conheço ${nova}.` : 'Anotei.';
+  // Até a agenda do Google chegar (Tarefa 10), compromisso é tarefa com hora: o dono precisa saber.
+  const base = itens.some((item) => item.tipo === 'compromisso')
+    ? 'Anotei como tarefa com hora. A agenda do Google chega depois.'
+    : 'Anotei.';
+  return nova ? `${base} Ainda não conheço ${nova}.` : base;
 }
 
 /** Grava na memória o que a escolha ensinou, e devolve o item com a pessoa, se houver. */

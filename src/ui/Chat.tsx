@@ -23,6 +23,7 @@ export function Chat() {
   // O campo é só deste chat: a resposta que chega nunca mexe no que se digita.
   const [texto, setTexto] = useState('');
   const log = useRef<HTMLDivElement>(null);
+  const formulario = useRef<HTMLFormElement>(null);
   const hoje = hojeEmLisboa();
 
   // A mensagem nova fica à vista, também quando a resposta chega depois do "Lendo…".
@@ -30,6 +31,9 @@ export function Chat() {
   useEffect(() => {
     const ultima = log.current?.lastElementChild as HTMLElement | null | undefined;
     ultima?.scrollIntoView?.({ block: 'nearest' });
+    // No celular a página rola e a barra de baixo é fixa: o campo (logo abaixo da mensagem nova)
+    // também precisa ficar à vista, acima da barra. `scroll-margin` em chat.css reserva o espaço dela.
+    if (ultima) formulario.current?.scrollIntoView?.({ block: 'end' });
   }, [ultimaMensagem]);
 
   const aoEnviar = (evento: Event) => {
@@ -68,7 +72,7 @@ export function Chat() {
           ),
         )}
       </div>
-      <form class="chat-form" onSubmit={aoEnviar}>
+      <form class="chat-form" ref={formulario} onSubmit={aoEnviar}>
         <input
           class="campo chat-entrada"
           type="text"

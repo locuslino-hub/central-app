@@ -6,7 +6,7 @@ import { Pessoas } from '../../src/ui/Pessoas';
 
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(2026, 10, 5, 12, 20));
+  vi.setSystemTime(Date.parse('2026-11-05T12:20:00Z'));
   await semear();
 });
 
@@ -218,5 +218,121 @@ describe('lista de pessoas', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(await listar('pessoas')).toEqual([]);
     expect(screen.queryByRole('button', { name: 'Desfazer' })).toBeNull();
+  });
+});
+
+describe('cadastrar com dois toques seguidos', () => {
+  it('cria uma pessoa só', async () => {
+    await pronta();
+    preencher('Marina', 'sala-orientacoes');
+    cadastrar();
+    cadastrar();
+    await waitFor(async () => expect(await listar('pessoas')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 40));
+    expect(await listar('pessoas')).toHaveLength(1);
+  });
+});
+
+describe('editar pessoa', () => {
+  const editar = (nome: string) => fireEvent.click(screen.getByRole('button', { name: `Editar ${nome}` }));
+  const nomeEditado = () => screen.getByLabelText('Nome da pessoa') as HTMLInputElement;
+
+  it('Editar abre nome, sala e papel já preenchidos, com o foco no nome', async () => {
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes', papel: 'aluna' });
+    await pronta();
+    await screen.findByText('Marina', { selector: '.pessoa-nome' });
+    editar('Marina');
+    expect(nomeEditado().value).toBe('Marina');
+    expect((screen.getByLabelText('Sala da pessoa') as HTMLSelectElement).value).toBe('sala-orientacoes');
+    expect((screen.getByLabelText('Papel da pessoa') as HTMLInputElement).value).toBe('aluna');
+    await waitFor(() => expect(document.activeElement).toBe(nomeEditado()));
+  });
+
+  it('Salvar muda nome, sala e papel na loja (mesmo id, sem duplicar) e a pessoa muda de grupo', async () => {
+    const m = await salvar('pessoas', { nome: 'Marnia', salaId: 'sala-orientacoes', emails: ['marina@exemplo.invalid'] });
+    await pronta();
+    await screen.findByText('Marnia', { selector: '.pessoa-nome' });
+    editar('Marnia');
+    fireEvent.input(nomeEditado(), { target: { value: 'Marina' } });
+    fireEvent.change(screen.getByLabelText('Sala da pessoa'), { target: { value: 'sala-aulas' } });
+    fireEvent.input(screen.getByLabelText('Papel da pessoa'), { target: { value: 'aluna' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(async () => expect(await listar('pessoas')).toMatchObject([{ id: m.id, nome: 'Marina', salaId: 'sala-aulas', papel: 'aluna', emails: ['marina@exemplo.invalid'] }]));
+    const aulas = within(await screen.findByRole('group', { name: 'Aulas' }));
+    expect(aulas.getByText('Marina')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Orientações' })).toBeNull();
+    expect(screen.queryByLabelText('Nome da pessoa')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Editar Marina' })));
+  });
+
+  it('papel esvaziado some do registro', async () => {
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes', papel: 'aluna' });
+    await pronta();
+    await screen.findByText('Marina', { selector: '.pessoa-nome' });
+    editar('Marina');
+    fireEvent.input(screen.getByLabelText('Papel da pessoa'), { target: { value: '  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await waitFor(async () => expect('papel' in (await listar('pessoas'))[0]).toBe(false));
+  });
+
+  it('nome já usado por outra pessoa é recusado; o próprio nome (outra caixa) não', async () => {
+    await salvar('pessoas', { nome: 'Renata', salaId: 'sala-aulas' });
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes' });
+    await pronta();
+    await screen.findByText('Marina', { selector: '.pessoa-nome' });
+    editar('Marina');
+    fireEvent.input(nomeEditado(), { target: { value: 'renata' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Renata já está cadastrada em Aulas.');
+
+    fireEvent.input(nomeEditado(), { target: { value: 'MARINA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await waitFor(async () => expect((await listar('pessoas')).map((p) => p.nome).sort()).toEqual(['MARINA', 'Renata']));
+  });
+
+  it('nome vazio é recusado; Cancelar e Esc fecham sem gravar', async () => {
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes' });
+    await pronta();
+    await screen.findByText('Marina', { selector: '.pessoa-nome' });
+    editar('Marina');
+    fireEvent.input(nomeEditado(), { target: { value: '  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Escreva o nome.');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByLabelText('Nome da pessoa')).toBeNull();
+    editar('Marina');
+    fireEvent.keyDown(nomeEditado(), { key: 'Escape' });
+    expect(screen.queryByLabelText('Nome da pessoa')).toBeNull();
+    expect((await listar('pessoas'))[0].nome).toBe('Marina');
+  });
+
+  it('o que se digita na edição não é refeito por atualização de outra pessoa', async () => {
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes' });
+    await pronta();
+    await screen.findByText('Marina', { selector: '.pessoa-nome' });
+    editar('Marina');
+    const campo = nomeEditado();
+    fireEvent.input(campo, { target: { value: 'Marina S' } });
+    campo.focus();
+    await salvar('pessoas', { nome: 'Aurora', salaId: 'sala-aulas' });
+    await screen.findByText('Aurora', { selector: '.pessoa-nome' });
+    expect(nomeEditado()).toBe(campo);
+    expect(campo.value).toBe('Marina S');
+    expect(document.activeElement).toBe(campo);
+  });
+
+  it('dois toques seguidos em Salvar gravam uma vez', async () => {
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes' });
+    await pronta();
+    await screen.findByText('Marina', { selector: '.pessoa-nome' });
+    editar('Marina');
+    fireEvent.input(nomeEditado(), { target: { value: 'Marina B' } });
+    const antes = (await listarPendentes()).length;
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await waitFor(async () => expect((await listar('pessoas'))[0].nome).toBe('Marina B'));
+    await new Promise((r) => setTimeout(r, 40));
+    expect((await listarPendentes()).length).toBe(antes + 1);
   });
 });

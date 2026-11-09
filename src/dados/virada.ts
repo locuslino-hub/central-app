@@ -11,7 +11,7 @@
 // nova e o resultado é igual).
 import { segundaDaSemana } from '../chat/datas';
 import { hojeEmLisboa, vigiarODia } from './dia';
-import { lerRegistros, listar, salvar } from './loja';
+import { lerDesde, lerRegistros, listar, salvar } from './loja';
 import type { Tarefa } from './tipos';
 
 export type ResultadoDaVirada = {
@@ -77,51 +77,107 @@ export type OpcoesDaVirada = {
    * Roda antes de cada virada, que só segue quando termina (ou falha, ou passa
    * de `esperaMaximaMs`). O app passa a sincronização: este aparelho pode ter
    * ficado dias fechado, e virar em cima de uma cópia velha desfaria o que o
-   * outro aparelho mudou nesse tempo.
+   * outro aparelho mudou nesse tempo. O que ele devolve é o estado da
+   * sincronia: só `'atualizado'` conta como dado em dia.
    */
   antes?: () => Promise<unknown>;
+  /**
+   * O aparelho tem conexão com o script? Se tem e o `antes` não terminou
+   * `'atualizado'` (sem internet, erro, espera esgotada), a virada não grava:
+   * as listas já mostram o dia certo, e a gravação espera a próxima tentativa.
+   * Sem conexão (uso só neste aparelho) vira com o que há.
+   */
+  conectado?: () => Promise<boolean>;
   agora?: () => Date;
   esperaMaximaMs?: number;
+  /** Intervalo da nova tentativa quando a virada ficou pendente. */
+  tentarDeNovoEmMs?: number;
 };
 
 const ESPERA_MAXIMA_PADRAO_MS = 15_000;
+const TENTAR_DE_NOVO_PADRAO_MS = 5 * 60_000;
+/** Relógio do aparelho e do servidor podem diferir tanto assim logo depois de sincronizar. */
+export const DIFERENCA_MAXIMA_DE_RELOGIO_MS = 5 * 60_000;
+
+type Espera = { terminou: true; resultado: unknown } | { terminou: false };
 
 /**
  * Vira o dia agora e sempre que o dia de Lisboa mudar (temporizador da
  * meia-noite, reagendado a cada dia, e retorno ao app). Devolve a função que desliga.
+ *
+ * Virada que não pôde gravar (sincronia não terminou, relógio fora do do
+ * servidor, erro de gravação) fica pendente: tenta de novo a cada 5 minutos e
+ * ao voltar ao app, até gravar.
  */
 export function iniciarVirada({
   antes,
+  conectado,
   agora = () => new Date(),
   esperaMaximaMs = ESPERA_MAXIMA_PADRAO_MS,
+  tentarDeNovoEmMs = TENTAR_DE_NOVO_PADRAO_MS,
 }: OpcoesDaVirada = {}): () => void {
   let ligada = true;
+  let pendente = false;
+  let novaTentativa: ReturnType<typeof setTimeout> | undefined;
 
-  const esperarAntes = async () => {
-    if (!antes) return;
+  const esperarAntes = async (): Promise<Espera> => {
+    if (!antes) return { terminou: true, resultado: undefined };
     let relogio: ReturnType<typeof setTimeout> | undefined;
-    const limite = new Promise<void>((pronto) => {
-      relogio = setTimeout(pronto, esperaMaximaMs);
+    const limite = new Promise<Espera>((pronto) => {
+      relogio = setTimeout(() => pronto({ terminou: false }), esperaMaximaMs);
     });
-    // Se a sincronia falha, o estado dela já diz; a virada segue com o que há.
-    await Promise.race([Promise.resolve().then(antes).catch(() => {}), limite]);
+    // Se a sincronia falha, o estado dela já diz; aqui só importa que não ficou em dia.
+    const sincronia = Promise.resolve()
+      .then(antes)
+      .then<Espera, Espera>(
+        (resultado) => ({ terminou: true, resultado }),
+        () => ({ terminou: false }),
+      );
+    const espera = await Promise.race([sincronia, limite]);
     clearTimeout(relogio);
+    return espera;
+  };
+
+  /** Dado em dia: sem conexão, qualquer um serve; conectado, só logo depois de uma sincronia que terminou. */
+  const emDia = async (espera: Espera): Promise<boolean> => {
+    if (!antes || !(await conectado?.())) return true;
+    if (!espera.terminou || espera.resultado !== 'atualizado') return false;
+    // Recém-sincronizado: o "agora" do servidor guardado e o relógio daqui têm de concordar.
+    const doServidor = await lerDesde();
+    return doServidor === 0 || Math.abs(agora().getTime() - doServidor) <= DIFERENCA_MAXIMA_DE_RELOGIO_MS;
+  };
+
+  const adiar = () => {
+    pendente = true;
+    clearTimeout(novaTentativa);
+    if (ligada) novaTentativa = setTimeout(() => void rodar(), tentarDeNovoEmMs);
   };
 
   const rodar = async () => {
-    await esperarAntes();
+    clearTimeout(novaTentativa);
+    const espera = await esperarAntes();
     if (!ligada) return;
     try {
+      if (!(await emDia(espera))) return adiar();
       await virarDia(hojeEmLisboa(agora()));
+      pendente = false;
     } catch (erro) {
       console.error('Não consegui virar o dia', erro);
+      adiar();
     }
+  };
+
+  const aoVoltar = () => {
+    if (pendente && document.visibilityState !== 'hidden') void rodar();
   };
 
   void rodar();
   const pararDeVigiar = vigiarODia(rodar, agora);
+  document.addEventListener('visibilitychange', aoVoltar);
   return () => {
     ligada = false;
+    clearTimeout(novaTentativa);
     pararDeVigiar();
+    document.removeEventListener('visibilitychange', aoVoltar);
   };
 }

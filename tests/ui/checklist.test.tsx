@@ -8,7 +8,7 @@ import { criar } from '../apoio/tarefas';
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(2026, 10, 5, 12, 20));
+  vi.setSystemTime(Date.parse('2026-11-05T12:20:00Z'));
   await semear();
 });
 
@@ -49,13 +49,19 @@ describe('Checklist do dia', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
   });
 
-  it('compromisso de hoje entra com a hora; compromisso de ontem não', async () => {
+  it('compromisso de hoje entra com a hora; compromisso de ontem que ficou aberto não some: aparece como atrasado', async () => {
     await criar('Reunião sobre o projeto', { data: '2026-11-05', inicio: '11:00', duracaoMin: 60, duracaoConfirmada: true });
     await criar('Reunião de ontem', { data: '2026-11-04', inicio: '11:00' });
+    await criar('Reunião de ontem já feita', { data: '2026-11-04', inicio: '11:00', feito: true });
+    await criar('Reunião de amanhã', { data: '2026-11-06', inicio: '11:00' });
     render(<Checklist />);
     await checkbox('Reunião sobre o projeto');
     expect(within(linha('Reunião sobre o projeto')).getByText('11:00')).toBeTruthy();
-    expect(screen.queryByText('Reunião de ontem')).toBeNull();
+    const ontem = within(linha('Reunião de ontem'));
+    expect(ontem.getByText('Atrasada')).toBeTruthy();
+    expect(ontem.getByText('Quarta, 4/11 · 11:00')).toBeTruthy();
+    expect(screen.queryByText('Reunião de ontem já feita')).toBeNull();
+    expect(screen.queryByText('Reunião de amanhã')).toBeNull();
   });
 
   it('tarefa com prazo vencida fica na lista, dita atrasada, com o dia do prazo', async () => {

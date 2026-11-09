@@ -6,11 +6,129 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { normalizar } from '../chat/datas';
 import { desfazer, type Desfazivel } from '../dados/desfazer';
 import { apagar, listar, salvar } from '../dados/loja';
-import type { Pessoa } from '../dados/tipos';
+import type { Pessoa, Sala } from '../dados/tipos';
 import { usePessoas, useSalas } from './hooks';
 import './tarefas.css';
 
 type Erro = { campo: 'nome' | 'sala' | 'geral'; texto: string };
+
+type EdicaoProps = {
+  pessoa: Pessoa;
+  salas: readonly Sala[];
+  nomeDaSala: (id: string) => string;
+  /** `salvou`: o nome gravado, ou `undefined` se fechou sem salvar. */
+  aoFechar: (salvou?: string) => void;
+};
+
+/** Nome, sala e papel de uma pessoa já cadastrada. Mesmo id: o que o chat aprendeu dela continua valendo. */
+function EdicaoDePessoa({ pessoa, salas, nomeDaSala, aoFechar }: EdicaoProps) {
+  const [nome, setNome] = useState(pessoa.nome);
+  const [salaId, setSalaId] = useState(pessoa.salaId);
+  const [papel, setPapel] = useState(pessoa.papel ?? '');
+  const [erro, setErro] = useState<string | null>(null);
+  const campoNome = useRef<HTMLInputElement>(null);
+  const emAndamento = useRef(false);
+
+  useEffect(() => {
+    campoNome.current?.focus();
+  }, []);
+
+  async function salvarEdicao(evento: Event) {
+    evento.preventDefault();
+    if (emAndamento.current) return;
+    const limpo = nome.trim();
+    if (!limpo) {
+      setErro('Escreva o nome.');
+      return campoNome.current?.focus();
+    }
+    emAndamento.current = true;
+    try {
+      const outra = (await listar('pessoas')).find((p) => p.id !== pessoa.id && normalizar(p.nome) === normalizar(limpo));
+      if (outra) {
+        setErro(`${outra.nome} já está cadastrada em ${nomeDaSala(outra.salaId)}.`);
+        return campoNome.current?.focus();
+      }
+      const { papel: _antigo, ...resto } = pessoa;
+      const funcao = papel.trim();
+      await salvar('pessoas', { ...resto, nome: limpo, salaId, ...(funcao ? { papel: funcao } : {}) });
+      aoFechar(limpo);
+    } catch (falha) {
+      console.error('Não consegui salvar a pessoa', falha);
+      setErro('Não consegui salvar. Tente de novo.');
+    } finally {
+      emAndamento.current = false;
+    }
+  }
+
+  return (
+    <form
+      class="tarefa-edicao"
+      noValidate
+      onSubmit={salvarEdicao}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          aoFechar();
+        }
+      }}
+    >
+      <div class="formulario-campo">
+        <label for={`editar-nome-${pessoa.id}`}>Nome da pessoa</label>
+        <input
+          id={`editar-nome-${pessoa.id}`}
+          ref={campoNome}
+          class="campo"
+          value={nome}
+          autocomplete="off"
+          aria-invalid={erro ? true : undefined}
+          onInput={(e) => {
+            setNome((e.target as HTMLInputElement).value);
+            setErro(null);
+          }}
+        />
+      </div>
+      <div class="formulario-campo">
+        <label for={`editar-sala-${pessoa.id}`}>Sala da pessoa</label>
+        <select
+          id={`editar-sala-${pessoa.id}`}
+          class="campo"
+          value={salaId}
+          onChange={(e) => setSalaId((e.target as HTMLSelectElement).value)}
+        >
+          {!salas.some((s) => s.id === salaId) && <option value={salaId}>Sem sala</option>}
+          {salas.map((sala) => (
+            <option key={sala.id} value={sala.id}>
+              {sala.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div class="formulario-campo">
+        <label for={`editar-papel-${pessoa.id}`}>Papel da pessoa</label>
+        <input
+          id={`editar-papel-${pessoa.id}`}
+          class="campo"
+          value={papel}
+          autocomplete="off"
+          onInput={(e) => setPapel((e.target as HTMLInputElement).value)}
+        />
+      </div>
+      {erro && (
+        <p class="tarefa-erro" role="alert">
+          {erro}
+        </p>
+      )}
+      <div class="tarefa-edicao-acoes">
+        <button type="submit" class="botao primario">
+          Salvar
+        </button>
+        <button type="button" class="botao" onClick={() => aoFechar()}>
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export function Pessoas() {
   const salas = useSalas();
@@ -25,6 +143,10 @@ export function Pessoas() {
   const campoSala = useRef<HTMLSelectElement>(null);
   const botaoDesfazer = useRef<HTMLButtonElement>(null);
   const focarDesfazer = useRef(false);
+  const emAndamento = useRef(false);
+  const [editando, setEditando] = useState<string | null>(null);
+  /** A pessoa cuja edição acabou: o foco volta ao Editar dela, onde quer que a linha esteja agora. */
+  const focoNoEditar = useRef<{ id: string; esperaLista: readonly Pessoa[] | null | undefined } | null>(null);
 
   // Apagar tira o botão em que o dono tocou: o foco vai para o Desfazer, que acabou de aparecer.
   useEffect(() => {
@@ -34,10 +156,34 @@ export function Pessoas() {
     }
   }, [volta]);
 
+  useEffect(() => {
+    const pedido = focoNoEditar.current;
+    if (!pedido || editando !== null) return;
+    // Depois de salvar, a pessoa pode mudar de grupo: espera a lista nova chegar para achar o botão onde ele ficou.
+    if (pedido.esperaLista !== null && pessoas === pedido.esperaLista) return;
+    const { id } = pedido;
+    const botao = Array.from(document.querySelectorAll<HTMLElement>('[data-editar]')).find((b) => b.dataset.editar === id);
+    if (botao) {
+      focoNoEditar.current = null;
+      botao.focus();
+    }
+  });
+
   const nomeDaSala = (id: string) => salas.find((sala) => sala.id === id)?.nome ?? 'sala apagada';
 
   async function cadastrar(evento: Event) {
     evento.preventDefault();
+    // Dois toques seguidos não cadastram duas vezes (a conferência de nome repetido é assíncrona).
+    if (emAndamento.current) return;
+    emAndamento.current = true;
+    try {
+      await cadastrarUma();
+    } finally {
+      emAndamento.current = false;
+    }
+  }
+
+  async function cadastrarUma() {
     const limpo = nome.trim();
     if (!limpo) {
       setErro({ campo: 'nome', texto: 'Escreva o nome.' });
@@ -197,20 +343,44 @@ export function Pessoas() {
           <ul class="pessoas-lista">
             {(porSala.get(grupo.id) ?? [])
               .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-              .map((pessoa) => (
-                <li key={pessoa.id} class="pessoa">
-                  <span class="pessoa-nome">{pessoa.nome}</span>
-                  {pessoa.papel && <span class="pessoa-papel">{pessoa.papel}</span>}
-                  <button
-                    type="button"
-                    class="botao pessoa-apagar"
-                    aria-label={`Apagar ${pessoa.nome}`}
-                    onClick={() => void apagarPessoa(pessoa)}
-                  >
-                    Apagar
-                  </button>
-                </li>
-              ))}
+              .map((pessoa) =>
+                editando === pessoa.id ? (
+                  <li key={pessoa.id} class="pessoa pessoa-editando">
+                    <EdicaoDePessoa
+                      pessoa={pessoa}
+                      salas={salas}
+                      nomeDaSala={nomeDaSala}
+                      aoFechar={(salvou) => {
+                        focoNoEditar.current = { id: pessoa.id, esperaLista: salvou ? pessoas : null };
+                        if (salvou) setAviso(`${salvou} atualizada.`);
+                        setEditando(null);
+                      }}
+                    />
+                  </li>
+                ) : (
+                  <li key={pessoa.id} class="pessoa">
+                    <span class="pessoa-nome">{pessoa.nome}</span>
+                    {pessoa.papel && <span class="pessoa-papel">{pessoa.papel}</span>}
+                    <button
+                      type="button"
+                      class="botao pessoa-editar"
+                      data-editar={pessoa.id}
+                      aria-label={`Editar ${pessoa.nome}`}
+                      onClick={() => setEditando(pessoa.id)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="botao pessoa-apagar"
+                      aria-label={`Apagar ${pessoa.nome}`}
+                      onClick={() => void apagarPessoa(pessoa)}
+                    >
+                      Apagar
+                    </button>
+                  </li>
+                ),
+              )}
           </ul>
         </div>
       ))}

@@ -8,7 +8,7 @@ import { criar } from '../apoio/tarefas';
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(2026, 10, 5, 12, 20));
+  vi.setSystemTime(Date.parse('2026-11-05T12:20:00Z'));
 });
 
 const botaoDaDuracao = () => screen.getByRole('button', { name: /^Duração/ });
@@ -92,11 +92,19 @@ describe('DuracaoTarefa', () => {
   it('o rótulo acompanha a tarefa: confirmada em outro aparelho, deixa de dizer "cerca de"', async () => {
     const t = (await criar('Rever capítulo', { data: '2026-11-05' })) as Tarefa;
     render(<Checklist />);
-    expect(await screen.findByRole('button', { name: 'Duração: cerca de 1 h' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Duração: cerca de 1 h' }));
+    expect(await screen.findByRole('button', { name: 'Duração de Rever capítulo: cerca de 1 h' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Duração de Rever capítulo: cerca de 1 h' }));
     fireEvent.click(screen.getByRole('button', { name: '2 h' }));
-    expect(await screen.findByRole('button', { name: 'Duração: 2 h' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Duração de Rever capítulo: 2 h' })).toBeTruthy();
     expect(t.duracaoConfirmada).toBe(false);
+  });
+
+  it('o nome do botão diz de que tarefa é a duração (e contém o texto visível)', async () => {
+    const t = (await criar('Rever capítulo')) as Tarefa;
+    render(<DuracaoTarefa tarefa={t} />);
+    const botao = screen.getByRole('button', { name: /^Duração de/ });
+    expect(botao.getAttribute('aria-label')).toBe('Duração de Rever capítulo: cerca de 1 h');
+    expect(botao.getAttribute('aria-label')).toContain(botao.textContent);
   });
 
   it('abrir as opções não é desfeito por uma atualização de outra tarefa', async () => {

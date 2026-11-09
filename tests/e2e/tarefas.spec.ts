@@ -91,17 +91,17 @@ test.describe('celular, 390 px', () => {
     const checklist = principal.getByRole('region', { name: 'Checklist do dia' });
     await expect(checklist.getByText('0 de 1 feita')).toBeVisible();
     await expect(checklist.getByText('Orientações')).toBeVisible();
-    await expect(checklist.getByRole('button', { name: 'Duração: cerca de 1 h' })).toBeVisible();
+    await expect(checklist.getByRole('button', { name: /^Duração de .*: cerca de 1 h$/ })).toBeVisible();
     const semPrazo = principal.getByRole('region', { name: 'Sem prazo' });
     await expect(semPrazo.getByText('Preciso parafusar o apoio do banheiro')).toBeVisible();
     expect(await pequenos(page)).toEqual([]);
     expect(await semRolagemDeLado(page)).toBe(true);
 
     // Duração: abrir as opções e confirmar 1 h30. Tudo continua com 44 px.
-    await checklist.getByRole('button', { name: 'Duração: cerca de 1 h' }).click();
+    await checklist.getByRole('button', { name: /^Duração de .*: cerca de 1 h$/ }).click();
     expect(await pequenos(page)).toEqual([]);
     await checklist.getByRole('button', { name: '1 h 30', exact: true }).click();
-    await expect(checklist.getByRole('button', { name: 'Duração: 1 h 30' })).toBeFocused();
+    await expect(checklist.getByRole('button', { name: /^Duração de .*: 1 h 30$/ })).toBeFocused();
 
     // Escolher dia abre o campo de data com 44 px.
     await semPrazo.getByRole('button', { name: 'Escolher dia' }).click();
@@ -128,6 +128,57 @@ test.describe('celular, 390 px', () => {
       ['2026-11-05', false],
     ]);
     expect(guardadas.find((t) => t.titulo.includes('Marina'))).toMatchObject({ duracaoMin: 90, duracaoConfirmada: true });
+    expect(erros).toEqual([]);
+  });
+
+  test('escrever tarefa à mão, editar, apagar com Desfazer e conferir "Em breve"', async ({ page }) => {
+    const erros = vigiarErros(page);
+    await page.goto('/central-app/#/');
+    const principal = page.getByRole('main');
+    const checklist = principal.getByRole('region', { name: 'Checklist do dia' });
+    const semPrazo = principal.getByRole('region', { name: 'Sem prazo' });
+
+    // Escrever à mão: hoje na Checklist, sem dia em Sem prazo.
+    await checklist.getByLabel('Nova tarefa para hoje').fill('Ligar para a Renata');
+    await checklist.getByRole('button', { name: 'Adicionar' }).click();
+    await expect(checklist.getByRole('checkbox', { name: 'Ligar para a Renata' })).toBeVisible();
+    await expect(checklist.getByLabel('Nova tarefa para hoje')).toBeFocused();
+    await semPrazo.getByLabel('Nova tarefa sem prazo').fill('Comprar café');
+    await semPrazo.getByRole('button', { name: 'Adicionar' }).click();
+    await expect(semPrazo.getByRole('checkbox', { name: 'Comprar café' })).toBeVisible();
+    expect(await pequenos(page)).toEqual([]);
+    expect(await semRolagemDeLado(page)).toBe(true);
+
+    // Editar: título, sala e quando; tudo com 44 px.
+    await checklist.getByRole('button', { name: 'Editar: Ligar para a Renata' }).click();
+    const edicao = checklist.locator('.tarefa-edicao');
+    await expect(edicao.getByLabel('Título')).toBeFocused();
+    expect(await pequenos(page)).toEqual([]);
+    await edicao.getByLabel('Título').fill('Ligar para a Renata hoje');
+    await edicao.getByLabel('Sala').selectOption({ label: 'Orientações' });
+    await edicao.getByRole('button', { name: 'Salvar' }).click();
+    await expect(checklist.getByRole('checkbox', { name: 'Ligar para a Renata hoje' })).toBeVisible();
+    await expect(checklist.getByText('Orientações')).toBeVisible();
+    await expect(checklist.getByRole('button', { name: 'Editar: Ligar para a Renata hoje' })).toBeFocused();
+
+    // Apagar tem Desfazer, com o foco nele.
+    await checklist.getByRole('button', { name: 'Editar: Ligar para a Renata hoje' }).click();
+    await checklist.locator('.tarefa-edicao').getByRole('button', { name: 'Apagar' }).click();
+    await expect(checklist.getByText('Tarefa apagada: Ligar para a Renata hoje')).toBeVisible();
+    await expect(checklist.getByRole('button', { name: 'Desfazer' })).toBeFocused();
+    await checklist.getByRole('button', { name: 'Desfazer' }).click();
+    await expect(checklist.getByRole('checkbox', { name: 'Ligar para a Renata hoje' })).toBeVisible();
+
+    // "Em breve": a barra só leva ao que existe, e as telas que faltam dizem isso.
+    const barra = page.getByRole('navigation', { name: 'Principal' });
+    await expect(barra.getByRole('link')).toHaveText(['Painel', 'Atividades', 'Sem prazo', 'Salas', 'Chat']);
+    await barra.getByRole('button', { name: 'Mais' }).click();
+    const folha = page.getByRole('dialog', { name: 'Mais' });
+    await expect(folha.getByText('Em breve')).toHaveCount(4);
+    expect(await pequenos(page)).toEqual([]);
+    await folha.getByRole('link', { name: 'Quadro' }).click();
+    await expect(principal.getByText('Esta tela chega numa próxima versão.')).toBeVisible();
+    expect(await semRolagemDeLado(page)).toBe(true);
     expect(erros).toEqual([]);
   });
 
@@ -184,6 +235,19 @@ test.describe('computador, 1280 px', () => {
     await expect(principal.getByRole('button', { name: 'Desfazer' })).toBeFocused();
     await principal.getByRole('button', { name: 'Desfazer' }).click();
     await expect(principal.getByRole('group', { name: 'Orientações' }).getByText('Renata')).toBeVisible();
+  });
+
+  test('editar uma pessoa: nome e sala', async ({ page }) => {
+    await cadastrarPessoa(page, 'Marnia', 'Orientações');
+    const principal = page.getByRole('main');
+    await principal.getByRole('button', { name: 'Editar Marnia' }).click();
+    await expect(principal.getByLabel('Nome da pessoa')).toBeFocused();
+    expect(await pequenos(page)).toEqual([]);
+    await principal.getByLabel('Nome da pessoa').fill('Marina');
+    await principal.getByLabel('Sala da pessoa').selectOption({ label: 'Aulas' });
+    await principal.getByRole('button', { name: 'Salvar' }).click();
+    await expect(principal.getByRole('group', { name: 'Aulas' }).getByText('Marina')).toBeVisible();
+    await expect(principal.getByRole('button', { name: 'Editar Marina' })).toBeFocused();
   });
 });
 

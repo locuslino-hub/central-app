@@ -2,7 +2,7 @@
 // Próximos dias, uma seção por semana e Sem prazo, nessa ordem; seção vazia não aparece.
 // (O dono chama de "atividades" o que o app chama de Tarefa: spec, seção 9.)
 import { useDia, useSalas, useTarefas } from './hooks';
-import { LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
+import { AvisoDeApagada, LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
 import { diaParaOrdenar, grupoDaAtividade, porOrdem, type GrupoDeAtividade } from './tarefas-lista';
 import './tarefas.css';
 
@@ -16,7 +16,6 @@ export function Atividades() {
   for (const tarefa of tarefas ?? []) {
     if (tarefa.feito && !conclusoes.concluidasAgora.has(tarefa.id)) continue;
     const grupo = grupoDaAtividade(tarefa, hoje);
-    if (!grupo) continue;
     const atual = grupos.get(grupo.chave) ?? { grupo, linhas: [] };
     atual.linhas.push(tarefa);
     grupos.set(grupo.chave, atual);
@@ -28,6 +27,7 @@ export function Atividades() {
   if (tarefas !== undefined && secoes.length === 0) {
     return (
       <section class="painel atividades" aria-label="Atividades">
+        <AvisoDeApagada conclusoes={conclusoes} />
         <div>
           <p class="lista-vazia-titulo">Nenhuma atividade aberta.</p>
           <p class="lista-vazia-texto">O que você anotar no Chat aparece aqui.</p>
@@ -43,6 +43,7 @@ export function Atividades() {
 
   return (
     <div class="atividades-grupos" aria-busy={tarefas === undefined}>
+      <AvisoDeApagada conclusoes={conclusoes} />
       {secoes.map(({ grupo, linhas }) => (
         <section class="painel atividades" key={grupo.chave} aria-labelledby={`atividades-${grupo.chave}`}>
           <h2 id={`atividades-${grupo.chave}`}>{grupo.titulo}</h2>

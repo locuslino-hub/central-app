@@ -61,6 +61,34 @@ test.describe('celular, 390 px', () => {
     expect(erros).toEqual([]);
   });
 
+  test('depois de cada frase, o cartão novo e o campo ficam acima da barra de baixo', async ({ page }) => {
+    await page.goto('/central-app/#/chat');
+    const principal = page.getByRole('main');
+    const campo = principal.getByRole('textbox', { name: 'Escreva ou dite' });
+    const barra = page.getByRole('navigation', { name: 'Principal' });
+    const frases = [
+      'Preciso parafusar o apoio do banheiro',
+      'Adicione em atividades do dia mandar mensagem para Renata',
+      'Comprar pão',
+      'Marcar reunião com a Marina',
+      'Ligar para a Aurora amanhã às 15h',
+      'Revisar o relatório 2 nas tarefas do doutoramento',
+    ];
+    for (const [i, frase] of frases.entries()) {
+      await campo.fill(frase);
+      await campo.press('Enter');
+      await expect(principal.getByRole('article')).toHaveCount(i + 1);
+      await page.waitForTimeout(300);
+      const topoDaBarra = (await barra.boundingBox())!.y;
+      const cartao = (await principal.getByRole('article').last().boundingBox())!;
+      const entrada = (await campo.boundingBox())!;
+      expect(cartao.y + cartao.height, `cartão ${i + 1} acima da barra`).toBeLessThanOrEqual(topoDaBarra + 1);
+      expect(entrada.y + entrada.height, `campo depois da frase ${i + 1} acima da barra`).toBeLessThanOrEqual(topoDaBarra + 1);
+      await expect(campo).toBeInViewport();
+      await expect(principal.getByRole('article').last()).toBeInViewport();
+    }
+  });
+
   test('pessoa desconhecida: escolher a sala uma vez, e a próxima frase não pergunta', async ({ page }) => {
     await page.goto('/central-app/#/chat');
     const principal = page.getByRole('main');
