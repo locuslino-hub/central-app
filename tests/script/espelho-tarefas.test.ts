@@ -138,6 +138,32 @@ describe('espelharTarefas', () => {
     expect(g.vivas()).toEqual([]);
   });
 
+  it('apagar com o id não lê a lista inteira', () => {
+    const g = tarefasGoogleFalso();
+    const [{ googleId }] = espelhar(g, item({ googleId: undefined, data: undefined }));
+    g.chamadas.length = 0;
+    espelhar(g, item({ apagado: true, googleId: googleId! }));
+    expect(g.de('Tasks.list')).toEqual([]);
+    expect(g.de('Tasks.remove')).toHaveLength(1);
+  });
+
+  it('id guardado que o Google recusa (400 Invalid Value): procura pelas notas e não duplica', () => {
+    const g = tarefasGoogleFalso();
+    const [{ googleId }] = espelhar(g, item());
+    const patch = g.servico.Tasks.patch;
+    g.servico.Tasks.patch = (corpo, lista, id) => {
+      if (id === 'idEstragado') {
+        const erro = new Error('API call to tasks.tasks.patch failed with error: Invalid Value');
+        throw erro; // sem details.code: o status sai do motivo
+      }
+      return patch(corpo, lista, id);
+    };
+    const [depois] = espelhar(g, item({ titulo: 'Mudou', googleId: 'idEstragado' }));
+    expect(depois).toEqual({ id: 'tarefa-1', ok: true, googleId });
+    expect(g.vivas()).toHaveLength(1);
+    expect(g.vivas()[0].title).toBe('Mudou');
+  });
+
   it('apagar sem o id acha pelas notas; apagar o que não existe não é erro', () => {
     const g = tarefasGoogleFalso();
     espelhar(g, item());

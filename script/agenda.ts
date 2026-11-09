@@ -354,6 +354,7 @@ const MOTIVOS_CONHECIDOS: readonly string[] = [
   'Service unavailable',
   'Internal error',
   'Precondition check failed',
+  'Invalid Value',
 ];
 
 /**
@@ -371,7 +372,7 @@ export function motivoDe(erro: unknown): string {
 
 /**
  * Status HTTP da falha: `details.code` do GoogleJsonResponseException, ou,
- * sem ele, pelo motivo da mensagem (só os três que o script trata).
+ * sem ele, pelo motivo da mensagem (só os que o script trata).
  */
 export function statusDe(erro: unknown): number | null {
   const detalhes = typeof erro === 'object' && erro !== null ? (erro as { details?: unknown }).details : undefined;
@@ -381,6 +382,7 @@ export function statusDe(erro: unknown): number | null {
   if (/^Not Found$/i.test(motivo)) return 404;
   if (/^(Resource has been deleted|Gone)$/i.test(motivo)) return 410;
   if (/already exists|^Duplicate$/i.test(motivo)) return 409;
+  if (/^(Invalid Value|Bad Request)$/i.test(motivo)) return 400;
   return null;
 }
 

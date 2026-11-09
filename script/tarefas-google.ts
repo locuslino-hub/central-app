@@ -181,16 +181,25 @@ function lerMarcadores(servico: ServicoDeTarefas, lista: string): Map<string, st
   return achados;
 }
 
-type Contexto = { servico: ServicoDeTarefas; lista: string; marcadores: () => Map<string, string> };
+type Contexto = {
+  servico: ServicoDeTarefas;
+  lista: string;
+  marcadores: () => Map<string, string>;
+  /** Tira o marcador, só se a lista já foi lida (não lê a lista por isso). */
+  esquecer: (id: string) => void;
+};
 
-/** Patch na espelho. `null` se ela não existe mais ou foi apagada no Google. */
+/**
+ * Patch na espelho. `null` se ela não existe mais, foi apagada no Google ou o
+ * Google recusa o id (400, ex. "Invalid Value"): aí se procura pelas notas.
+ */
 function atualizar(ctx: Contexto, googleId: string, corpo: object): string | null {
   try {
     const resposta = google('tasks.patch', () => ctx.servico.Tasks.patch(corpo, ctx.lista, googleId));
     if (resposta?.deleted === true) return null;
     return typeof resposta?.id === 'string' && resposta.id !== '' ? resposta.id : googleId;
   } catch (erro) {
-    if (sumiu(erro)) return null;
+    if (sumiu(erro) || (erro instanceof FalhaDasTarefas && erro.status === 400)) return null;
     throw erro;
   }
 }
@@ -204,7 +213,7 @@ function espelharUma(ctx: Contexto, item: ItemDoEspelho): string | null {
       } catch (erro) {
         if (!sumiu(erro)) throw erro;
       }
-      ctx.marcadores().delete(item.id);
+      ctx.esquecer(item.id);
     }
     return null;
   }
@@ -234,7 +243,12 @@ export function espelharTarefas(dados: unknown, servico: ServicoDeTarefas): { re
   const itens = lerLote(dados);
   const lista = listaCentral(servico);
   let marcadores: Map<string, string> | null = null;
-  const ctx: Contexto = { servico, lista, marcadores: () => (marcadores ??= lerMarcadores(servico, lista)) };
+  const ctx: Contexto = {
+    servico,
+    lista,
+    marcadores: () => (marcadores ??= lerMarcadores(servico, lista)),
+    esquecer: (id) => void marcadores?.delete(id),
+  };
   const resultados = itens.map((item): ResultadoDoEspelho => {
     try {
       return { id: item.id, ok: true, googleId: espelharUma(ctx, item) };
