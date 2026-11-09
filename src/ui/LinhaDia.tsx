@@ -38,6 +38,7 @@ const titulo = (item: Item) => {
 function frase(item: Item): string {
   const notas: string[] = [];
   if (item.tipo === 'evento' && item.evento.livre) notas.push('livre');
+  if (item.tipo === 'evento' && item.evento.feito) notas.push('feito');
   if (item.tipo === 'bloco') notas.push('tarefa');
   if (item.passado) notas.push('passado');
   const horario =
@@ -107,6 +108,7 @@ export function LinhaDia({ dia, agora, inicioDoDia = 8 * 60, fimDoDia = 20 * 60,
               class={`lin-bloco ${cor}`}
               {...comum}
               data-livre={String(item.tipo === 'evento' && item.evento.livre)}
+              data-feito={String(item.tipo === 'evento' ? item.evento.feito === true : item.tarefa.feito)}
               style={{
                 left: `${por100(item.ini)}%`,
                 width: `${((item.fim - item.ini) / total) * 100}%`,

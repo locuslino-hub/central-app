@@ -1,7 +1,10 @@
 // Os eventos de um período, atualizados ao abrir a tela, ao voltar ao app e a
 // cada 15 minutos (src/dados/eventos.ts guarda e lê).
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
+import type { Evento } from '../dados/agenda';
 import { assinarEventos, atualizarEventos, lerEventos, type Leitura } from '../dados/eventos';
+import { aplicarFeitos } from '../dados/eventos-feitos';
+import { useEventosFeitos } from './hooks';
 
 export const ATUALIZAR_A_CADA_MS = 15 * 60_000;
 /** Abrir telas ou voltar ao app em sequência não repete a chamada antes disto. */
@@ -49,4 +52,24 @@ export function useEventos(de: string, ate: string): { leitura: Leitura; atualiz
   }, [de, ate]);
 
   return { leitura, atualizar: () => void atualizarEventos(de, ate) };
+}
+
+/**
+ * A leitura já guardada do período, acompanhando as mudanças, sem pedir ao
+ * script: para quem só soma o que outra parte da tela já leu (o progresso
+ * da Checklist usa o que a Agenda de hoje lê).
+ */
+export function useLeituraGuardada(de: string, ate: string): Leitura {
+  const [, refazer] = useState(0);
+  useEffect(() => {
+    refazer((n) => n + 1);
+    return assinarEventos(() => refazer((n) => n + 1));
+  }, [de, ate]);
+  return lerEventos(de, ate);
+}
+
+/** Os eventos com o feito que vale (o marcado na Central, senão o do Google). */
+export function useComFeito(eventos: Evento[]): Evento[] {
+  const feitos = useEventosFeitos();
+  return useMemo(() => aplicarFeitos(eventos, feitos), [eventos, feitos]);
 }

@@ -30,6 +30,7 @@ import { SemPrazo } from './SemPrazo';
 import { daChecklist } from './tarefas-lista';
 import { useAdivinharSala } from './useAdivinharSala';
 import { useAgoraDoDia, type AgoraDoDia } from './useAgoraDoDia';
+import { useComFeito } from './useEventos';
 import './painel.css';
 import './tarefas.css';
 
@@ -105,9 +106,10 @@ function MensagemDoDia({ dia }: { dia: AgoraDoDia }) {
 function LinhaDoDia({ dia }: { dia: AgoraDoDia }) {
   const salas = useSalas();
   const adivinhar = useAdivinharSala();
+  const eventos = useComFeito(dia.eventos.eventos);
   const calendario = useMemo(
-    () => montarCalendario({ eventos: dia.eventos.eventos, tarefas: dia.tarefas ?? [], de: dia.hoje, ate: dia.hoje, agora: dia.agora }),
-    [dia.eventos.eventos, dia.tarefas, dia.hoje, dia.agora],
+    () => montarCalendario({ eventos, tarefas: dia.tarefas ?? [], de: dia.hoje, ate: dia.hoje, agora: dia.agora }),
+    [eventos, dia.tarefas, dia.hoje, dia.agora],
   );
   // Como no modelo: a régua solta, logo abaixo da saudação, sem cartão nem título à vista.
   // O título e o tempo livre ficam para o leitor de tela (o Agora mostra o tempo livre).

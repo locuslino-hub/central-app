@@ -690,6 +690,26 @@
   margin-bottom: 10px;
 }
 
+/* Compromisso com a caixa de feito (a mesma redonda das tarefas), à esquerda da hora. */
+.cal-com-caixa {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+.cal-com-caixa .cal-caixa {
+  margin: 0 -10px 0 2px;
+}
+.cal-com-caixa .cal-botao {
+  padding-left: 8px;
+}
+.cal-evento[data-feito='true'] .cal-titulo {
+  color: var(--tinta2);
+  text-decoration: line-through;
+}
+.cal-evento[data-feito='true'] .cal-hora {
+  opacity: 0.6;
+}
+
 /* ---- Linha do dia ---- */
 
 /* Como no modelo: régua branca de 50 px; cada bloco ocupa a altura toda, com o nome no alto. */
@@ -740,6 +760,11 @@
 .lin-bloco[data-livre='true'] {
   border: 1px dashed var(--c, var(--campo));
   background: transparent;
+}
+/* Feito: o nome riscado, como na Agenda de hoje; o leitor de tela ouve "feito". */
+.lin-bloco[data-feito='true'] .lin-texto {
+  text-decoration: line-through;
+  opacity: 0.75;
 }
 .lin-prazo {
   align-items: center;

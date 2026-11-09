@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
 import { lerNome, NOME_MUDOU } from '../dados/nome';
-import type { Colecoes, Config, Documento, EstadoEmail, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { Colecoes, Config, Documento, EstadoEmail, EventoFeito, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -102,7 +102,9 @@ export function useTituloDaAba(titulo: string) {
 // ---- Dados que o menu e as páginas leem ----
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
-function useLista<C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas'>(colecao: C): Colecoes[C][] | undefined {
+function useLista<
+  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos',
+>(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
     let ativo = true;
@@ -137,6 +139,11 @@ export function useSala(id: string | undefined): Sala | null | undefined {
 /** As tarefas vivas (nenhuma apagada). `undefined` enquanto lê. */
 export function useTarefas(): Tarefa[] | undefined {
   return useLista('tarefas');
+}
+
+/** Os compromissos marcados como feitos na Central (feito espelhado). `undefined` enquanto lê. */
+export function useEventosFeitos(): EventoFeito[] | undefined {
+  return useLista('eventosFeitos');
 }
 
 /** O que o dono já fez com cada e-mail (Feito, Agora não). `undefined` enquanto lê. */

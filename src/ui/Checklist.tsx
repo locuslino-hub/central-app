@@ -1,9 +1,13 @@
 // Checklist do dia (spec, seção 7, item 4): o que é de hoje e o que ficou de
-// dias anteriores, com progresso. Cada linha tem Desfazer ao concluir.
+// dias anteriores, com progresso. Cada linha tem Desfazer ao concluir. O
+// progresso conta também os compromissos de hoje da Agenda de hoje (feito
+// espelhado), menos os marcados como livres e os recusados.
+import type { Evento } from '../dados/agenda';
 import { useDia, useSalas, useTarefas } from './hooks';
 import { AvisoDeApagada, LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
 import { NovaTarefa } from './NovaTarefa';
 import { daChecklist, porOrdem } from './tarefas-lista';
+import { useComFeito, useLeituraGuardada } from './useEventos';
 import './tarefas.css';
 
 export function Checklist() {
@@ -13,7 +17,9 @@ export function Checklist() {
   const conclusoes = useConclusoes();
 
   const doDia = (tarefas ?? []).filter((t) => daChecklist(t, hoje, conclusoes.concluidasAgora)).sort(porOrdem);
-  const feitas = doDia.filter((t) => t.feito).length;
+  const compromissos = useComFeito(useLeituraGuardada(hoje, hoje).eventos).filter((e) => contaNoDia(e, hoje));
+  const feitas = doDia.filter((t) => t.feito).length + compromissos.filter((e) => e.feito).length;
+  const total = doDia.length + compromissos.length;
 
   return (
     <section class="painel checklist" aria-labelledby="titulo-checklist" aria-busy={tarefas === undefined}>
@@ -31,21 +37,23 @@ export function Checklist() {
           </p>
         </div>
       )}
-      {doDia.length > 0 && (
+      {total > 0 && (
         <>
           <div
             class="progresso"
             role="progressbar"
             aria-label="Progresso do dia"
             aria-valuemin={0}
-            aria-valuemax={doDia.length}
+            aria-valuemax={total}
             aria-valuenow={feitas}
           >
-            <span class="progresso-cheio" style={{ width: `${(feitas / doDia.length) * 100}%` }} />
+            <span class="progresso-cheio" style={{ width: `${(feitas / total) * 100}%` }} />
           </div>
-          <p class="progresso-texto">
-            {`${feitas} de ${doDia.length} ${doDia.length === 1 ? 'feita' : 'feitas'}`}
-          </p>
+          <p class="progresso-texto">{`${feitas} de ${total} ${total === 1 ? 'feita' : 'feitas'}`}</p>
+        </>
+      )}
+      {doDia.length > 0 && (
+        <>
           <ul class="tarefas">
             {doDia.map((tarefa) => (
               <LinhaDeTarefa key={tarefa.id} tarefa={tarefa} salas={salas} hoje={hoje} conclusoes={conclusoes} />
@@ -55,4 +63,12 @@ export function Checklist() {
       )}
     </section>
   );
+}
+
+/** O compromisso conta no progresso de hoje? Começa ou termina hoje, não é livre nem recusado. */
+function contaNoDia(evento: Evento, hoje: string): boolean {
+  if (evento.livre || evento.recusado) return false;
+  const inicio = evento.inicio.slice(0, 10);
+  const fim = evento.fim.slice(0, 10);
+  return evento.diaInteiro ? inicio <= hoje && hoje < fim : inicio <= hoje && hoje <= fim;
 }

@@ -65,3 +65,24 @@ describe('aviso da fila da agenda', () => {
     expect(await listarPendentes()).toEqual([]);
   });
 });
+
+describe('aviso da fila: espelho no Google parado', () => {
+  it('tarefas e "✓ " que não chegaram ao Google aparecem; Descartar não mexe nas tarefas', async () => {
+    const { criarTarefa } = await import('../../src/dados/tarefas');
+    const { enfileirarMarcaDeFeito, listar } = await import('../../src/dados/loja');
+    const tarefa = (await criarTarefa('Ligar para a Aurora', { data: '2026-11-05' }))!;
+    await criarTarefa('Revisar parágrafo');
+    await enfileirarMarcaDeFeito('meu1', true);
+    for (const p of await listarPendentes()) if (p.tipo === 'espelho') {
+      for (let i = 0; i < TENTATIVAS_NO_MAXIMO; i++) await registrarTentativa(p.seq);
+    }
+    render(<AvisoDaFila />);
+
+    expect(await screen.findByText('2 tarefas não chegaram ao Google Tarefas.')).toBeTruthy();
+    expect(screen.getByText('1 compromisso feito não foi marcado no Google Agenda.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    await waitFor(() => expect(screen.queryByText('2 tarefas não chegaram ao Google Tarefas.')).toBeNull());
+    expect((await listarPendentes()).filter((p) => p.tipo === 'espelho')).toEqual([]);
+    expect((await listar('tarefas')).map((t) => t.id)).toContain(tarefa.id);
+  });
+});
