@@ -246,6 +246,12 @@ describe('eventos em cada dia', () => {
     expect(doEvento(cal.dia('2026-11-02').horarios[0])).toMatchObject({ ini: 0, fim: 120, continuaAntes: true });
   });
 
+  it('dia inteiro com fim mal formado vale só o dia do início, sem quebrar', () => {
+    const cal = montar([diaInteiro('2026-11-05', 'lixo', { titulo: 'Sem fim' })]);
+    expect(cal.dia('2026-11-05').diaInteiro).toHaveLength(1);
+    expect(cal.dia('2026-11-06').diaInteiro).toEqual([]);
+  });
+
   it('evento de dia inteiro enorme é cortado no período (não gera dias demais)', () => {
     const cal = montar([diaInteiro('2020-01-01', '2030-01-01', { titulo: 'Bolsa' })]);
     expect(cal.dia('2026-11-05').diaInteiro).toHaveLength(1);

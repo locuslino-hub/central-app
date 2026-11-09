@@ -448,7 +448,8 @@ describe('estado da sincronia, sempre em texto', () => {
     salvarConexao({ url: 'https://script.google.com/macros/s/ID-FICTICIO/exec', codigo: 'codigo-ficticio-0123456789' });
   const chip = () => document.querySelector<HTMLElement>('.sync')!;
   /** O que o leitor de tela recebe: só o texto, sem prefixo. */
-  const anuncio = () => screen.getByRole('status');
+  // O da sincronia fica no topo; a agenda do Painel tem o seu (avisos quietos).
+  const anuncio = () => within(document.querySelector('.topo') as HTMLElement).getByRole('status');
   const semRede = () => sincronizar({ chamar: () => Promise.reject(new ErroConexao()), esperar: esperarSemRede });
   const tudoCerto = () =>
     sincronizar({
@@ -618,7 +619,7 @@ describe('estado da sincronia, sempre em texto', () => {
     for (const largura of [390, 800, 1280]) {
       irPara('#/', largura);
       const { unmount } = render(<App />);
-      expect(screen.getAllByRole('status')).toHaveLength(1);
+      expect(within(document.querySelector('.topo') as HTMLElement).getAllByRole('status')).toHaveLength(1);
       expect(document.querySelectorAll('.sync')).toHaveLength(1);
       unmount();
     }

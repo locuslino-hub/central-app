@@ -12,11 +12,14 @@ export const INTERVALO_MINIMO_MS = 30_000;
  * que já existe aparece de imediato, enquanto a nova chega.
  */
 export function useEventos(de: string, ate: string): { leitura: Leitura; atualizar: () => void } {
-  const [leitura, setLeitura] = useState(() => lerEventos(de, ate));
+  // A leitura é lida na hora de desenhar, do período pedido agora: depois de uma
+  // troca de período nunca aparece, por um instante, a leitura do período antigo.
+  const [, refazer] = useState(0);
+  const leitura = lerEventos(de, ate);
 
   useEffect(() => {
-    setLeitura(lerEventos(de, ate));
-    const parar = assinarEventos(() => setLeitura(lerEventos(de, ate)));
+    refazer((n) => n + 1); // a leitura pode ter mudado entre o desenho e a assinatura
+    const parar = assinarEventos(() => refazer((n) => n + 1));
     const tentar = (forcar: boolean) => {
       const atual = lerEventos(de, ate);
       if (atual.carregando) return;
@@ -29,7 +32,10 @@ export function useEventos(de: string, ate: string): { leitura: Leitura; atualiz
     };
     tentar(false);
     document.addEventListener('visibilitychange', aoVoltar);
-    const relogio = setInterval(() => tentar(true), ATUALIZAR_A_CADA_MS);
+    // Com o app escondido não vale gastar chamada; ao voltar, `aoVoltar` lê de novo.
+    const relogio = setInterval(() => {
+      if (document.visibilityState !== 'hidden') tentar(true);
+    }, ATUALIZAR_A_CADA_MS);
     return () => {
       parar();
       document.removeEventListener('visibilitychange', aoVoltar);

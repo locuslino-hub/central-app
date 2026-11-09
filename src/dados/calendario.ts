@@ -177,8 +177,8 @@ export function montarCalendario({ eventos, tarefas, de, ate, agora }: Entrada):
     if (!diaExiste(inicio)) continue;
 
     if (evento.diaInteiro) {
-      let ultimo = somarDias(evento.fim, -1);
-      if (!diaExiste(evento.fim) || ultimo < inicio) ultimo = inicio;
+      let ultimo = diaExiste(evento.fim) ? somarDias(evento.fim, -1) : inicio;
+      if (ultimo < inicio) ultimo = inicio;
       const passado = evento.fim <= hoje;
       percorrer(inicio, ultimo, (dia) => {
         if (evento.recusado) return void doDia(dia).recusados++;

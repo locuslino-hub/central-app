@@ -20,11 +20,12 @@ type Props = {
 
 export function AvisoDaAgenda({ leitura, aoTentar, recusados = 0 }: Props) {
   const { falha, incompleto, carregando, lidoEm } = leitura;
-  const vazio = !(carregando && lidoEm === null && falha === null) && falha === null && !incompleto && recusados === 0;
+  const carregandoPrimeira = carregando && lidoEm === null && falha === null;
+  const vazio = !carregandoPrimeira && falha === null && !incompleto && recusados === 0;
   if (vazio) return null;
   return (
-    <div class="cal-avisos">
-      {carregando && lidoEm === null && falha === null && <p class="cal-aviso">Carregando a agenda…</p>}
+    <div class="cal-avisos" role="status">
+      {carregandoPrimeira && <p class="cal-aviso">Carregando a agenda…</p>}
       {falha !== null && (
         <div class="cal-aviso cal-aviso-falha">
           {falha === 'nao-liberada' ? (

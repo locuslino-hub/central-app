@@ -221,6 +221,16 @@ describe('Agenda de hoje', () => {
       expect(agenda.pedidos.map((p) => p.acao)).toEqual(['eventos']);
     });
 
+    it('os avisos ficam numa região de status, quieta (não é alerta)', async () => {
+      const agenda = await agendaDeTeste();
+      agenda.falharEventosCom('rede');
+      render(<AgendaHoje />);
+      await cartao().findByText('Agenda não carregou');
+      const aviso = document.querySelector('.cal-avisos') as HTMLElement;
+      expect(aviso.getAttribute('role')).toBe('status');
+      expect(document.querySelector('[role="alert"]')).toBeNull();
+    });
+
     it('algumas agendas não carregaram: o que veio aparece, com a linha de aviso', async () => {
       const agenda = await agendaDeTeste();
       agenda.responder([aula()], true);
