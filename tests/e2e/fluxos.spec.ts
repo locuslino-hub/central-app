@@ -306,7 +306,9 @@ test.describe('offline: o app guardado no aparelho', () => {
         expect(await semRolagemDeLado(page)).toBe(true);
 
         // Sem internet, a abertura traz a versão 2 (a última baixada), na tela inicial e em outra página.
+        // O servidor do app também cai (503): o que abrir daqui em diante veio do aparelho, não da rede.
         script.cair();
+        servidor.foraDoAr();
         await context.setOffline(true);
         await page.reload();
         await expect(page.getByRole('heading', { level: 1, name: 'Painel do dia' })).toBeVisible();

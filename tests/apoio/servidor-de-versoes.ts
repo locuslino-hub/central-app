@@ -1,7 +1,8 @@
 // Servidor de arquivos do app construído (`dist/`) em que o teste escolhe qual
 // versão está no ar. A versão 2 muda o HTML (uma marca no <head>) e o service
 // worker (o carimbo e a integridade do index.html), como acontece quando o app é
-// publicado de novo.
+// publicado de novo. `foraDoAr` faz tudo responder 503: o que abrir depois disso
+// veio do aparelho, não da rede.
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
@@ -24,10 +25,12 @@ export const MARCA_DA_VERSAO = 'versao-do-app';
 
 export async function servidorDeVersoes(pasta = 'dist') {
   let versao = 1;
+  let noAr = true;
   const html2 = async () =>
     (await readFile(join(pasta, 'index.html'), 'utf8')).replace('<head>', `<head><meta name="${MARCA_DA_VERSAO}" content="2" />`);
   const servidor: Server = createServer((pedido, resposta) => {
     void (async () => {
+      if (!noAr) return resposta.writeHead(503).end();
       const caminho = decodeURIComponent((pedido.url ?? '/').split('?')[0]);
       if (!caminho.startsWith(BASE)) return resposta.writeHead(404).end();
       const relativo = caminho.slice(BASE.length) || 'index.html';
@@ -60,6 +63,15 @@ export async function servidorDeVersoes(pasta = 'dist') {
     publicarVersao2() {
       versao = 2;
     },
-    parar: () => new Promise<void>((pronto) => servidor.close(() => pronto())),
+    /** Tudo passa a responder 503 (o servidor do app "caiu"). */
+    foraDoAr() {
+      noAr = false;
+    },
+    /** Fecha o servidor, mesmo com conexões abertas pelo navegador; pode ser chamado mais de uma vez. */
+    parar: () =>
+      new Promise<void>((pronto) => {
+        servidor.close(() => pronto());
+        servidor.closeAllConnections();
+      }),
   };
 }
