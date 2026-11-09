@@ -333,7 +333,6 @@ describe('páginas', () => {
 
   it.each([
     '#/quadro',
-    '#/sala/sala-mba',
   ])('%s é uma tela que ainda não existe e diz isso com o mesmo cartão', async (hash) => {
     await mostrar(hash, 1280);
     const principal = within(document.querySelector('main') as HTMLElement);
@@ -648,10 +647,10 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
     expect(within(principal()).getByRole('link', { name: 'Caixa' })).toBeTruthy();
   });
 
-  it('as páginas das salas ainda não existem: o grupo Minhas salas avisa uma vez', async () => {
+  it('as páginas das salas existem (Tarefa 17): o grupo Minhas salas não avisa mais "próxima versão"', async () => {
     await mostrar('#/', 1280);
     const menu = principal();
-    expect(within(menu).getByText('As páginas das salas chegam numa próxima versão.')).toBeTruthy();
+    expect(within(menu).queryByText(/próxima versão/)).toBeNull();
   });
 
   it('o cartão Agora do painel direito já é o de verdade (Tarefa 16): sem "Em breve", com o caminho para o Agora', async () => {

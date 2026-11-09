@@ -1,32 +1,23 @@
 // A página de cada rota. Painel do dia, Agora, Semana, Mês, Ano, Caixa, Sem prazo, Atividades, Salas
-// (com o cadastro de pessoas), Conectar e Chat existem; as demais mostram o título e dizem que ainda não
-// estão prontas, até a tarefa delas chegar.
-import type { ComponentChildren } from 'preact';
-import { hrefDe, type RotaAtual } from '../rotas';
+// (com o cadastro de pessoas), cada sala, cada pessoa, Conectar e Chat existem; as demais mostram o título
+// e dizem que ainda não estão prontas, até a tarefa delas chegar.
+import type { RotaAtual } from '../rotas';
 import { AgoraPagina } from './Agora';
 import { Ano } from './Ano';
 import { Atividades } from './Atividades';
 import { Caixa } from './Caixa';
 import { Chat } from './Chat';
 import { Conectar } from './Conectar';
-import { usePessoa, useSala, useSalas, useTituloDaAba } from './hooks';
-import { corDaSala } from './Menu';
+import { useTituloDaAba } from './hooks';
 import { Mes } from './Mes';
 import { Painel } from './Painel';
-import { Pessoas } from './Pessoas';
+import { Pagina } from './Pagina';
+import { Pessoa } from './Pessoa';
+import { Sala } from './Sala';
+import { Salas } from './Salas';
 import { SemPrazo } from './SemPrazo';
 import { Semana } from './Semana';
 import './tarefas.css';
-
-function Pagina({ titulo, children }: { titulo: string; children?: ComponentChildren }) {
-  useTituloDaAba(titulo);
-  return (
-    <>
-      <h1>{titulo}</h1>
-      {children}
-    </>
-  );
-}
 
 /** Tela que chega numa tarefa seguinte: diz isso e leva ao que já funciona. */
 const AindaNaoPronta = () => (
@@ -40,72 +31,6 @@ const AindaNaoPronta = () => (
     </p>
   </section>
 );
-
-/** Temporária: a Tarefa 17 traz a página de cada sala. Por ora, os atalhos e o cadastro de pessoas. */
-function Salas({ titulo }: { titulo: string }) {
-  const salas = useSalas();
-  return (
-    <Pagina titulo={titulo}>
-      <div class="salas-pagina">
-        <section class="painel" aria-labelledby="titulo-salas">
-          <h2 id="titulo-salas">Minhas salas</h2>
-          <ul class="salas-links">
-            {salas.map((sala) => (
-              <li key={sala.id}>
-                <a class={`sala-bloco ${corDaSala(sala.id)}`} href={hrefDe('sala', sala.id)}>
-                  {sala.nome}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <Pessoas />
-      </div>
-    </Pagina>
-  );
-}
-
-function Sala({ id }: { id: string }) {
-  const sala = useSala(id);
-  if (sala === null) {
-    return (
-      <Pagina titulo="Sala não encontrada">
-        <p class="aviso">Esta sala não existe neste aparelho.</p>
-        <p>
-          <a class="botao-link" href="#/salas">
-            Ver as salas
-          </a>
-        </p>
-      </Pagina>
-    );
-  }
-  return (
-    <Pagina titulo={sala?.nome ?? 'Sala'}>
-      <AindaNaoPronta />
-    </Pagina>
-  );
-}
-
-function Pessoa({ id }: { id: string }) {
-  const pessoa = usePessoa(id);
-  if (pessoa === null) {
-    return (
-      <Pagina titulo="Pessoa não encontrada">
-        <p class="aviso">Esta pessoa não existe neste aparelho.</p>
-        <p>
-          <a class="botao-link" href="#/salas">
-            Ver as salas
-          </a>
-        </p>
-      </Pagina>
-    );
-  }
-  return (
-    <Pagina titulo={pessoa?.nome ?? 'Pessoa'}>
-      <AindaNaoPronta />
-    </Pagina>
-  );
-}
 
 function ConectarNaCasca({ titulo }: { titulo: string }) {
   useTituloDaAba(titulo);

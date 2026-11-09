@@ -1,5 +1,6 @@
 // Campo para escrever uma tarefa sem passar pelo Chat. Na Checklist ela vai para
-// hoje; em Sem prazo, fica sem dia. A sala se escolhe depois, em Editar.
+// hoje; em Sem prazo, fica sem dia. A sala se escolhe depois, em Editar, salvo
+// nas páginas de sala e de pessoa, onde ela já nasce no lugar.
 import { useRef, useState } from 'preact/hooks';
 import { criarTarefa } from '../dados/tarefas';
 import './tarefas.css';
@@ -9,9 +10,12 @@ type Props = {
   rotulo: string;
   /** `AAAA-MM-DD` quando a tarefa nova já nasce com dia (hoje); sem isto, Sem prazo. */
   data?: string;
+  /** Numa página de sala ou de pessoa: a tarefa nasce já nela. */
+  salaId?: string;
+  pessoaId?: string;
 };
 
-export function NovaTarefa({ rotulo, data }: Props) {
+export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const campo = useRef<HTMLInputElement>(null);
@@ -29,7 +33,7 @@ export function NovaTarefa({ rotulo, data }: Props) {
     }
     emAndamento.current = true;
     try {
-      await criarTarefa(limpo, data === undefined ? {} : { data });
+      await criarTarefa(limpo, { ...(data === undefined ? {} : { data }), ...(salaId === undefined ? {} : { salaId }), ...(pessoaId === undefined ? {} : { pessoaId }) });
       setErro(null);
       // Só limpa o que foi gravado: quem já começou a próxima não perde o texto.
       setTexto((atual) => (atual.trim() === limpo ? '' : atual));

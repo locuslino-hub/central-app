@@ -26,11 +26,7 @@ export type IdDaRota =
  * Telas que ainda não existem (chegam em tarefas seguintes). O menu e a barra
  * dizem "Em breve" nelas, e a página mostra um cartão que diz o mesmo.
  */
-export const ROTAS_EM_BREVE: ReadonlySet<IdDaRota> = new Set<IdDaRota>([
-  'quadro',
-  'sala',
-  'pessoa',
-]);
+export const ROTAS_EM_BREVE: ReadonlySet<IdDaRota> = new Set<IdDaRota>(['quadro']);
 
 /** O que o painel direito do computador aceita. */
 export type Painel = 'agora' | 'chat';
@@ -85,8 +81,8 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
     titulo: (agora, data) => (data === undefined ? String(agora.getFullYear()) : data.slice(0, 4)),
   },
   salas: { caminho: 'salas', titulo: fixo('Salas') },
-  sala: { caminho: 'sala/:id', titulo: fixo('Sala') },
-  pessoa: { caminho: 'pessoa/:id', titulo: fixo('Pessoa') },
+  sala: { caminho: 'sala/:id', titulo: fixo('Sala'), voltarPara: '#/salas' },
+  pessoa: { caminho: 'pessoa/:id', titulo: fixo('Pessoa'), voltarPara: '#/salas' },
   caixa: { caminho: 'caixa', titulo: fixo('Caixa') },
   quadro: { caminho: 'quadro', titulo: fixo('Quadro') },
   atividades: { caminho: 'atividades', titulo: fixo('Atividades') },

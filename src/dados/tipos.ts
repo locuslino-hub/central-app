@@ -13,7 +13,7 @@ export type Base = {
 
 export type Sala = Base & { nome: string; ordem: number; notas?: string };
 
-export type Pessoa = Base & { nome: string; salaId: string; papel?: string; emails?: string[] };
+export type Pessoa = Base & { nome: string; salaId: string; papel?: string; emails?: string[]; notas?: string };
 
 /**
  * `data`: `AAAA-MM-DD`. `semana`: a segunda-feira da semana, `AAAA-MM-DD`.

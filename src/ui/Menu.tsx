@@ -101,7 +101,6 @@ export function MenuLateral({ rota, hoje }: Props) {
           {item('sem-prazo', 'sem-prazo')}
         </Grupo>
         <Grupo titulo="Minhas salas">
-          <li class="menu-nota">As páginas das salas chegam numa próxima versão.</li>
           {salas.map((sala) => (
             <li key={sala.id}>
               <Item rota={rota} id="sala" param={sala.id} rotulo={sala.nome} cor={corDaSala(sala.id)} />

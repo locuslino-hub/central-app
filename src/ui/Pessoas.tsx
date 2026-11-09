@@ -1,12 +1,13 @@
-// Cadastro mínimo de pessoas (Tarefa 9): nome, sala e papel opcional. É o que o
-// chat usa para saber a sala de quem a frase cita ("Marcar reunião com a
-// Marina" vai para Orientações). A Tarefa 17 traz a página própria de cada
-// pessoa e substitui esta tela; os dados são os mesmos (`pessoas`).
+// Cadastro de pessoas (Tarefa 9): nome, sala e papel opcional. É o que o chat
+// usa para saber a sala de quem a frase cita ("Marcar reunião com a Marina" vai
+// para Orientações). Desde a Tarefa 17 o nome de cada pessoa leva à página dela
+// (src/ui/Pessoa.tsx), que reaproveita o formulário de edição daqui.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { normalizar } from '../chat/datas';
 import { desfazer, type Desfazivel } from '../dados/desfazer';
 import { apagar, listar, salvar } from '../dados/loja';
 import type { Pessoa, Sala } from '../dados/tipos';
+import { hrefDe } from '../rotas';
 import { usePessoas, useSalas } from './hooks';
 import './tarefas.css';
 
@@ -21,7 +22,7 @@ type EdicaoProps = {
 };
 
 /** Nome, sala e papel de uma pessoa já cadastrada. Mesmo id: o que o chat aprendeu dela continua valendo. */
-function EdicaoDePessoa({ pessoa, salas, nomeDaSala, aoFechar }: EdicaoProps) {
+export function EdicaoDePessoa({ pessoa, salas, nomeDaSala, aoFechar }: EdicaoProps) {
   const [nome, setNome] = useState(pessoa.nome);
   const [salaId, setSalaId] = useState(pessoa.salaId);
   const [papel, setPapel] = useState(pessoa.papel ?? '');
@@ -359,7 +360,9 @@ export function Pessoas() {
                   </li>
                 ) : (
                   <li key={pessoa.id} class="pessoa">
-                    <span class="pessoa-nome">{pessoa.nome}</span>
+                    <a class="pessoa-nome" href={hrefDe('pessoa', pessoa.id)}>
+                      {pessoa.nome}
+                    </a>
                     {pessoa.papel && <span class="pessoa-papel">{pessoa.papel}</span>}
                     <button
                       type="button"

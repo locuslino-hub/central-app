@@ -490,7 +490,14 @@
   border-top: 0;
 }
 .pessoa-nome {
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--toque);
+  color: var(--acao2);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
 }
 .pessoa-papel {
   flex: 1;

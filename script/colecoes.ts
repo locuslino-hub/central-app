@@ -17,7 +17,7 @@ type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?
 /** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
 export const ESQUEMAS = {
   salas: { nome: 'texto', notas: 'texto?' },
-  pessoas: { nome: 'texto', salaId: 'texto', papel: 'texto?' },
+  pessoas: { nome: 'texto', salaId: 'texto', papel: 'texto?', notas: 'texto?' },
   tarefas: {
     titulo: 'texto',
     salaId: 'textoOuNulo',
