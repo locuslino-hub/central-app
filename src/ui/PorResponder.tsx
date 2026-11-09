@@ -33,6 +33,9 @@ export function quandoChegou(data: string, hoje: string): string {
   return `${diaMes(dia, hoje)}, ${hora}`;
 }
 
+/** Quanto tempo o pedido de foco espera a janela sair, depois de tocar em Responder. */
+export const PRAZO_DO_FOCO_MS = 10_000;
+
 const idDoResponder = (id: string) => `email-responder-${id}`;
 
 // ---- Estado da leitura ----
@@ -221,10 +224,10 @@ export function CartaoDeEmail({ item, salas, hoje, caixa, aoResponder }: CartaoP
             type="button"
             class="email-escolher"
             aria-expanded={perguntando}
-            aria-label={`Sem sala. Escolher a sala de ${remetente}`}
+            aria-label={`Sem sala, escolher a sala de ${remetente}`}
             onClick={() => setPerguntando((aberto) => !aberto)}
           >
-            Sem sala · escolher
+            Sem sala, escolher
           </button>
         )}
         {tarefa && <span class="etiqueta email-tarefa">{tarefa.feito ? 'Tarefa concluída' : 'Virou tarefa'}</span>}
@@ -272,6 +275,11 @@ export function ListaDeEmails({ itens, caixa }: { itens: ItemDeEmail[]; caixa: C
   const hoje = useDia();
   const salas = useSalas();
   const pendente = useRef<{ atual: string; proximo: string | null; saiu: boolean } | null>(null);
+  const prazo = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const limpar = () => {
+    clearTimeout(prazo.current);
+    pendente.current = null;
+  };
 
   useEffect(() => {
     const saiu = () => {
@@ -280,7 +288,7 @@ export function ListaDeEmails({ itens, caixa }: { itens: ItemDeEmail[]; caixa: C
     const voltou = () => {
       const p = pendente.current;
       if (!p || !p.saiu || document.visibilityState === 'hidden') return;
-      pendente.current = null;
+      limpar();
       // O próximo pode ter saído da lista nesse meio tempo: então fica no mesmo.
       const alvo = (p.proximo && document.getElementById(idDoResponder(p.proximo))) || document.getElementById(idDoResponder(p.atual));
       alvo?.focus();
@@ -293,17 +301,31 @@ export function ListaDeEmails({ itens, caixa }: { itens: ItemDeEmail[]; caixa: C
       window.removeEventListener('blur', saiu);
       window.removeEventListener('focus', voltou);
       document.removeEventListener('visibilitychange', aoMudarAVisibilidade);
+      clearTimeout(prazo.current);
     };
   }, []);
 
   function aoResponder(id: string) {
     const posicao = itens.findIndex((item) => item.email.id === id);
     const vizinho = itens[posicao + 1] ?? itens[posicao - 1];
-    pendente.current = { atual: id, proximo: vizinho ? vizinho.email.id : null, saiu: false };
+    clearTimeout(prazo.current);
+    const meu = { atual: id, proximo: vizinho ? vizinho.email.id : null, saiu: false };
+    pendente.current = meu;
+    // Se a janela não saiu (o navegador não abriu a aba), o pedido vence: um Alt+Tab
+    // muito depois não pode tirar o foco de onde o dono está.
+    prazo.current = setTimeout(() => {
+      if (pendente.current === meu && !meu.saiu) pendente.current = null;
+    }, PRAZO_DO_FOCO_MS);
   }
 
   return (
-    <ul class="emails">
+    <ul
+      class="emails"
+      // Outro controle da lista foi usado: o dono desistiu de ir ao Gmail por agora.
+      onClickCapture={(evento) => {
+        if (!(evento.target as Element).closest('a[id^="email-responder-"]')) limpar();
+      }}
+    >
       {itens.map((item) => (
         <CartaoDeEmail key={item.email.id} item={item} salas={salas} hoje={hoje} caixa={caixa} aoResponder={aoResponder} />
       ))}

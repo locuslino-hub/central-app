@@ -163,6 +163,33 @@ describe('sala de quem enviou', () => {
     expect(resumoDoEndereco('A@x.invalid')).toBe(resumoDoEndereco(' a@X.invalid '));
   });
 
+  it('a lista guarda a ordem de verdade: com 300 respostas, a mais antiga sai e quem respondeu de novo fica', () => {
+    // Endereços numerados: resumos que podem ser só dígitos, que um objeto reordenaria.
+    const endereco = (n: number) => `pessoa${n}@exemplo.invalid`;
+    for (let n = 0; n < 300; n++) lembrarComoSala(endereco(n), 'sala-casa');
+    lembrarComoSala(endereco(0), 'sala-mba'); // responde de novo: vai para o fim
+    lembrarComoSala(endereco(300), 'sala-aulas'); // o 301º: sai o mais antigo, que agora é o 1
+    expect(origemDoRemetente(endereco(1), [])).toEqual({ sabe: false, salaId: null });
+    expect(origemDoRemetente(endereco(0), [])).toEqual({ sabe: true, salaId: 'sala-mba' });
+    expect(origemDoRemetente(endereco(2), [])).toEqual({ sabe: true, salaId: 'sala-casa' });
+    expect(origemDoRemetente(endereco(300), [])).toEqual({ sabe: true, salaId: 'sala-aulas' });
+    const guardado = JSON.parse(localStorage.getItem('central-remetentes')!);
+    expect(Array.isArray(guardado)).toBe(true);
+    expect(guardado).toHaveLength(300);
+    expect(guardado[guardado.length - 1]).toEqual([expect.any(String), 'sala-aulas']);
+  });
+
+  it('lê o formato antigo (objeto) e passa a gravar em lista', () => {
+    localStorage.setItem('central-remetentes', JSON.stringify({ [resumoDoEndereco('velho@exemplo.invalid')]: 'sala-casa' }));
+    expect(origemDoRemetente('velho@exemplo.invalid', [])).toEqual({ sabe: true, salaId: 'sala-casa' });
+    lembrarComoSala('novo@exemplo.invalid', null);
+    const guardado = JSON.parse(localStorage.getItem('central-remetentes')!);
+    expect(guardado).toEqual([
+      [resumoDoEndereco('velho@exemplo.invalid'), 'sala-casa'],
+      [resumoDoEndereco('novo@exemplo.invalid'), ''],
+    ]);
+  });
+
   it('armazenamento quebrado não derruba nada', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('bloqueado');

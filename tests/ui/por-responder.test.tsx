@@ -4,7 +4,7 @@ import { desfazer } from '../../src/dados/desfazer';
 import { esquecerEmails, lerEmails } from '../../src/dados/emails';
 import { listar, salvar, semear } from '../../src/dados/loja';
 import { Caixa } from '../../src/ui/Caixa';
-import { PorResponder } from '../../src/ui/PorResponder';
+import { PorResponder, PRAZO_DO_FOCO_MS } from '../../src/ui/PorResponder';
 import { ATUALIZAR_A_CADA_MS } from '../../src/ui/useEmails';
 import { email, gmailDeTeste } from '../apoio/emails-ui';
 
@@ -129,6 +129,55 @@ describe('Por responder', () => {
       expect(document.activeElement).toBe(primeiro.getByRole('link', { name: /^Responder/ }));
     });
 
+    /** Pega o relógio do pedido de foco, sem esperar 10 s de verdade. */
+    const relogioDoFoco = () => {
+      const chamadas = vi.spyOn(globalThis, 'setTimeout');
+      return () => {
+        const achada = chamadas.mock.calls.filter(([, ms]) => ms === PRAZO_DO_FOCO_MS).pop();
+        expect(achada).toBeTruthy();
+        return achada![0] as () => void;
+      };
+    };
+
+    it('se a janela não saiu em 10 s, o pedido vence: um Alt+Tab muito depois não mexe no foco', async () => {
+      await gmailDeTeste([email('Primeiro'), email('Segundo')]);
+      render(<PorResponder />);
+      const primeiro = await itemDe('Primeiro');
+      await assentar();
+      const relogio = relogioDoFoco();
+      fireEvent.click(primeiro.getByRole('link', { name: /^Responder/ }));
+      act(() => relogio()());
+      fireEvent.blur(window);
+      fireEvent.focus(window);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('quem já saiu para o Gmail pode demorar: o pedido não vence depois que a janela saiu', async () => {
+      await gmailDeTeste([email('Primeiro'), email('Segundo')]);
+      render(<PorResponder />);
+      const primeiro = await itemDe('Primeiro');
+      await assentar();
+      const relogio = relogioDoFoco();
+      fireEvent.click(primeiro.getByRole('link', { name: /^Responder/ }));
+      fireEvent.blur(window);
+      act(() => relogio()());
+      fireEvent.focus(window);
+      const segundo = await itemDe('Segundo');
+      expect(document.activeElement).toBe(segundo.getByRole('link', { name: /^Responder/ }));
+    });
+
+    it('usar outro controle da lista cancela o pedido', async () => {
+      await gmailDeTeste([email('Primeiro'), email('Segundo')]);
+      render(<PorResponder />);
+      const primeiro = await itemDe('Primeiro');
+      await assentar();
+      fireEvent.click(primeiro.getByRole('link', { name: /^Responder/ }));
+      fireEvent.click((await itemDe('Segundo')).getByRole('button', { name: /^Virar tarefa/ }));
+      fireEvent.blur(window);
+      fireEvent.focus(window);
+      expect(document.activeElement).not.toBe((await itemDe('Segundo')).getByRole('link', { name: /^Responder/ }));
+    });
+
     it('com um item só, o foco volta para o próprio Responder', async () => {
       await gmailDeTeste([email('Sozinho')]);
       render(<PorResponder />);
@@ -139,6 +188,14 @@ describe('Por responder', () => {
       fireEvent.focus(window);
       expect(document.activeElement).toBe(item.getByRole('link', { name: /^Responder/ }));
     });
+  });
+
+  it('"Sem sala, escolher": o nome acessível contém o texto visível', async () => {
+    await gmailDeTeste([email('Dúvida', { remetente: 'Renata', enderecoRemetente: 'renata@exemplo.invalid' })]);
+    render(<PorResponder />);
+    const botaoSala = (await itemDe('Dúvida')).getByRole('button', { name: 'Sem sala, escolher a sala de Renata' });
+    expect(botaoSala.textContent).toBe('Sem sala, escolher');
+    expect(botaoSala.getAttribute('aria-label')!.startsWith(botaoSala.textContent!)).toBe(true);
   });
 
   describe('Virar tarefa', () => {

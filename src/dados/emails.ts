@@ -87,14 +87,14 @@ export function esquecerEmails() {
 
 /** Ids do Gmail: letras e números. O mesmo padrão vale para o id do registro de estado. */
 const ID_VALIDO = /^[A-Za-z0-9_-]{1,64}$/;
-const LINK_WEB = /^https?:\/\/\S+$/i;
+const LINK_DO_GMAIL = /^https:\/\/mail\.google\.com\/\S*$/;
 const DATA_COM_FUSO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
 
 const texto = (valor: unknown, maximo: number): valor is string => typeof valor === 'string' && valor.length <= maximo;
 
-/** O link serve para abrir em outra aba? Só http e https (nunca `javascript:` nem `data:`). */
+/** O link serve para abrir em outra aba? Só `https://mail.google.com/` (nunca `javascript:`, `data:`, `http:` nem outro endereço). */
 export function linkSeguro(link: string): boolean {
-  return LINK_WEB.test(link);
+  return LINK_DO_GMAIL.test(link);
 }
 
 /** O item tem a forma de `Email`? Fora dela, fica de fora: a tela nunca monta HTML com isto. */

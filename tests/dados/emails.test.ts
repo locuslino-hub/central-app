@@ -45,6 +45,8 @@ describe('leitura dos e-mails', () => {
       bom,
       email('Link perigoso', { link: 'javascript:alert(1)' }),
       email('Link de dados', { link: 'data:text/html,<b>oi</b>' }),
+      email('Link de outro site', { link: 'https://exemplo.invalid/mail/u/0/#all/abc' }),
+      email('Link sem https', { link: 'http://mail.google.com/mail/u/0/#all/abc' }),
       email('Id estranho', { id: 'a/b' }),
       { ...email('Sem remetente'), remetente: 7 },
       'texto solto',
@@ -139,10 +141,22 @@ describe('leitura dos e-mails', () => {
 });
 
 describe('conferências', () => {
-  it('linkSeguro aceita só http e https', () => {
+  it('linkSeguro aceita só https://mail.google.com/', () => {
     expect(linkSeguro('https://mail.google.com/mail/u/0/#all/abc')).toBe(true);
-    expect(linkSeguro('http://exemplo.invalid/')).toBe(true);
-    for (const ruim of ['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', '//exemplo.invalid', 'https://a b', '']) {
+    for (const ruim of [
+      'http://mail.google.com/mail/u/0/#all/abc',
+      'https://exemplo.invalid/',
+      'https://mail.google.com.exemplo.invalid/mail',
+      'https://mail.google.com@exemplo.invalid/',
+      'https://exemplo.invalid/https://mail.google.com/',
+      'https://mail.google.com',
+      'javascript:alert(1)',
+      'data:text/html,x',
+      'file:///etc/passwd',
+      '//mail.google.com/',
+      'https://mail.google.com/a b',
+      '',
+    ]) {
       expect(linkSeguro(ruim)).toBe(false);
     }
   });

@@ -30,24 +30,35 @@ export function resumoDoEndereco(endereco: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** Texto vazio quer dizer que o dono respondeu "sem sala". */
-type Mapa = Record<string, string>;
+/**
+ * Pares `[resumo, sala]` na ordem em que foram respondidos (o mais antigo
+ * primeiro). Lista, e não objeto: chave só de dígitos ganha lugar próprio num
+ * objeto e a ordem de saída deixaria de ser real. Sala vazia quer dizer que o
+ * dono respondeu "sem sala".
+ */
+type Par = [resumo: string, sala: string];
 
-function lerMapa(): Mapa {
+function lerPares(): Par[] {
   try {
     const bruto = localStorage.getItem(CHAVE);
-    const valor: unknown = bruto ? JSON.parse(bruto) : {};
-    if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) return {};
-    return Object.fromEntries(Object.entries(valor).filter(([, sala]) => typeof sala === 'string'));
+    const valor: unknown = bruto ? JSON.parse(bruto) : [];
+    // Formato antigo (objeto): vale como lista, na ordem que o JSON trouxe.
+    const entradas: unknown[] = Array.isArray(valor)
+      ? valor
+      : typeof valor === 'object' && valor !== null
+        ? Object.entries(valor)
+        : [];
+    return entradas.filter(
+      (par): par is Par => Array.isArray(par) && par.length === 2 && typeof par[0] === 'string' && typeof par[1] === 'string',
+    );
   } catch {
-    return {};
+    return [];
   }
 }
 
-function gravarMapa(mapa: Mapa) {
-  const cabem = Object.fromEntries(Object.entries(mapa).slice(-NO_MAXIMO));
+function gravarPares(pares: Par[]) {
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(cabem));
+    localStorage.setItem(CHAVE, JSON.stringify(pares.slice(-NO_MAXIMO)));
   } catch {
     // Sem armazenamento (janela privativa): a pergunta volta na próxima vez.
   }
@@ -67,8 +78,8 @@ export function origemDoRemetente(endereco: string, pessoas: readonly Pessoa[]):
   if (!chave) return { sabe: true, salaId: null };
   const pessoa = pessoas.find((p) => !p.apagado && p.emails?.some((email) => normalizado(email) === chave));
   if (pessoa) return { sabe: true, salaId: pessoa.salaId, pessoa };
-  const guardada = lerMapa()[resumoDoEndereco(chave)];
-  if (guardada !== undefined) return { sabe: true, salaId: guardada === '' ? null : guardada };
+  const guardada = lerPares().find(([resumo]) => resumo === resumoDoEndereco(chave));
+  if (guardada) return { sabe: true, salaId: guardada[1] === '' ? null : guardada[1] };
   return { sabe: false, salaId: null };
 }
 
@@ -88,9 +99,7 @@ export async function lembrarComoPessoa(endereco: string, pessoaId: string): Pro
 export function lembrarComoSala(endereco: string, salaId: string | null) {
   const chave = normalizado(endereco);
   if (!chave) return;
-  const mapa = lerMapa();
   const resumo = resumoDoEndereco(chave);
-  delete mapa[resumo]; // reinsere no fim: sai primeiro o que foi respondido há mais tempo
-  mapa[resumo] = salaId ?? '';
-  gravarMapa(mapa);
+  // Quem responde de novo vai para o fim: sai primeiro o que foi respondido há mais tempo.
+  gravarPares([...lerPares().filter(([antigo]) => antigo !== resumo), [resumo, salaId ?? '']]);
 }
