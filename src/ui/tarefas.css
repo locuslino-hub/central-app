@@ -49,17 +49,27 @@
   list-style: none;
 }
 .tarefa {
-  /* Caixa | título e meta | Editar numa coluna fixa à direita. O que abre (edição, ações) ocupa a largura toda embaixo. */
+  /* Como no modelo, uma linha só: caixa | título | etiqueta da sala à direita.
+     O que abre (edição, opções de duração, ações no toque) ocupa a largura toda embaixo. */
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  column-gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: start;
+  column-gap: 8px;
   border-top: 1px solid var(--fio);
 }
-.tarefa-lado {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding-top: 3px;
+.tarefa:first-child {
+  border-top: 0;
+}
+/* A primeira linha tem lugar fixo; o que abre vem embaixo, na ordem da página. */
+.tarefa-caixa,
+.tarefa-titulo,
+.tarefa-meta,
+.tarefa-mais {
+  grid-row: 1;
+}
+.tarefa-mais {
+  grid-column: 4;
 }
 .tarefa-extra {
   grid-column: 2 / -1;
@@ -68,15 +78,12 @@
 .tarefa-extra:empty {
   display: none;
 }
-.tarefa:first-child {
-  border-top: 0;
-}
 .tarefa-caixa {
   display: grid;
   place-items: center;
   width: var(--toque);
   height: var(--toque);
-  margin-top: 3px;
+  margin-left: -9px;
   padding: 0;
   border: 0;
   background: none;
@@ -85,9 +92,9 @@
 .tarefa-marca {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 2px solid var(--campo);
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--campo);
   border-radius: 50%;
   background: var(--folha);
   color: transparent;
@@ -105,12 +112,10 @@
   outline-offset: -4px;
   border-radius: 50%;
 }
-.tarefa-corpo {
-  min-width: 0;
-  padding: 9px 0 8px;
-}
 .tarefa-titulo {
+  min-width: 0;
   margin: 0;
+  padding: 11px 0 10px;
   font-weight: 500;
   line-height: 1.3;
   overflow-wrap: anywhere;
@@ -120,18 +125,15 @@
   text-decoration: line-through;
 }
 .tarefa-meta {
-  /* Uma linha só: o "quando" encolhe com reticências. As opções de duração, quando abertas, descem para a linha seguinte. */
+  /* Na mesma linha, à direita: o "quando" encolhe com reticências; a etiqueta nunca. */
   display: flex;
-  flex-wrap: nowrap;
   align-items: center;
-  gap: 2px 8px;
+  justify-content: flex-end;
+  gap: 6px;
   min-width: 0;
-  margin-top: 2px;
+  max-width: 14rem;
+  min-height: var(--toque);
   white-space: nowrap;
-}
-.tarefa-meta:has(.duracao-opcoes) {
-  flex-wrap: wrap;
-  white-space: normal;
 }
 .tarefa-meta .etiqueta {
   flex: none;
@@ -159,10 +161,95 @@
   font-size: 0.87rem;
 }
 
-/* Desfazer e Entendi: botões de texto pequeno, mas com 44 px de altura para o toque. */
-.tarefa-desfazer,
-.tarefa-entendi,
+/* Duração e Editar. Com mouse: por cima da etiqueta, ao passar sobre a linha ou ao chegar
+   pelo teclado (o fundo branco cobre o que está embaixo). No toque: ver o fim deste bloco. */
+.tarefa-acoes {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 28px;
+  background: linear-gradient(to right, transparent, var(--folha) 26px);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.tarefa:hover .tarefa-acoes,
+.tarefa:focus-within .tarefa-acoes,
+.tarefa[data-acoes='abertas'] .tarefa-acoes {
+  opacity: 1;
+}
+/* Opções de duração abertas: as ações descem para a linha de baixo, na largura toda. */
+.tarefa-acoes:has(.duracao-opcoes) {
+  position: static;
+  grid-column: 2 / -1;
+  flex-wrap: wrap;
+  padding: 0;
+  background: none;
+  opacity: 1;
+}
+/* Com o Desfazer à vista, as ações não o cobrem: ficam para depois. */
+.tarefa:has(.tarefa-desfazer) .tarefa-acoes:not(:has(.duracao-opcoes)) {
+  display: none;
+}
+.tarefa-mais {
+  display: none;
+}
+
+/* Botões discretos: sem sublinhado, cinza; ganham fundo ao passar. Toque de 44 px. */
+.tarefa-editar,
+.tarefa-mais {
+  place-items: center;
+  width: var(--toque);
+  height: var(--toque);
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--tinta2);
+  cursor: pointer;
+}
 .tarefa-editar {
+  display: grid;
+}
+.tarefa-editar .icone,
+.tarefa-mais .icone {
+  width: 19px;
+  height: 19px;
+}
+.tarefa-editar:hover,
+.tarefa-mais:hover,
+.tarefa-editar[aria-expanded='true'],
+.tarefa-mais[aria-expanded='true'] {
+  background: var(--poco);
+  color: var(--tinta);
+}
+
+/* Toque (sem mouse): três pontos discretos no fim da linha; tocar mostra Duração e Editar embaixo. */
+@media (hover: none) {
+  .tarefa-mais {
+    display: grid;
+  }
+  .tarefa-acoes {
+    position: static;
+    display: none;
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+    padding: 0 0 6px;
+    background: none;
+    opacity: 1;
+  }
+  .tarefa[data-acoes='abertas'] .tarefa-acoes,
+  .tarefa-acoes:has(.duracao-opcoes) {
+    display: flex;
+  }
+}
+
+/* Desfazer e Entendi: pílulas pequenas, mas com 44 px de altura para o toque. */
+.tarefa-desfazer,
+.tarefa-entendi {
   min-height: var(--toque);
   padding: 0 16px;
   border: 1px solid var(--campo);
@@ -173,17 +260,8 @@
   cursor: pointer;
 }
 .tarefa-desfazer:hover,
-.tarefa-entendi:hover,
-.tarefa-editar:hover,
-.tarefa-editar[aria-expanded='true'] {
+.tarefa-entendi:hover {
   background: var(--poco);
-}
-.tarefa-editar {
-  border-color: transparent;
-  color: var(--tinta2);
-  font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 .tarefa-apagada {
   display: flex;
@@ -311,14 +389,13 @@
 }
 .duracao-botao {
   min-height: var(--toque);
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: 99px;
   background: none;
   color: var(--tinta2);
   font: 500 0.87rem var(--ui);
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .duracao-botao:hover,

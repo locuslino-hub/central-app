@@ -157,8 +157,9 @@
   background: var(--poco);
 }
 /*
- * Ação secundária em forma de texto (Tarefa 16, rodada 1): num grupo de ações,
- * só uma é pílula; as outras são texto sublinhado, com a mesma área de toque de 44 px.
+ * Ações secundárias, como no modelo: a pílula com contorno (.botao-pilula, "Virar tarefa",
+ * "Amanhã") e o texto simples sem sublinhado (.botao-texto, "Agora não", "Feito"), que ganha
+ * fundo ao passar. As duas com a área de toque de 44 px.
  */
 .botao-texto {
   display: inline-flex;
@@ -166,19 +167,41 @@
   justify-content: center;
   min-width: var(--toque);
   min-height: var(--toque);
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: 99px;
   background: none;
-  color: var(--acao2);
-  font: 600 0.95rem var(--ui);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
+  color: var(--tinta2);
+  font: 500 0.95rem var(--ui);
+  text-decoration: none;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
-.botao-texto:hover {
-  background: rgb(var(--som-rgb) / 0.08);
+.botao-texto:hover,
+.botao-texto[aria-expanded='true'] {
+  background: var(--poco);
+  color: var(--tinta);
+}
+.botao-pilula {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--toque);
+  padding: 0 16px;
+  border: 1px solid var(--campo);
+  border-radius: 99px;
+  background: var(--folha);
+  color: var(--tinta);
+  font: 500 0.92rem var(--ui);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.botao-pilula:hover,
+.botao-pilula[aria-expanded='true'] {
+  border-color: var(--acao);
+  background: var(--poco);
 }
 .botao.primario {
   border-color: transparent;

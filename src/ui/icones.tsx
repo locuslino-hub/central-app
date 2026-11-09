@@ -16,6 +16,7 @@ const TRACOS = {
   'sem-prazo': 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 8v4.5l2.5 1.5',
   conectar: 'M9 15 15 9M10.5 6.8l1-1a3.5 3.5 0 0 1 5 5l-1 1M13.5 17.2l-1 1a3.5 3.5 0 0 1-5-5l1-1',
   voltar: 'M15 5l-7 7 7 7',
+  editar: 'M4.5 19.5l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3l-10 10zM13.5 7l3 3',
 } as const;
 
 export type NomeDoIcone = keyof typeof TRACOS;

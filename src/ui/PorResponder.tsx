@@ -228,7 +228,7 @@ export function CartaoDeEmail({ item, salas, hoje, caixa, aoResponder }: CartaoP
             aria-label={`Sem sala, escolher a sala de ${remetente}`}
             onClick={() => setPerguntando((aberto) => !aberto)}
           >
-            Sem sala, escolher
+            <span>Sem sala, escolher</span>
           </button>
         )}
         {tarefa && <span class="etiqueta email-tarefa">{tarefa.feito ? 'Tarefa concluída' : 'Virou tarefa'}</span>}
@@ -251,7 +251,7 @@ export function CartaoDeEmail({ item, salas, hoje, caixa, aoResponder }: CartaoP
           </a>
         )}
         {!tarefa && (
-          <button type="button" class="botao-texto" aria-label={`Virar tarefa: ${assunto}`} onClick={() => void caixa.virarTarefa(item)}>
+          <button type="button" class="botao-pilula" aria-label={`Virar tarefa: ${assunto}`} onClick={() => void caixa.virarTarefa(item)}>
             Virar tarefa
           </button>
         )}

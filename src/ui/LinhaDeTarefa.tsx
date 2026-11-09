@@ -11,6 +11,7 @@ import { apagarTarefa, concluirTarefa, darCiencia, editarTarefa, reabrirTarefa, 
 import type { Sala, Tarefa } from '../dados/tipos';
 import { CaixaMarcar } from './CaixaMarcar';
 import { DuracaoTarefa } from './DuracaoTarefa';
+import { Icone } from './icones';
 import { corDaSala } from './Menu';
 import { diaMes, nomeDaSemana } from './quando';
 import { estaAtrasada, quandoNaLista } from './tarefas-lista';
@@ -369,6 +370,7 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
   const [falha, setFalha] = useState(false);
   const [editando, setEditando] = useState(false);
   const [marcando, setMarcando] = useState(false);
+  const [acoesAbertas, setAcoesAbertas] = useState(false);
   const sala = tarefa.salaId === null ? undefined : salas.find((s) => s.id === tarefa.salaId);
   const quando = quandoNaLista(tarefa, hoje);
   const atrasada = estaAtrasada(tarefa, hoje);
@@ -397,7 +399,7 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
   };
 
   return (
-    <li class="tarefa" data-feita={tarefa.feito} data-id={tarefa.id}>
+    <li class="tarefa" data-feita={tarefa.feito} data-id={tarefa.id} data-acoes={acoesAbertas || editando ? 'abertas' : undefined}>
       <button
         type="button"
         class="tarefa-caixa"
@@ -417,17 +419,12 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
           </svg>
         </span>
       </button>
-      <div class="tarefa-corpo">
-        <p class="tarefa-titulo">{String(tarefa.titulo ?? '')}</p>
-        <div class="tarefa-meta">
-          <span class={`etiqueta ${corDaSala(tarefa.salaId ?? '')}`}>{sala ? sala.nome : 'Sem sala'}</span>
-          {atrasada && <span class="etiqueta etiqueta-atrasada">Atrasada</span>}
-          {quando && <span class="tarefa-quando">{quando}</span>}
-          <DuracaoTarefa tarefa={tarefa} />
-        </div>
-      </div>
-      {/* Coluna fixa à direita: Editar sempre no mesmo lugar; Desfazer logo acima, quando há. */}
-      <div class="tarefa-lado">
+      <p class="tarefa-titulo">{String(tarefa.titulo ?? '')}</p>
+      {/* Como no modelo: a etiqueta da sala na mesma linha, à direita. */}
+      <div class="tarefa-meta">
+        {quando && <span class="tarefa-quando">{quando}</span>}
+        {atrasada && <span class="etiqueta etiqueta-atrasada">Atrasada</span>}
+        <span class={`etiqueta ${corDaSala(tarefa.salaId ?? '')}`}>{sala ? sala.nome : 'Sem sala'}</span>
         {tarefa.feito && conclusoes.temDesfazer(tarefa.id) && (
           <button
             type="button"
@@ -438,6 +435,11 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
             Desfazer
           </button>
         )}
+      </div>
+      {/* Duração e Editar: com mouse, aparecem ao passar sobre a linha (ou ao chegar pelo teclado);
+          no toque, o botão de três pontos as mostra. */}
+      <div class="tarefa-acoes">
+        <DuracaoTarefa tarefa={tarefa} />
         <button
           type="button"
           class="tarefa-editar"
@@ -446,9 +448,18 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
           aria-label={`Editar: ${tarefa.titulo}`}
           onClick={() => (editando ? fecharEdicao() : setEditando(true))}
         >
-          Editar
+          <Icone nome="editar" />
         </button>
       </div>
+      <button
+        type="button"
+        class="tarefa-mais"
+        aria-expanded={acoesAbertas}
+        aria-label={`Mais ações: ${tarefa.titulo}`}
+        onClick={() => setAcoesAbertas(!acoesAbertas)}
+      >
+        <Icone nome="mais" />
+      </button>
       <div class="tarefa-extra">
         {tarefa.semanaVencida && (
           <p class="tarefa-aviso">

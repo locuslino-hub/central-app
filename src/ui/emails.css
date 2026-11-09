@@ -148,56 +148,50 @@
   --c: var(--tinta);
   --f: var(--cabe);
 }
-/* "Sem sala · escolher": parece o texto ao lado, mas tem a altura do toque. */
+/* "Sem sala, escolher": uma etiqueta tracejada (sem sublinhado), com a altura do toque. */
 .email-escolher {
+  display: inline-flex;
+  align-items: center;
   min-height: var(--toque);
-  padding: 0 4px;
+  padding: 0;
   border: 0;
   background: none;
-  color: var(--acao2);
-  font: 500 0.87rem var(--ui);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--tinta2);
+  font: 600 0.8rem var(--ui);
   cursor: pointer;
 }
+.email-escolher span {
+  padding: 1px 10px;
+  border: 1px dashed var(--campo);
+  border-radius: 99px;
+}
+.email-escolher:hover span,
+.email-escolher[aria-expanded='true'] span {
+  border-color: var(--acao);
+  background: var(--poco);
+  color: var(--tinta);
+}
 .email-acoes {
-  /* Responder (pílula) e as três ações em texto, numa linha. */
+  /* Como no modelo: Responder (coral), Virar tarefa (pílula com contorno), Agora não e Feito (texto). */
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0;
-  margin-top: 6px;
+  gap: 4px;
+  margin-top: 8px;
   white-space: nowrap;
 }
 .email-acoes .botao {
-  margin-right: 4px;
-  padding: 0 11px;
+  margin-right: 2px;
+  padding: 0 14px;
   font-size: 0.88rem;
 }
-/* Compactas: as quatro cabem numa linha na coluna do Painel a 1280 px (cerca de 280 px). */
-.email-acoes .botao-texto {
-  padding: 0 3px;
-  font-size: 0.85rem;
+.email-acoes .botao-pilula {
+  padding: 0 12px;
+  font-size: 0.88rem;
 }
-/* Celular: a pílula sozinha na primeira linha, as três ações em texto na segunda. */
-@media (max-width: 699px) {
-  .email-acoes {
-    display: grid;
-    grid-template-columns: repeat(3, auto);
-    justify-content: start;
-    column-gap: 8px;
-  }
-  .email-acoes .botao {
-    grid-column: 1 / -1;
-    justify-self: start;
-    margin: 0 0 2px;
-  }
-  .email-acoes .botao-texto {
-    padding: 0 6px;
-  }
-  .email-acoes .botao-texto:first-of-type {
-    margin-left: -6px;
-  }
+.email-acoes .botao-texto {
+  padding: 0 8px;
+  font-size: 0.88rem;
 }
 
 /* ---- Pergunta "de quem é?" ---- */

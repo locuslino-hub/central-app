@@ -373,10 +373,12 @@
 .fechar-acoes {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
-.fechar-acoes .botao-texto {
-  font-size: 0.92rem;
+.fechar-acoes .botao-texto,
+.fechar-acoes .botao-pilula {
+  font-size: 0.9rem;
 }
 .fechar-lote {
   padding: 0 16px;

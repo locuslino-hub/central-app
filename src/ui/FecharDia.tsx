@@ -137,13 +137,13 @@ function TarefaQueFicou({ tarefa, salas, hoje, acoes, aoMarcar }: ItemProps) {
       </div>
       <div class="fechar-acoes" role="group" aria-label={`O que fazer com: ${tarefa.titulo}`}>
         {temPrazo ? (
-          <button type="button" class="botao-texto" ref={botaoPrazo} aria-expanded={prazoAberto} onClick={() => (prazoAberto ? fecharPrazo() : setPrazoAberto(true))}>
+          <button type="button" class="botao-pilula" ref={botaoPrazo} aria-expanded={prazoAberto} onClick={() => (prazoAberto ? fecharPrazo() : setPrazoAberto(true))}>
             Mudar prazo
           </button>
         ) : (
           <button
             type="button"
-            class="botao-texto"
+            class="botao-pilula"
             onClick={() => void acoes.agir(() => comDesfazer(() => moverTarefa(tarefa.id, { tipo: 'amanha', hoje })), 'Não consegui salvar. Tente de novo.')}
           >
             Amanhã
