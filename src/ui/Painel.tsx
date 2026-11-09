@@ -7,7 +7,7 @@
 //   6. Sem prazo.
 //   7. Fechar o dia.
 // No celular as duplas viram uma coluna, na mesma ordem. Onde não há painel
-// direito (celular e tablet), o cartão do Agora vem no alto, antes de tudo.
+// direito (celular e tablet), o cartão do Agora vem logo depois da saudação e da linha do dia.
 // A seguir começa depois do destaque do Agora (que está no painel direito ou
 // no alto): a mesma tarefa não aparece duas vezes.
 import { useMemo } from 'preact/hooks';
@@ -21,7 +21,7 @@ import { AvisosDeConflito } from './AvisosDeConflito';
 import { CaixasSalas } from './CaixasSalas';
 import { Checklist } from './Checklist';
 import { FecharDia } from './FecharDia';
-import { usePessoas, useSalas, useTela } from './hooks';
+import { useNome, usePessoas, useSalas, useTela } from './hooks';
 import { LinhaDia } from './LinhaDia';
 import { juntar, nEmails, nTarefas } from './plural';
 import { PorResponder } from './PorResponder';
@@ -72,6 +72,7 @@ export function resumoDoDia(dia: AgoraDoDia): string {
 }
 
 function MensagemDoDia({ dia }: { dia: AgoraDoDia }) {
+  const nome = useNome();
   const acabou = dia.livreConhecido && dia.livre.minutos === 0 && !dia.livre.proximo;
   const irParaFechar = () => {
     const titulo = document.getElementById('titulo-fechar-o-dia');
@@ -82,11 +83,13 @@ function MensagemDoDia({ dia }: { dia: AgoraDoDia }) {
   };
   return (
     <section class="mensagem-do-dia" aria-label="Mensagem do dia">
-      <p class="mensagem-saudacao">{saudacao(dia.agora)}</p>
-      <p class="mensagem-data">{diaPorExtenso(dia.hoje, dia.hoje)}</p>
-      <p class="mensagem-resumo" aria-live="polite">
-        {resumoDoDia(dia)}
-      </p>
+      <p class="mensagem-saudacao">{nome ? `${saudacao(dia.agora)}, ${nome}` : saudacao(dia.agora)}</p>
+      <div class="mensagem-texto">
+        <p class="mensagem-data">{diaPorExtenso(dia.hoje, dia.hoje)}</p>{' '}
+        <p class="mensagem-resumo" aria-live="polite">
+          {resumoDoDia(dia)}
+        </p>
+      </div>
       {acabou && !dia.fechado && (
         <p class="mensagem-fim">
           <span>{`O dia de trabalho acabou às ${dia.fimDoDia}.`}</span>
@@ -106,12 +109,14 @@ function LinhaDoDia({ dia }: { dia: AgoraDoDia }) {
     () => montarCalendario({ eventos: dia.eventos.eventos, tarefas: dia.tarefas ?? [], de: dia.hoje, ate: dia.hoje, agora: dia.agora }),
     [dia.eventos.eventos, dia.tarefas, dia.hoje, dia.agora],
   );
+  // Como no modelo: a régua solta, logo abaixo da saudação, sem cartão nem título à vista.
+  // O título e o tempo livre ficam para o leitor de tela (o Agora mostra o tempo livre).
   return (
-    <section class="painel linha-do-dia-cartao" aria-labelledby="titulo-linha-do-dia">
-      <div class="cartao-topo">
-        <h2 id="titulo-linha-do-dia">Linha do dia</h2>
-        <p class="cartao-topo-nota">{textoDoTempoLivre(dia).curto}</p>
-      </div>
+    <section class="linha-do-dia-solta" aria-labelledby="titulo-linha-do-dia">
+      <h2 id="titulo-linha-do-dia" class="so-leitor">
+        Linha do dia
+      </h2>
+      <p class="so-leitor">{textoDoTempoLivre(dia).curto}</p>
       <LinhaDia dia={calendario.dia(dia.hoje)} agora={dia.agora} salas={salas} fimDoDia={minutosDe(dia.fimDoDia)} adivinhar={adivinhar} />
     </section>
   );
@@ -127,14 +132,14 @@ export function Painel() {
       <AvisosDeConflito />
       <AvisoDaFila />
       <div class="painel-do-dia">
+        <MensagemDoDia dia={dia} />
+        <LinhaDoDia dia={dia} />
         {tela !== 'computador' && (
           <section class="painel agora-no-painel" aria-labelledby="titulo-agora-no-painel">
             <h2 id="titulo-agora-no-painel">Agora</h2>
             <AgoraCurto />
           </section>
         )}
-        <MensagemDoDia dia={dia} />
-        <LinhaDoDia dia={dia} />
         <CaixasSalas salas={salas} tarefas={dia.tarefas} fila={dia.fila} pessoas={pessoas} hoje={dia.hoje} />
         <div class="hoje-grade">
           <Checklist />

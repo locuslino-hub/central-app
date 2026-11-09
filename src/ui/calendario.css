@@ -692,39 +692,46 @@
 
 /* ---- Linha do dia ---- */
 
+/* Como no modelo: régua branca de 50 px; cada bloco ocupa a altura toda, com o nome no alto. */
 .linha-dia {
   position: relative;
 }
 .lin-faixa {
   position: relative;
-  height: calc(var(--linhas, 1) * 30px + 10px);
+  height: calc(var(--linhas, 1) * 50px);
   overflow: hidden;
-  border-radius: var(--r-p);
+  border-radius: 18px;
   background: var(--folha);
   box-shadow: var(--relevo-p);
 }
 .lin-bloco,
 .lin-prazo {
   position: absolute;
-  top: calc(5px + var(--linha, 0) * 30px);
+  top: calc(var(--linha, 0) * 50px);
   display: flex;
-  align-items: center;
-  height: 26px;
+  height: 50px;
 }
 .lin-bloco {
+  align-items: flex-start;
   min-width: 6px;
-  padding: 0 8px;
+  padding: 6px 8px;
   overflow: hidden;
-  border-radius: 8px;
+  border: 1px solid var(--folha);
+  border-radius: 12px;
   background: var(--f, var(--poco));
   color: var(--c, var(--tinta2));
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1.25;
 }
+/* O nome em até duas linhas, sem cortar a palavra no meio; o que não cabe some na borda. */
 .lin-texto {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: normal;
 }
 /* O que passou continua na cor da sala, só mais clara (o fundo leva branco). */
 .lin-bloco[data-passado='true'] {
@@ -735,6 +742,7 @@
   background: transparent;
 }
 .lin-prazo {
+  align-items: center;
   gap: 5px;
   margin-left: -6px;
   color: var(--tinta);

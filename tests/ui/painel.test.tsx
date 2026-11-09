@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
 import { listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
+import { guardarNome } from '../../src/dados/nome';
 import { email } from '../apoio/emails-ui';
 import { evento } from '../apoio/agenda-ui';
 import { scriptDeTeste } from '../apoio/script-ui';
@@ -118,6 +119,21 @@ describe('Mensagem do dia', () => {
         'Hoje: 2 tarefas em aberto, 2 e-mails por responder e o próximo compromisso às 14:00, Reunião de orientação.',
       ),
     ).toBeTruthy();
+  });
+
+  it('a saudação é o título visível; "Painel do dia" fica só para o leitor de tela', async () => {
+    await diaComum();
+    mostrar('#/', 1280);
+    const titulo = screen.getByRole('heading', { level: 1, name: 'Painel do dia' });
+    expect(titulo.classList.contains('so-leitor')).toBe(true);
+    expect(regiao('Mensagem do dia').getByText('Boa tarde').classList.contains('mensagem-saudacao')).toBe(true);
+  });
+
+  it('com nome guardado no aparelho: "Boa tarde, Marina"', async () => {
+    guardarNome('Marina');
+    await diaComum();
+    mostrar('#/', 1280);
+    expect(regiao('Mensagem do dia').getByText('Boa tarde, Marina')).toBeTruthy();
   });
 
   it('no singular: 1 tarefa, 1 e-mail', async () => {
@@ -244,13 +260,17 @@ describe('A seguir', () => {
     expect(screen.queryByText('Cabe agora')).toBeNull();
   });
 
-  it('no celular o Agora vem no alto do Painel; A seguir mostra 3 e o resto em "Ver tudo"', async () => {
+  it('no celular o Agora vem logo depois da saudação e da linha do dia; A seguir mostra 3 e o resto em "Ver tudo"', async () => {
     for (const t of ['A', 'B', 'C', 'D', 'E']) await criar(`Tarefa ${t}`, { data: '2026-11-05' });
     await scriptDeTeste();
     mostrar('#/', 390);
     const regioes = () => principal().getAllByRole('region');
     const agora = await principal().findByRole('region', { name: 'Agora' });
-    expect(regioes().indexOf(agora)).toBeLessThan(regioes().indexOf(principal().getByRole('region', { name: 'Mensagem do dia' })));
+    const mensagem = principal().getByRole('region', { name: 'Mensagem do dia' });
+    const linha = principal().getByRole('region', { name: 'Linha do dia' });
+    expect(regioes().indexOf(mensagem)).toBeLessThan(regioes().indexOf(linha));
+    expect(regioes().indexOf(linha)).toBeLessThan(regioes().indexOf(agora));
+    expect(regioes().indexOf(agora)).toBeLessThan(regioes().indexOf(principal().getByRole('region', { name: 'Pendências das salas' })));
     expect(await within(agora).findByText('Tarefa A')).toBeTruthy();
     await waitFor(() => expect(linhas()).toHaveLength(3));
     expect(regiao(/^A seguir/).queryByText('Tarefa A')).toBeNull();

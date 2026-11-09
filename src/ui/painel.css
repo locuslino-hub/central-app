@@ -17,19 +17,6 @@
   margin-top: 0;
 }
 
-/* Cabeçalho de cartão com uma nota à direita (a linha do dia diz o tempo livre). */
-.cartao-topo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px 14px;
-  margin-bottom: 6px;
-}
-.cartao-topo h2 {
-  margin: 0;
-}
-.cartao-topo-nota,
 .agora-livre {
   margin: 0;
   padding: 5px 14px;
@@ -68,36 +55,38 @@
 
 /* ---- 1. Mensagem do dia ---- */
 
+/* Como no modelo: a saudação é o título grande, em serifa; embaixo, a data e o resumo numa frase só. */
 .mensagem-do-dia {
   display: grid;
-  gap: 2px;
-  padding: 2px 4px 4px;
-}
-.mensagem-data {
-  order: -1;
-  margin: 0;
-  color: var(--tinta3);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  gap: 0;
+  padding: 0 2px;
 }
 .mensagem-saudacao {
   margin: 0;
   font-family: var(--titulo);
-  font-size: 2.2rem;
-  line-height: 1.05;
+  font-size: clamp(2.45rem, 3.6vw, 3.75rem);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
 }
 .mensagem-saudacao::after {
   content: '.';
   color: var(--coral2);
 }
-.mensagem-resumo {
+.mensagem-texto {
   max-width: 62ch;
-  margin: 6px 0 0;
+  margin-top: 8px;
   color: var(--tinta2);
   font-size: 1.05rem;
   line-height: 1.45;
+}
+.mensagem-data,
+.mensagem-resumo {
+  display: inline;
+  margin: 0;
+}
+.mensagem-data::after {
+  content: '.';
 }
 .mensagem-fim {
   display: flex;
@@ -107,6 +96,12 @@
   margin: 10px 0 0;
   color: var(--tinta);
   font-weight: 500;
+}
+
+/* ---- 2. Linha do dia: a régua solta, sem cartão ---- */
+
+.linha-do-dia-solta {
+  padding-bottom: 6px;
 }
 
 /* ---- 3. Caixas das salas ---- */
@@ -126,10 +121,10 @@
     gap: 8px;
   }
   .caixas-salas-lista .caixa-sala {
-    padding: 13px 12px;
+    padding: 13px 10px 13px 12px;
   }
   .caixas-salas-lista .caixa-sala-nome {
-    font-size: 0.9rem;
+    font-size: 0.86rem;
   }
   .caixas-salas-lista .caixa-sala-conta {
     font-size: 0.82rem;
@@ -662,9 +657,6 @@
 /* ---- Celular ---- */
 
 @media (max-width: 699px) {
-  .mensagem-saudacao {
-    font-size: 1.95rem;
-  }
   /* As salas viram uma faixa que corre de lado (só ela; a página não rola de lado). */
   .caixas-salas-lista {
     display: flex;

@@ -17,6 +17,7 @@ import { Sala } from './Sala';
 import { Salas } from './Salas';
 import { SemPrazo } from './SemPrazo';
 import { Semana } from './Semana';
+import { SeuNome } from './SeuNome';
 import './tarefas.css';
 
 /** Tela que chega numa tarefa seguinte: diz isso e leva ao que já funciona. */
@@ -39,14 +40,19 @@ function ConfigIANaCasca({ titulo }: { titulo: string }) {
 
 function ConectarNaCasca({ titulo }: { titulo: string }) {
   useTituloDaAba(titulo);
-  return <Conectar />;
+  return (
+    <div class="ajustes-do-aparelho">
+      <Conectar />
+      <SeuNome />
+    </div>
+  );
 }
 
 export function Vista({ rota }: { rota: RotaAtual }) {
   switch (rota.id) {
     case 'hoje':
       return (
-        <Pagina titulo={rota.titulo}>
+        <Pagina titulo={rota.titulo} tituloEscondido>
           <Painel />
         </Pagina>
       );
