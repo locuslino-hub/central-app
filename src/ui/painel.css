@@ -282,8 +282,15 @@
   color: var(--pinho2);
 }
 .fila-responder {
-  padding: 0 16px;
   font-size: 0.9rem;
+}
+.fila-item-email .fila-titulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fila-item-email .etiqueta {
+  margin-right: 4px;
 }
 .fila-rodape {
   margin: 12px 0 0;
@@ -545,32 +552,6 @@
   padding: 0 14px;
   font-size: 0.92rem;
 }
-.agora-depois-titulo {
-  margin: 4px 0 0;
-  color: var(--tinta2);
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-.agora-depois {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.agora-depois li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: var(--tinta2);
-  font-size: 0.93rem;
-}
-.agora-depois li span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .agora-abrir {
   margin: 2px 0 0;
 }
@@ -578,13 +559,7 @@
   margin: 0;
   color: var(--tinta2);
 }
-/* Janela baixa (notebook): o chat embaixo precisa de altura; os próximos ficam no Agora. */
-@media (max-height: 880px) {
-  .agora-depois-titulo,
-  .agora-depois {
-    display: none;
-  }
-}
+
 .agora-vazio {
   padding: 16px 18px;
   border-radius: var(--r-m);
@@ -688,6 +663,11 @@
   .caixas-salas-lista li {
     flex: 0 0 8.25rem;
     scroll-snap-align: start;
+  }
+  /* A borda direita some aos poucos: sinal de que a faixa continua. No fim da faixa, não. */
+  .caixas-salas-lista:not([data-fim='true']) {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent);
   }
   .destaque {
     padding: 18px 18px 22px;

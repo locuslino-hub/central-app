@@ -5,7 +5,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   gap: 18px;
-  align-items: start;
+  /* Os dois cartões da dupla com a mesma altura; o conteúdo do mais curto fica no alto. */
+  align-items: stretch;
 }
 .hoje-grade + .hoje-grade {
   margin-top: 18px;
@@ -259,7 +260,7 @@
   font-weight: 500;
   line-height: 1;
 }
-@container nova-tarefa (max-width: 20rem) {
+@container nova-tarefa (max-width: 23rem) {
   .nova-tarefa-botao {
     flex: none;
     width: var(--toque);
@@ -361,10 +362,17 @@
 /* ---- Sem prazo ---- */
 
 .semprazo-acoes {
+  /* Uma linha só: "Escolher dia" nunca desce sozinho. */
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
   margin-top: 4px;
+  white-space: nowrap;
+}
+/* Em Sem prazo as ações (e o que abre) começam na margem do cartão, sem recuo. */
+.semprazo .tarefa-extra {
+  grid-column: 1 / -1;
 }
 .semprazo-acoes .botao {
   padding: 0 16px;

@@ -161,14 +161,43 @@
   cursor: pointer;
 }
 .email-acoes {
+  /* Responder (pílula) e as três ações em texto, numa linha. */
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
   margin-top: 6px;
+  white-space: nowrap;
 }
 .email-acoes .botao {
-  padding: 0 18px;
-  font-size: 0.93rem;
+  margin-right: 4px;
+  padding: 0 11px;
+  font-size: 0.88rem;
+}
+/* Compactas: as quatro cabem numa linha na coluna do Painel a 1280 px (cerca de 280 px). */
+.email-acoes .botao-texto {
+  padding: 0 3px;
+  font-size: 0.85rem;
+}
+/* Celular: a pílula sozinha na primeira linha, as três ações em texto na segunda. */
+@media (max-width: 699px) {
+  .email-acoes {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: start;
+    column-gap: 8px;
+  }
+  .email-acoes .botao {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin: 0 0 2px;
+  }
+  .email-acoes .botao-texto {
+    padding: 0 6px;
+  }
+  .email-acoes .botao-texto:first-of-type {
+    margin-left: -6px;
+  }
 }
 
 /* ---- Pergunta "de quem é?" ---- */

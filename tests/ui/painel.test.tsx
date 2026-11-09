@@ -215,7 +215,9 @@ describe('A seguir', () => {
     expect(textoDe(b)).toContain('cerca de 1 h');
     expect(within(b).queryByText('Cabe agora')).toBeNull();
     expect(textoDe(c)).toContain('Revisão do capítulo 2');
-    expect(textoDe(c)).toContain('E-mail de Marina');
+    // E-mail na fila: curto, a etiqueta e o assunto, sem Responder (ele está no Por responder).
+    expect(within(c).getByText('E-mail')).toBeTruthy();
+    expect(within(c).queryByRole('link', { name: /^Responder/ })).toBeNull();
     expect(within(c).queryByText('Cabe agora')).toBeNull();
     expect(seguir.queryByText('Depois')).toBeNull();
     expect(seguir.getByRole('heading', { name: /A seguir/ }).textContent).toContain('3 itens');

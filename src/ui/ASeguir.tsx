@@ -149,6 +149,18 @@ type LinhaProps = { item: ItemFila; dia: AgoraDoDia; salas: readonly Sala[] };
 export function LinhaDaFila({ item, dia, salas }: LinhaProps) {
   const sala = salaDoItem(item, salas);
   const encaixe = dia.encaixes.get(item.chave);
+  if (item.tipo === 'email') {
+    // E-mail na fila: curto, a etiqueta e o assunto. Responder e o resto ficam no Por responder, ao lado.
+    return (
+      <li class="fila-item fila-item-email" data-tipo="email" data-grupo={item.grupo}>
+        <span class="fila-ponto sala-outra" data-tipo="email" aria-hidden="true" />
+        <p class="fila-texto fila-titulo">
+          <span class="etiqueta sala-outra">E-mail</span> {tituloDoItem(item)}
+        </p>
+        <SeloDoEncaixe encaixe={encaixe} />
+      </li>
+    );
+  }
   const detalhes = [sala?.nome, porQue(item, dia.hoje), duracaoDoItem(item)].filter(Boolean).join(' · ');
   return (
     <li class="fila-item" data-tipo={item.tipo} data-grupo={item.grupo}>
@@ -158,7 +170,7 @@ export function LinhaDaFila({ item, dia, salas }: LinhaProps) {
         <p class="fila-detalhes">{detalhes}</p>
       </div>
       <SeloDoEncaixe encaixe={encaixe} />
-      <ResponderDoItem item={item} dia={dia} />
+      <ResponderDoItem item={item} dia={dia} classe="botao-texto fila-responder" />
     </li>
   );
 }

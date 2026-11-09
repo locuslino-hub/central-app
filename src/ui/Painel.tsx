@@ -128,7 +128,7 @@ export function Painel() {
         {tela !== 'computador' && (
           <section class="painel agora-no-painel" aria-labelledby="titulo-agora-no-painel">
             <h2 id="titulo-agora-no-painel">Agora</h2>
-            <AgoraCurto semDepois />
+            <AgoraCurto />
           </section>
         )}
         <MensagemDoDia dia={dia} />

@@ -48,7 +48,14 @@ export function CaixasSalas({ salas, tarefas, fila, pessoas, hoje }: Props) {
       <h2 id="titulo-caixas-salas" class="so-leitor">
         Pendências das salas
       </h2>
-      <ul class="caixas-salas-lista">
+      <ul
+        class="caixas-salas-lista"
+        // No celular a faixa rola de lado; no fim dela, a borda direita deixa de sumir.
+        onScroll={(e) => {
+          const ul = e.currentTarget as HTMLElement;
+          ul.dataset.fim = String(ul.scrollLeft + ul.clientWidth >= ul.scrollWidth - 2);
+        }}
+      >
         {salas.map((sala) => {
           const t = tarefasPorSala.get(sala.id) ?? 0;
           const e = emailsPorSala.get(sala.id) ?? 0;

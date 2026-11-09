@@ -73,7 +73,7 @@ describe('#/agora', () => {
     // A seguir: o resto, sem repetir o destaque.
     const seguir = within(principal().getByRole('region', { name: /^A seguir/ }));
     const linhas = seguir.getAllByRole('listitem');
-    expect(linhas.map((li) => li.querySelector('.fila-titulo')?.textContent)).toEqual(['Rever capítulo 3', 'Revisão do capítulo 2', 'Dúvida sobre a prova']);
+    expect(linhas.map((li) => li.querySelector('.fila-titulo')?.textContent)).toEqual(['Rever capítulo 3', 'E-mail Revisão do capítulo 2', 'E-mail Dúvida sobre a prova']);
     expect(linhas[0].textContent).toContain('cerca de 1 h');
     // Não cabe: sem selo (a ordem já diz que vem depois).
     expect(within(linhas[0]).queryByText('Cabe agora')).toBeNull();
@@ -226,13 +226,14 @@ describe('abas do Agora: Agora, Triagem e Fechar o dia', () => {
 describe('cartão Agora no painel direito (computador)', () => {
   const lado = () => within(screen.getByRole('complementary', { name: 'Agora e chat' }).querySelector('.cartao-agora') as HTMLElement);
 
-  it('tempo livre, destaque com ação, os próximos e o caminho para o Agora; sem "Em breve"', async () => {
+  it('tempo livre, destaque com ação e o caminho para o Agora; sem "Em breve" nem os próximos', async () => {
     await diaComum();
     mostrar('#/', 1280);
     expect(await lado().findByText('Livre até 14:00 · 1 h 40')).toBeTruthy();
     expect(await lado().findByText('Ler artigo da Renata')).toBeTruthy();
     expect(lado().getByRole('button', { name: 'Concluir: Ler artigo da Renata' })).toBeTruthy();
-    expect(lado().getByText('Rever capítulo 3')).toBeTruthy();
+    // Os seguintes não se repetem no cartão: estão em A seguir, no Painel.
+    expect(lado().queryByText('Rever capítulo 3')).toBeNull();
     expect(lado().getByRole('link', { name: 'Abrir o Agora' }).getAttribute('href')).toBe('#/agora');
     expect(lado().queryByText('Em breve')).toBeNull();
   });

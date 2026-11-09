@@ -163,11 +163,10 @@ function FilaVazia({ fechado }: { fechado: boolean }) {
 // ---- No painel direito ----
 
 /**
- * O cartão do painel direito: tempo livre, destaque, os dois seguintes e o
- * caminho para a página. `semDepois`: no alto do Painel (celular e tablet), os
- * seguintes já estão em A seguir, mais abaixo.
+ * O cartão curto do Agora: tempo livre, destaque e o caminho para a página.
+ * Os seguintes não se repetem aqui: estão em A seguir, no Painel.
  */
-export function AgoraCurto({ semDepois = false }: { semDepois?: boolean }) {
+export function AgoraCurto() {
   const dia = useAgoraDoDia();
   const salas = useSalas();
   const pessoas = usePessoas() ?? [];
@@ -175,7 +174,7 @@ export function AgoraCurto({ semDepois = false }: { semDepois?: boolean }) {
   const base = useRef<HTMLDivElement>(null);
   const marcar = useMarcar(dia.hoje, acoes, base);
   const fila = dia.fila ?? [];
-  const [primeiro, ...resto] = fila;
+  const [primeiro] = fila;
   return (
     <div class="agora-curto" ref={base} aria-busy={dia.fila === undefined}>
       <p class="agora-livre">{textoDoTempoLivre(dia).curto}</p>
@@ -185,24 +184,6 @@ export function AgoraCurto({ semDepois = false }: { semDepois?: boolean }) {
       )}
       {dia.fila !== undefined && !primeiro && (
         <p class="agora-vazio-curto">{dia.fechado ? 'Dia fechado. Nada na fila.' : 'Nada na fila agora.'}</p>
-      )}
-      {!semDepois && resto.length > 0 && (
-        <>
-          <p class="agora-depois-titulo" id="agora-depois">
-            Depois
-          </p>
-          <ul class="agora-depois" aria-labelledby="agora-depois">
-            {resto.slice(0, 2).map((item) => {
-              const sala = salaDoItem(item, salas);
-              return (
-                <li key={item.chave}>
-                  <span class={`fila-ponto ${sala ? corDaSala(sala.id) : 'sala-outra'}`} data-tipo={item.tipo} aria-hidden="true" />
-                  <span>{tituloDoItem(item)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </>
       )}
       <p class="agora-abrir">
         <a class="botao-texto" href="#/agora">

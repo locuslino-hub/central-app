@@ -214,6 +214,27 @@ for (const [nome, viewport, sufixo] of [
       await expect(seguir.getByRole('listitem')).toHaveCount(5);
       // A Agenda de hoje tem só o que tem hora: os 3 compromissos (as tarefas estão na Checklist).
       await expect(regiao('Agenda de hoje').getByRole('listitem')).toHaveCount(3);
+      // E-mail em A seguir é curto: etiqueta e assunto, sem Responder (ele está no Por responder).
+      await expect(seguir.getByRole('link', { name: /^Responder/ })).toHaveCount(0);
+
+      // Por responder: no computador, Responder e as três ações numa linha; no celular, duas linhas fixas.
+      const topos = (local: Locator) => local.locator('a, button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+      const acoesDoEmail = await topos(regiao(/^Por responder/).getByRole('group', { name: 'Ações do e-mail: Relatório do semestre' }));
+      expect(acoesDoEmail).toHaveLength(4);
+      if (sufixo === '1280') {
+        expect(new Set(acoesDoEmail).size).toBe(1);
+        // E cabem no cartão: nada passa da borda.
+        const cartao = await caixa(regiao(/^Por responder/));
+        const direita = await regiao(/^Por responder/).locator('.email-acoes, .email-topo').evaluateAll((els) => Math.max(...els.map((el) => el.getBoundingClientRect().right)));
+        expect(direita).toBeLessThanOrEqual(cartao.x + cartao.width - 23); // dentro do recuo de 24 px do cartão
+      }
+      if (sufixo === '390') {
+        expect(acoesDoEmail[1]).toBeGreaterThan(acoesDoEmail[0]);
+        expect(new Set(acoesDoEmail.slice(1)).size).toBe(1);
+      }
+      // Sem prazo: Hoje, Esta semana e Escolher dia numa linha só.
+      const quando = await topos(regiao('Sem prazo').getByRole('group', { name: 'Quando fazer: Comprar lâmpadas' }));
+      expect(new Set(quando).size).toBe(1);
       await expect(regiao('Fechar o dia')).toContainText('Hoje: 1 tarefa feita, 3 em aberto e 2 e-mails sem resposta.');
 
       const ordem = [
