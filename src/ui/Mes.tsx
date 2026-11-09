@@ -1,11 +1,15 @@
 // O mês: grade de semanas inteiras, de segunda a domingo. Cada dia mostra pontos
 // (cheio: evento; anel: tarefa) e leva à semana daquele dia. Só leitura.
-// No computador a grade ocupa o painel central inteiro (calendario.css) e cada dia
-// mostra tantos títulos quantos couberem na altura dele; o resto vira "+N".
+// Página larga (como no modelo): cada compromisso é uma pílula na cor da sala e o
+// que não cabe vira "e mais N". No computador a grade ocupa o painel central inteiro
+// (calendario.css) e cada dia mostra tantas pílulas quantas couberem na altura dele.
 import { useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { diasDoMes, montarCalendario, periodoDoMes, type DiaDoCalendario, type Item } from '../dados/calendario';
 import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { useAgora, useDia, useTarefas, useTela } from './hooks';
+import { salaDoItem } from './ItemDeAgenda';
+import { corDaSala } from './Menu';
+import { useAdivinharSala, type Adivinhar } from './useAdivinharSala';
 import { NavegacaoDoCalendario } from './NavegacaoDoCalendario';
 import { NOMES_DOS_MESES, abreviacaoDoDia, diaPorExtenso } from './quando';
 import { useEventos } from './useEventos';
@@ -13,8 +17,8 @@ import './calendario.css';
 
 const PONTOS_NO_MAXIMO = 3;
 const ANEIS_NO_MAXIMO = 2;
-/** Fora do computador (ou antes de medir): os títulos dos dois primeiros eventos. */
-const TITULOS_SEM_MEDIR = 2;
+/** Sem medir (tablet, ou antes de medir): três pílulas e "e mais N", como no modelo. */
+const LINHAS_SEM_MEDIR = 4;
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
@@ -32,8 +36,8 @@ function titulosQueCabem(tabela: HTMLElement): number | null {
   const area = tabela.querySelector<HTMLElement>('tbody .mes-titulos');
   if (!area) return null;
   const estilo = getComputedStyle(area);
-  if (estilo.display === 'none') return null; // página estreita: sem títulos, só os pontos
-  const linha = parseFloat(estilo.lineHeight);
+  if (estilo.display === 'none') return null; // página estreita: sem pílulas, só os pontos
+  const linha = parseFloat(estilo.lineHeight); // a pílula não tem margem em cima nem embaixo
   const vao = parseFloat(estilo.rowGap) || 0;
   if (!(linha > 0)) return null;
   return Math.max(0, Math.floor((area.clientHeight + vao) / (linha + vao)));
@@ -68,6 +72,7 @@ export function Mes({ data }: { data?: string }) {
   const agora = useAgora();
   const tarefas = useTarefas();
   const tela = useTela();
+  const adivinhar = useAdivinharSala();
   const grade = useRef<HTMLTableElement>(null);
   const cabem = useTitulosQueCabem(grade, tela === 'computador');
 
@@ -114,7 +119,7 @@ export function Mes({ data }: { data?: string }) {
               <tr key={semana[0]}>
                 {semana.map((dia) => (
                   <td key={dia}>
-                    <CelulaDoDia dia={calendario.dia(dia)} hoje={hoje} doMes={Number(dia.slice(5, 7)) === mes} cabem={cabem} />
+                    <CelulaDoDia dia={calendario.dia(dia)} hoje={hoje} doMes={Number(dia.slice(5, 7)) === mes} cabem={cabem} adivinhar={adivinhar} />
                   </td>
                 ))}
               </tr>
@@ -127,21 +132,30 @@ export function Mes({ data }: { data?: string }) {
   );
 }
 
+/** A cor da sala do item (a mesma da Agenda e da Semana); sem sala, neutra. */
+export function corDaSalaDoItem(item: Item, adivinhar: Adivinhar): string {
+  const salaId = salaDoItem(item, adivinhar);
+  return salaId === null ? 'sala-outra' : corDaSala(salaId);
+}
+
 const tituloDoItem = (item: Item) =>
   item.tipo === 'evento' ? (item.evento.titulo === '' ? '(sem título)' : item.evento.titulo) : item.tarefa.titulo;
 
 /**
- * Os títulos do dia. Sem medida: os dois primeiros eventos, como sempre foi. Medido
- * (computador): eventos e depois tarefas, até onde cabe; quantos ficaram de fora
- * aparece como "+N" ao lado dos pontos.
+ * As pílulas do dia: eventos e depois tarefas, em tantas linhas quantas couberem. Se
+ * não cabe tudo, a última linha diz "e mais N".
  */
-function titulosDoDia(eventos: Item[], tarefas: Item[], cabem: number | null): { itens: Item[]; fora: number } {
-  if (cabem === null) return { itens: eventos.slice(0, TITULOS_SEM_MEDIR), fora: 0 };
+export function titulosDoDia(eventos: Item[], tarefas: Item[], cabem: number | null): { itens: Item[]; fora: number } {
+  const linhas = cabem ?? LINHAS_SEM_MEDIR;
   const todos = [...eventos, ...tarefas];
-  return { itens: todos.slice(0, cabem), fora: Math.max(0, todos.length - cabem) };
+  if (todos.length <= linhas) return { itens: todos, fora: 0 };
+  const mostrados = Math.max(0, linhas - 1);
+  return { itens: todos.slice(0, mostrados), fora: todos.length - mostrados };
 }
 
-function CelulaDoDia({ dia, hoje, doMes, cabem }: { dia: DiaDoCalendario; hoje: string; doMes: boolean; cabem: number | null }) {
+type CelulaProps = { dia: DiaDoCalendario; hoje: string; doMes: boolean; cabem: number | null; adivinhar: Adivinhar };
+
+function CelulaDoDia({ dia, hoje, doMes, cabem, adivinhar }: CelulaProps) {
   const itens = [...dia.diaInteiro, ...dia.horarios];
   const eventos = itens.filter((i) => i.tipo === 'evento');
   const itensDeTarefa = itens.filter((i) => i.tipo !== 'evento');
@@ -151,8 +165,7 @@ function CelulaDoDia({ dia, hoje, doMes, cabem }: { dia: DiaDoCalendario; hoje: 
   const passado = dia.data < hoje;
   const pontos = Math.min(eventos.length, PONTOS_NO_MAXIMO);
   const aneis = Math.min(tarefas, ANEIS_NO_MAXIMO);
-  // Medido, o "+N" conta o que não coube nos títulos; sem medir, o que não coube nos pontos.
-  const extra = cabem === null ? eventos.length - pontos + (tarefas - aneis) : titulos.fora;
+  const extra = eventos.length - pontos + (tarefas - aneis);
   const nome = `${diaPorExtenso(dia.data, hoje)}${eHoje ? ', hoje' : passado ? ', passado' : ''}, ${resumo(eventos.length, tarefas)}`;
 
   return (
@@ -179,10 +192,16 @@ function CelulaDoDia({ dia, hoje, doMes, cabem }: { dia: DiaDoCalendario; hoje: 
       </span>
       <span class="mes-titulos" aria-hidden="true">
         {titulos.itens.map((item) => (
-          <span key={item.chave} class="mes-titulo" data-tipo={item.tipo === 'evento' ? 'evento' : 'tarefa'}>
+          <span
+            key={item.chave}
+            class={`mes-titulo ${corDaSalaDoItem(item, adivinhar)}`}
+            data-tipo={item.tipo === 'evento' ? 'evento' : 'tarefa'}
+            data-feito={String(item.tipo === 'evento' ? item.evento.feito === true : item.tarefa.feito)}
+          >
             {tituloDoItem(item)}
           </span>
         ))}
+        {titulos.fora > 0 && <span class="mes-mais">{`e mais ${titulos.fora}`}</span>}
       </span>
     </a>
   );

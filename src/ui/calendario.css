@@ -275,50 +275,195 @@
   font-size: 0.9rem;
 }
 
-/* Página larga: sete colunas, uma por dia. */
+/* A régua das horas e a linha de agora só existem na grade (página larga). */
+.sem-regua,
+.sem-agora {
+  display: none;
+}
+
+/*
+ * Página larga: a grade de horas do modelo. Uma coluna estreita com as horas e
+ * sete colunas de dia; cada dia tem o título (hoje em pílula coral), o dia inteiro
+ * no alto e, embaixo, os blocos na hora deles. As três faixas se alinham entre os
+ * dias (subgrid). A posição de cada bloco vem de --ini e --dur (minutos), postas
+ * pela Semana; a altura de uma hora é a altura da grade dividida pelas horas.
+ */
 @container semana (min-width: 40rem) {
   .semana-dias {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    align-items: start;
-    gap: 6px;
+    grid-template-columns: 2.6rem repeat(7, minmax(0, 1fr));
+    grid-template-rows: auto auto minmax(calc(var(--horas, 12) * 3.25rem), 1fr);
+    gap: 0;
+    height: 100%;
   }
-  .semana-dias .cal-dia {
-    padding: 8px 5px 10px;
+  .sem-regua,
+  .semana-dias > .cal-dia {
+    display: grid;
+    grid-row: 1 / 4;
+    grid-template-rows: subgrid;
+    min-width: 0;
+  }
+  .semana-dias > .cal-dia,
+  .semana-dias > .cal-dia[data-hoje='true'] {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
   }
   .semana-dias .cal-dia-titulo {
-    gap: 0 4px;
-    margin-bottom: 6px;
-    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 2px;
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--linha);
+    color: var(--tinta2);
+    font: 500 0.88rem/1.2 var(--ui);
+    white-space: nowrap;
   }
   .semana-dias .cal-dia-numero {
-    font-size: 1.45rem;
+    font: inherit;
+  }
+  .semana-dias .cal-dia[data-hoje='true'] .cal-dia-titulo {
+    border-bottom-color: transparent;
+    border-radius: 12px;
+    background: var(--coral);
+    color: var(--coral-t);
+    font-weight: 600;
   }
   .semana-dias .cal-hoje {
-    margin-left: 0;
-    padding: 0 7px;
-    font-size: 0.7rem;
+    display: none;
   }
-  .semana-dias .cal-lista {
-    gap: 6px;
+
+  /* Dia inteiro: pílulas no alto da coluna. */
+  .sem-topo {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    min-height: 2rem;
+    padding: 4px 3px;
+    border-bottom: 1px solid var(--linha);
+  }
+  .sem-topo .cal-lista {
+    gap: 3px;
+  }
+  /* No alto, uma linha por item: título cortado com "…"; o resto fica para o leitor de tela. */
+  .sem-topo .cal-botao,
+  .sem-topo .cal-tarefa {
+    align-content: center;
+    padding: 2px 7px;
+  }
+  .sem-topo .cal-tarefa {
+    border-radius: 6px 8px 8px 6px;
+  }
+  .sem-topo .cal-titulo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sem-topo .cal-meta,
+  .sem-topo .cal-vazio {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* As horas: linhas finas a cada hora, e os blocos por cima. */
+  .sem-horas {
+    position: relative;
+    min-height: 0;
+    border-left: 1px solid var(--fio);
+    background-image: linear-gradient(to bottom, var(--fio) 1px, transparent 1px);
+    background-size: 100% calc(100% / var(--horas, 12));
+  }
+  .sem-blocos {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+  .sem-blocos > .cal-item {
+    position: absolute;
+    top: calc(var(--ini, 0) / var(--minutos) * 100% + 1px);
+    left: calc(var(--coluna, 0) / var(--colunas, 1) * 100% + 3px);
+    width: calc(100% / var(--colunas, 1) - 6px);
+    height: max(var(--toque), calc(var(--dur, 60) / var(--minutos) * 100% - 2px));
+    overflow: hidden;
+  }
+  .sem-blocos > .cal-item:hover,
+  .sem-blocos > .cal-item:focus-within {
+    z-index: 3;
+  }
+  .sem-agora {
+    position: absolute;
+    z-index: 4;
+    top: calc(var(--ini) / var(--minutos) * 100%);
+    right: 0;
+    left: 0;
+    display: block;
+    height: 2px;
+    background: var(--alerta);
+    pointer-events: none;
+  }
+  .sem-agora::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--alerta);
+  }
+
+  /* Régua: a hora no alto de cada faixa. */
+  .sem-regua-horas {
+    display: grid;
+    grid-template-rows: repeat(var(--horas, 12), minmax(0, 1fr));
+  }
+  .sem-regua-horas span {
+    padding: 3px 6px 0 0;
+    color: var(--tinta3);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  /* Blocos e pílulas: na cor clara da sala, título em negrito na cor forte. */
+  .semana-dias .cal-evento {
+    border-radius: 10px;
   }
   .semana-dias .cal-botao,
   .semana-dias .cal-tarefa {
     grid-template-columns: minmax(0, 1fr);
-    padding: 5px 6px 7px;
+    align-content: start;
+    padding: 4px 7px;
+  }
+  .sem-blocos .cal-botao {
+    height: 100%;
   }
   .semana-dias .cal-hora {
-    min-width: 0;
-    font-size: 1.1rem;
+    display: none;
   }
   .semana-dias .cal-titulo {
-    font-size: 0.82rem;
+    color: var(--c, var(--tinta));
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.2;
     hyphens: auto;
     overflow-wrap: break-word;
   }
-  .semana-dias .cal-meta {
-    gap: 2px 5px;
-    font-size: 0.74rem;
+  .semana-dias .cal-item[data-passado='true'] .cal-titulo {
+    color: color-mix(in srgb, var(--c, var(--tinta)) 70%, var(--folha));
   }
+  .semana-dias .cal-meta {
+    gap: 2px 4px;
+    font-size: 0.72rem;
+  }
+  .semana-dias .etiqueta,
   .semana-dias .cal-quando-simples {
     position: absolute;
     width: 1px;
@@ -330,15 +475,18 @@
   }
   .semana-dias .cal-nota {
     padding: 0 6px;
-    font-size: 0.7rem;
+    border-color: currentColor;
+    color: var(--c, var(--tinta2));
+    font-size: 0.68rem;
   }
-  .semana-dias .etiqueta {
-    max-width: 100%;
-    padding: 0 7px;
-    overflow: hidden;
-    font-size: 0.7rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* Tarefa com hora: bloco branco com o filete da sala; prazo: marcador. */
+  .sem-blocos .cal-tarefa {
+    border-radius: 6px 10px 10px 6px;
+  }
+  .sem-blocos .cal-prazo {
+    border: 1px solid var(--c, var(--campo));
+    border-radius: 10px;
+    background: var(--folha);
   }
 }
 
@@ -504,55 +652,110 @@
   }
 }
 
-/* Página larga: cabem os títulos (dois eventos; no computador, quantos couberem). */
+/*
+ * Página larga: como no modelo. Grade de linhas finas dentro do cartão, número do dia
+ * no canto (hoje num círculo coral), dias de fora em cinza-claro e cada compromisso
+ * como pílula na cor clara da sala, com o texto na cor forte; o que não cabe vira
+ * "e mais N". Os pontos e a legenda deles ficam só no celular.
+ */
 @container mes (min-width: 36rem) {
-  .mes-dia {
+  .mes-grade {
+    border: 1px solid var(--fio);
+    border-radius: var(--r-m);
+    border-spacing: 0;
+  }
+  .mes-grade th {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--fio);
+    color: var(--tinta2);
+    font: 500 0.8rem/1.2 var(--ui);
+    text-align: left;
+  }
+  .mes-grade td + td {
+    border-left: 1px solid var(--fio);
+  }
+  .mes-grade tbody tr + tr td {
+    border-top: 1px solid var(--fio);
+  }
+  .mes-grade tbody tr:last-child td:first-child,
+  .mes-grade tbody tr:last-child td:first-child .mes-dia {
+    border-bottom-left-radius: calc(var(--r-m) - 1px);
+  }
+  .mes-grade tbody tr:last-child td:last-child,
+  .mes-grade tbody tr:last-child td:last-child .mes-dia {
+    border-bottom-right-radius: calc(var(--r-m) - 1px);
+  }
+  .mes-dia,
+  .mes-dia[data-hoje='true'] {
+    gap: 2px;
     min-height: 92px;
+    padding: 6px;
+    border-radius: 0;
+    background: var(--folha);
+    color: var(--tinta);
+  }
+  .mes-dia:hover,
+  .mes-dia[data-hoje='true']:hover {
+    background: var(--poco);
+  }
+  .mes-dia[data-fora='true'] {
+    background: var(--poco);
+    color: var(--tinta3);
+  }
+  .mes-numero {
+    padding: 1px 0;
+    font: 600 0.82rem/1.25 var(--ui);
+  }
+  .mes-dia[data-hoje='true'] .mes-numero {
+    padding: 1px 8px;
+    border-radius: 99px;
+    background: var(--coral);
+    color: var(--coral-t);
+  }
+  .mes-pontos,
+  .cal-legenda {
+    display: none;
   }
   .mes-titulos {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    align-items: flex-start;
+    gap: 2px;
     align-self: stretch;
     min-width: 0;
-    font-size: 0.74rem;
-    line-height: 1.45;
+    font-size: 0.72rem;
+    line-height: 1.5;
   }
   .mes-titulo {
     display: block;
-    max-width: 100%;
-    padding: 0 5px;
+    padding: 0 6px;
     overflow: hidden;
-    border-radius: 4px;
-    background: var(--agua);
-    color: var(--tinta);
-    font-size: 0.74rem;
-    line-height: 1.45;
+    border-radius: 6px;
+    background: var(--f, var(--poco));
+    color: var(--c, var(--tinta));
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mes-dia[data-passado='true'] .mes-titulo,
-  .mes-dia[data-fora='true'] .mes-titulo {
-    background: var(--fio);
+  /* O que passou continua na cor da sala, só mais clara. */
+  .mes-dia[data-passado='true'] .mes-titulo {
+    background: color-mix(in srgb, var(--f, var(--poco)) 55%, var(--folha));
+  }
+  .mes-titulo[data-feito='true'] {
+    text-decoration: line-through;
+  }
+  .mes-mais {
+    padding: 0 2px;
     color: var(--tinta2);
   }
-  .mes-dia[data-hoje='true'] .mes-titulo {
-    background: #fff;
-    color: var(--pinho2);
-  }
-  /* Tarefa: contorno, como o anel; evento: fundo cheio, como o ponto. */
-  .mes-titulo[data-tipo='tarefa'],
-  .mes-dia[data-passado='true'] .mes-titulo[data-tipo='tarefa'],
-  .mes-dia[data-fora='true'] .mes-titulo[data-tipo='tarefa'] {
-    background: transparent;
-    box-shadow: inset 0 0 0 1px var(--campo);
-  }
-  .mes-dia[data-hoje='true'] .mes-titulo[data-tipo='tarefa'] {
-    background: transparent;
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7);
-    color: #fff;
-  }
+}
+
+.casca[data-tela='computador'] .pagina > .semana[data-modo='dias'] {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+.casca[data-tela='computador'] .semana > .semana-corpo {
+  flex: 1 1 auto;
 }
 
 /*
@@ -562,6 +765,7 @@
  * guarda um mínimo e a página rola. Tablet e celular seguem com a altura do conteúdo.
  */
 .casca[data-tela='computador'] .pagina:has(> .mes),
+.casca[data-tela='computador'] .pagina:has(> .semana),
 .casca[data-tela='computador'] .pagina:has(> .ano) {
   display: flex;
   flex-direction: column;
@@ -675,26 +879,74 @@
 }
 
 /*
- * Tablet e computador: grade uniforme, sem buracos. Quantas colunas, pela largura
- * da página: 4 x 3, 3 x 4 ou 2 x 6. No computador as caixas esticam até o fim da
- * janela (com um mínimo; abaixo dele a página rola) e o mini calendário estica junto.
- * Celular: como sempre foi.
+ * Tablet e computador: como no modelo. Os doze meses num cartão branco só, em três
+ * colunas (duas, se a página for estreita), sem buracos; título do mês com a letra
+ * de títulos; os dias com espaço, e o dia com compromisso num círculo na cor da sala
+ * (hoje em coral). No computador a grade ocupa o painel até o fim da janela: as
+ * linhas de meses dividem a altura que sobra. Celular: como sempre foi.
  */
 .casca:not([data-tela='celular']) .ano {
   container: ano / inline-size;
 }
 .casca:not([data-tela='celular']) .ano-meses {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 28px;
+  padding: 20px 24px 24px;
+  border-radius: var(--r-g);
+  background: var(--folha);
+  box-shadow: var(--relevo);
 }
-@container ano (min-width: 30rem) {
+@container ano (min-width: 34rem) {
   .casca:not([data-tela='celular']) .ano-meses {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-@container ano (min-width: 44rem) {
-  .casca:not([data-tela='celular']) .ano-meses {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+.casca:not([data-tela='celular']) .ano-mes {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.casca:not([data-tela='celular']) .ano-mes .ano-mes-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 1.45rem;
+}
+.casca:not([data-tela='celular']) .ano-contagem {
+  margin-bottom: 8px;
+}
+.casca:not([data-tela='celular']) .ano-mini {
+  flex: 1 1 auto;
+  /* Sete linhas em todo mês (as letras e até seis semanas): os meses ficam alinhados. */
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+  align-items: center;
+  justify-items: center;
+}
+.casca:not([data-tela='celular']) .ano-letra,
+.casca:not([data-tela='celular']) .ano-dia {
+  width: min(100%, 1.8rem);
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.casca:not([data-tela='celular']) .ano-dia[data-tem='true'] {
+  background: var(--f, var(--agua));
+  color: var(--c, var(--tinta));
+  font-weight: 600;
+  text-decoration: none;
+}
+.casca:not([data-tela='celular']) .ano-dia[data-tem='true'][data-passado='true'] {
+  background: color-mix(in srgb, var(--f, var(--agua)) 60%, var(--folha));
+}
+.casca:not([data-tela='celular']) .ano-dia[data-hoje='true'] {
+  background: var(--coral);
+  color: var(--coral-t);
+  font-weight: 600;
 }
 .casca[data-tela='computador'] .pagina > .ano {
   display: flex;
@@ -703,28 +955,7 @@
 }
 .casca[data-tela='computador'] .ano-meses {
   flex: 1 1 auto;
-  grid-auto-rows: minmax(12.5rem, 1fr);
-}
-.casca[data-tela='computador'] .ano-mes {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.casca[data-tela='computador'] .ano-mini {
-  flex: 1 1 auto;
-  grid-template-rows: repeat(7, minmax(0, 1fr));
-  place-items: center;
-}
-.casca[data-tela='computador'] .ano-letra,
-.casca[data-tela='computador'] .ano-dia {
-  width: min(100%, 2.4rem);
-  height: min(100%, 2.4rem);
-  aspect-ratio: auto;
-  font-size: 0.74rem;
-}
-.casca[data-tela='computador'] .ano-dia[data-tem='true'],
-.casca[data-tela='computador'] .ano-dia[data-hoje='true'] {
-  border-radius: 99px;
+  grid-auto-rows: 1fr;
 }
 
 /* ---- Detalhes do evento ---- */
