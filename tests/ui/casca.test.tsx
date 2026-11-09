@@ -172,7 +172,7 @@ describe('celular (390 px): barra inferior com Mais', () => {
     expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('o Mais leva a Esta semana, mês, ano, Quadro, Atividades e Sem prazo', async () => {
+  it('o Mais leva a Esta semana, mês, ano, Agora, Quadro, Atividades e Sem prazo', async () => {
     await mostrar('#/', 390);
     const botao = screen.getByRole('button', { name: 'Mais' });
     expect(botao.getAttribute('aria-expanded')).toBe('false');
@@ -185,6 +185,7 @@ describe('celular (390 px): barra inferior com Mais', () => {
       ['Esta semana', '#/semana'],
       ['Novembro', '#/mes'],
       ['2026', '#/ano'],
+      ['Agora', '#/agora'],
       ['Quadro', '#/quadro'],
       ['Atividades', '#/atividades'],
       ['Sem prazo', '#/sem-prazo'],
@@ -331,7 +332,6 @@ describe('páginas', () => {
   });
 
   it.each([
-    '#/agora',
     '#/quadro',
     '#/sala/sala-mba',
   ])('%s é uma tela que ainda não existe e diz isso com o mesmo cartão', async (hash) => {
@@ -341,7 +341,7 @@ describe('páginas', () => {
   });
 
   it('as telas que existem não dizem "Em breve"', async () => {
-    for (const hash of ['#/', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat', '#/caixa']) {
+    for (const hash of ['#/', '#/agora', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat', '#/caixa']) {
       const { unmount } = render(<App />);
       navegar(hash);
       expect(within(document.querySelector('main') as HTMLElement).queryByText('Esta tela chega numa próxima versão.')).toBeNull();
@@ -654,10 +654,11 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
     expect(within(menu).getByText('As páginas das salas chegam numa próxima versão.')).toBeTruthy();
   });
 
-  it('o cartão Agora do painel direito também diz que chega depois', async () => {
+  it('o cartão Agora do painel direito já é o de verdade (Tarefa 16): sem "Em breve", com o caminho para o Agora', async () => {
     await mostrar('#/', 1280);
     const agora = within(screen.getByRole('complementary', { name: 'Agora e chat' }).querySelector('.cartao-agora') as HTMLElement);
-    expect(agora.getByText('Em breve')).toBeTruthy();
+    expect(agora.queryByText('Em breve')).toBeNull();
+    expect(agora.getByRole('link', { name: 'Abrir o Agora' }).getAttribute('href')).toBe('#/agora');
   });
 
   it('na folha Mais do celular: só o Quadro tem a marca; o calendário, Atividades e Sem prazo, não', async () => {

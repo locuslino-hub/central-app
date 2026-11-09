@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
-import { assinar, listar } from '../dados/loja';
+import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
-import type { Colecoes, EstadoEmail, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { Colecoes, Config, EstadoEmail, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -150,4 +150,25 @@ export function usePessoas(): Pessoa[] | undefined {
 export function usePessoa(id: string | undefined): Pessoa | null | undefined {
   const lista = useLista('pessoas');
   return lista && (lista.find((pessoa) => pessoa.id === id) ?? null);
+}
+
+/** Os ajustes (fim do dia, dia fechado), relidos quando mudam aqui ou no outro aparelho. `undefined` enquanto lê. */
+export function useConfig(): Config | undefined {
+  const [config, setConfig] = useState<Config>();
+  useEffect(() => {
+    let ativo = true;
+    const ler = () =>
+      lerConfig()
+        .then((lido) => ativo && setConfig(lido))
+        .catch((erro: unknown) => console.error('Não consegui ler os ajustes', erro));
+    void ler();
+    const parar = assinar((mudanca) => {
+      if (mudanca.colecao === 'config') void ler();
+    });
+    return () => {
+      ativo = false;
+      parar();
+    };
+  }, []);
+  return config;
 }

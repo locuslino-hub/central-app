@@ -70,8 +70,12 @@ export type EstadoEmail = Base & { feito: boolean; adiadaAte?: string };
 
 export type Rascunho = Base & { texto: string; salaId?: string | null };
 
-/** Ajustes do dono. `fimDoDia`: `HH:MM`. */
-export type Config = Base & { fimDoDia: string };
+/**
+ * Ajustes do dono. `fimDoDia`: `HH:MM`. `diaFechado` (Tarefa 16): o dia
+ * (`AAAA-MM-DD`) em que o dono deu o passo final de Fechar o dia. Sincroniza
+ * com o resto dos ajustes: o dia fechado no notebook aparece fechado no celular.
+ */
+export type Config = Base & { fimDoDia: string; diaFechado?: string };
 
 export type Colecoes = {
   salas: Sala;

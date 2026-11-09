@@ -1,7 +1,7 @@
 // O que as telas de tarefas fazem com uma tarefa (Tarefa 9). Cada operação lê o
 // registro de novo na hora de escrever e muda só o seu campo: uma edição que
 // chegou do outro aparelho nesse meio tempo não é desfeita. Tudo passa por `salvar`.
-import { dataValida, segundaDaSemana } from '../chat/datas';
+import { dataValida, segundaDaSemana, somarDias } from '../chat/datas';
 import { desfazer, type Desfazivel } from './desfazer';
 import { apagar, lerRegistros, salvar } from './loja';
 import type { ParaSalvar, Tarefa } from './tipos';
@@ -147,5 +147,87 @@ export async function apagarTarefa(id: string): Promise<Desfazivel | undefined> 
   if (!antes) return undefined;
   return desfazer.registrar(`Tarefa apagada: ${antes.titulo}`, async () => {
     await salvar('tarefas', antes);
+  });
+}
+
+// ---- Agora e Fechar o dia (Tarefa 16) ----
+
+/**
+ * "Agora não" do Agora: a tarefa sai da fila até amanhã (`adiadaAte`). Ela
+ * continua onde estava (na checklist de hoje, por exemplo). Desfazer devolve o
+ * adiamento que havia antes, ou nenhum.
+ */
+export async function adiarTarefa(id: string, hoje: string): Promise<Desfazivel | undefined> {
+  const antes = await lerTarefa(id);
+  if (!antes) return undefined;
+  const anterior = antes.adiadaAte;
+  const feita = await atualizar(id, (tarefa) => ({ ...tarefa, adiadaAte: somarDias(hoje, 1) }));
+  if (!feita) return undefined;
+  return desfazer.registrar(`Volta amanhã: ${feita.titulo}`, async () => {
+    await atualizar(id, ({ adiadaAte: _adiada, ...resto }) =>
+      (anterior === undefined ? resto : { ...resto, adiadaAte: anterior }) as Tarefa,
+    );
+  });
+}
+
+/** Para onde Fechar o dia leva uma tarefa que ficou: o dia seguinte a `hoje`, ou Sem prazo. */
+export type Destino = { tipo: 'amanha'; hoje: string } | { tipo: 'sem-prazo' };
+
+type Lugar = Pick<Tarefa, 'data' | 'semana' | 'semanaVencida'>;
+
+/** Move sem registrar o desfazer; devolve o lugar de antes e o título, ou `undefined` se não moveu. */
+async function moverSemRegistrar(id: string, destino: Destino): Promise<{ lugar: Lugar; titulo: string } | undefined> {
+  if (destino.tipo === 'amanha' && !diaExiste(destino.hoje)) return undefined;
+  const antes = await lerTarefa(id);
+  if (!antes) return undefined;
+  // Prazo e compromisso têm hora: sem dia, perderiam o sentido.
+  if (destino.tipo === 'sem-prazo' && (antes.inicio || antes.prazoHora)) return undefined;
+  const lugar: Lugar = { data: antes.data, semana: antes.semana, semanaVencida: antes.semanaVencida };
+  const feita = await atualizar(id, (tarefa) => {
+    const { data: _data, ...resto } = semSemana(tarefa) as Tarefa;
+    return (destino.tipo === 'amanha' ? { ...resto, data: somarDias(destino.hoje, 1) } : resto) as Tarefa;
+  });
+  return feita && { lugar, titulo: feita.titulo };
+}
+
+/** Devolve data, semana e aviso da semana como eram; o resto da tarefa fica como está agora. */
+function devolverLugar(id: string, lugar: Lugar) {
+  return async () => {
+    await atualizar(id, ({ data: _data, semana: _semana, semanaVencida: _vencida, ...resto }) => {
+      const volta: Partial<Lugar> = {};
+      if (lugar.data !== undefined) volta.data = lugar.data;
+      if (lugar.semana !== undefined) volta.semana = lugar.semana;
+      if (lugar.semanaVencida !== undefined) volta.semanaVencida = lugar.semanaVencida;
+      return { ...resto, ...volta } as Tarefa;
+    });
+  };
+}
+
+const rotuloDoDestino = (destino: Destino) => (destino.tipo === 'amanha' ? 'Para amanhã' : 'Em Sem prazo');
+
+/**
+ * Leva a tarefa para amanhã ou para Sem prazo (Fechar o dia) e devolve a
+ * entrada do desfazer. `undefined`, sem gravar, se a tarefa sumiu, o dia não
+ * existe ou ela tem hora (prazo, compromisso) e o destino é Sem prazo.
+ */
+export async function moverTarefa(id: string, destino: Destino): Promise<Desfazivel | undefined> {
+  const movida = await moverSemRegistrar(id, destino);
+  if (!movida) return undefined;
+  return desfazer.registrar(`${rotuloDoDestino(destino)}: ${movida.titulo}`, devolverLugar(id, movida.lugar));
+}
+
+/** Várias de uma vez ("Passar todas para amanhã"), com um Desfazer só. */
+export async function moverTarefas(ids: readonly string[], destino: Destino): Promise<Desfazivel | undefined> {
+  const voltas: (() => Promise<void>)[] = [];
+  for (const id of ids) {
+    const movida = await moverSemRegistrar(id, destino);
+    if (movida) voltas.push(devolverLugar(id, movida.lugar));
+  }
+  if (voltas.length === 0) return undefined;
+  const n = voltas.length;
+  const quantas = n === 1 ? '1 tarefa' : `${n} tarefas`;
+  const rotulo = destino.tipo === 'amanha' ? `${quantas} para amanhã` : `${quantas} em Sem prazo`;
+  return desfazer.registrar(rotulo, async () => {
+    for (const voltar of voltas) await voltar();
   });
 }

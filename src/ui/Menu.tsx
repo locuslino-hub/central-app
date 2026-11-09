@@ -33,6 +33,8 @@ function rotuloDe(id: IdComHref, hoje: Date): string {
       return nomeDoMes(hoje);
     case 'ano':
       return String(hoje.getFullYear());
+    case 'agora':
+      return 'Agora';
     case 'salas':
       return 'Salas';
     case 'caixa':

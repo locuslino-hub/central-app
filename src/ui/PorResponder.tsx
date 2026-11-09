@@ -10,6 +10,7 @@ import { linkSeguro, type LeituraDeEmails } from '../dados/emails';
 import type { Sala } from '../dados/tipos';
 import { useDia, useSalas, usePessoas } from './hooks';
 import { corDaSala } from './Menu';
+import { nEmails } from './plural';
 import { diaMes } from './quando';
 import { useCaixaDeEmails, type Caixa, type ItemDeEmail } from './useEmails';
 import './emails.css';
@@ -22,7 +23,7 @@ const HORA_DE_LISBOA = new Intl.DateTimeFormat('pt-PT', {
   hourCycle: 'h23',
 });
 
-export const nEmails = (n: number) => (n === 1 ? '1 e-mail' : `${n} e-mails`);
+export { nEmails } from './plural';
 
 /** "Hoje, 10:20", "Ontem, 18:05" ou "3/11, 09:40". A data do e-mail já vem com a hora de Lisboa. */
 export function quandoChegou(data: string, hoje: string): string {

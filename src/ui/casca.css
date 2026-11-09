@@ -472,13 +472,13 @@
   padding: 14px 14px 14px 0;
   overflow-y: auto;
 }
-.painel-direito section {
+.painel-direito > section {
   padding: 18px 20px 20px;
   border-radius: var(--r-g);
   background: var(--folha);
   box-shadow: var(--relevo);
 }
-.painel-direito h2 {
+.painel-direito > section > h2 {
   display: flex;
   align-items: center;
   gap: 8px;

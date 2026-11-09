@@ -1,0 +1,659 @@
+/* Painel do dia, Agora e Fechar o dia (Tarefa 16). Moderno 3, paleta Sálvia:
+   cartões brancos em relevo macio, títulos em serifa, destaque em água com a
+   curva do protótipo, coral só na ação principal. Só classes, como o resto do app.
+   As cores das salas vêm de .sala-* (--c texto, --f fundo). Toque mínimo: 44 px. */
+
+.painel-do-dia {
+  display: grid;
+  /* minmax(0, …): a faixa das salas no celular rola por dentro e não alarga a página. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
+}
+.painel-do-dia > * {
+  min-width: 0;
+}
+.painel-do-dia .hoje-grade + .hoje-grade {
+  margin-top: 0;
+}
+
+/* Cabeçalho de cartão com uma nota à direita (a linha do dia diz o tempo livre). */
+.cartao-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  margin-bottom: 6px;
+}
+.cartao-topo h2 {
+  margin: 0;
+}
+.cartao-topo-nota,
+.agora-livre {
+  margin: 0;
+  padding: 5px 14px;
+  border-radius: 99px;
+  background: var(--poco);
+  box-shadow: var(--poco-in);
+  color: var(--tinta2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.painel-contagem {
+  color: var(--tinta2);
+  font: 500 0.95rem var(--ui);
+}
+.a-seguir h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+/* ---- 1. Mensagem do dia ---- */
+
+.mensagem-do-dia {
+  display: grid;
+  gap: 2px;
+  padding: 2px 4px 4px;
+}
+.mensagem-data {
+  order: -1;
+  margin: 0;
+  color: var(--tinta3);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mensagem-saudacao {
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 2.2rem;
+  line-height: 1.05;
+}
+.mensagem-saudacao::after {
+  content: '.';
+  color: var(--coral2);
+}
+.mensagem-resumo {
+  max-width: 62ch;
+  margin: 6px 0 0;
+  color: var(--tinta2);
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+.mensagem-fim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 10px 0 0;
+  color: var(--tinta);
+  font-weight: 500;
+}
+
+/* ---- 3. Caixas das salas ---- */
+
+.caixas-salas-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.caixa-sala {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 4.9rem;
+  height: 100%;
+  padding: 13px 16px 14px;
+  border-radius: var(--r-m);
+  background: var(--f);
+  box-shadow: var(--relevo-p);
+  color: var(--c);
+  text-decoration: none;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.caixa-sala::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -24px;
+  bottom: -34px;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c) 10%, var(--f));
+}
+.caixa-sala:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--relevo);
+}
+.caixa-sala:focus-visible {
+  outline: 2.5px solid var(--c);
+  outline-offset: 2px;
+}
+.caixa-sala-nome {
+  margin-bottom: 2px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.caixa-sala-conta {
+  color: var(--tinta2);
+  font-size: 0.87rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+/* Sala em dia: fica quieta, sem fundo de cor. A palavra "Em dia" diz o mesmo. */
+.caixa-sala[data-vazia='true'] {
+  background: var(--folha);
+}
+.caixa-sala[data-vazia='true']::after {
+  background: var(--f);
+}
+.caixa-sala[data-vazia='true'] .caixa-sala-conta {
+  color: var(--tinta3);
+}
+
+/* ---- A seguir: a fila ---- */
+
+.tempo-livre {
+  margin: 0 0 6px;
+}
+.tempo-livre-ate {
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+.tempo-livre-quanto {
+  margin: 2px 0 0;
+  color: var(--tinta2);
+  font-variant-numeric: tabular-nums;
+}
+.fila {
+  container: fila / inline-size;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fila-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'ponto texto selo'
+    '. acao acao';
+  align-items: center;
+  column-gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--fio);
+}
+.fila-item > .fila-ponto {
+  grid-area: ponto;
+  align-self: start;
+  margin-top: 6px;
+}
+.fila-item > .fila-texto {
+  grid-area: texto;
+}
+.fila-item > .fila-cabe {
+  grid-area: selo;
+}
+.fila-item > .fila-responder {
+  grid-area: acao;
+  justify-self: start;
+  margin-top: 8px;
+}
+/* Com espaço, Responder fica na mesma linha, depois do selo. */
+@container fila (min-width: 30rem) {
+  .fila-item {
+    grid-template-columns: 10px minmax(0, 1fr) auto auto;
+    grid-template-areas: 'ponto texto selo acao';
+  }
+  .fila-item > .fila-responder {
+    margin-top: 0;
+  }
+}
+.fila-item:first-child {
+  border-top: 0;
+}
+/* Ponto de cor da sala; e-mail é um anel, para não depender só da cor. */
+.fila-ponto {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.fila-ponto[data-tipo='email'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--tinta3);
+}
+.fila-texto {
+  min-width: 0;
+}
+.fila-titulo {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.fila-detalhes {
+  margin: 2px 0 0;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+.fila-cabe {
+  flex: none;
+  padding: 3px 11px;
+  border-radius: 99px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.fila-cabe[data-cabe='true'] {
+  background: var(--cabe);
+  color: var(--pinho2);
+}
+.fila-cabe[data-cabe='false'] {
+  background: var(--poco);
+  color: var(--tinta3);
+}
+.fila-responder {
+  padding: 0 16px;
+  font-size: 0.9rem;
+}
+.fila-rodape {
+  margin: 12px 0 0;
+}
+
+/* ---- 7. Fechar o dia ---- */
+
+.fechar-resumo {
+  margin: 0 0 14px;
+  color: var(--tinta2);
+  font-size: 1.05rem;
+}
+.fechar-grupos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 14px;
+}
+.fechar-grupo {
+  min-width: 0;
+  padding: 14px 18px 8px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+}
+.fechar-grupo-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: var(--toque);
+  margin-bottom: 4px;
+}
+.fechar-grupo h3 {
+  margin: 0;
+  font: 600 1rem/1.3 var(--ui);
+}
+.fechar-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fechar-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--linha);
+}
+.fechar-item-texto {
+  flex: 1 1 11rem;
+  min-width: 0;
+}
+.fechar-item-titulo {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.fechar-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin: 3px 0 0;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+}
+.fechar-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fechar-acoes .botao {
+  padding: 0 16px;
+  font-size: 0.92rem;
+}
+.fechar-final {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 14px;
+  padding: 14px 16px 14px 20px;
+  border-radius: var(--r-m);
+  background: var(--pessego);
+}
+.fechar-final p {
+  margin: 0;
+  font-weight: 500;
+}
+.fechar-fechado {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 18px 22px 20px;
+  border-radius: 22px 22px 64px 22px;
+  background: var(--agua);
+}
+.fechar-fechado::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -58px;
+  right: -46px;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: var(--agua2);
+}
+.fechar-fechado p {
+  max-width: 52ch;
+  margin: 0 0 12px;
+}
+.fechar-fechado .fechar-fechado-titulo {
+  margin: 0 0 4px;
+  font-family: var(--titulo);
+  font-size: 1.9rem;
+  line-height: 1.1;
+}
+
+/* ---- Agora: o destaque ---- */
+
+.destaque {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 20px 24px 24px;
+  border-radius: 26px 26px 72px 26px;
+  background: var(--agua);
+  color: var(--tinta);
+}
+.destaque::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -64px;
+  right: -52px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--agua2);
+}
+.destaque-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.destaque .etiqueta {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.5);
+}
+.destaque-duracao {
+  color: var(--tinta);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.destaque .fila-cabe[data-cabe='false'] {
+  background: rgb(255 255 255 / 0.6);
+  color: var(--tinta2);
+}
+.destaque .fila-cabe[data-cabe='true'] {
+  background: var(--folha);
+}
+.destaque-titulo {
+  margin: 12px 0 6px;
+  font-family: var(--titulo);
+  font-size: 2.5rem;
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.destaque-trecho {
+  max-width: 60ch;
+  margin: 0 0 6px;
+}
+.destaque-porque {
+  margin: 0;
+  color: var(--pinho2);
+  font-weight: 600;
+}
+.destaque-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.destaque-acoes .botao:not(.primario) {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.72);
+}
+.destaque-acoes .botao:not(.primario):hover {
+  background: var(--folha);
+}
+
+/* O cartão curto do painel direito. */
+.agora-curto {
+  display: grid;
+  gap: 10px;
+}
+.agora-livre {
+  justify-self: start;
+}
+.destaque[data-curto='true'] {
+  padding: 15px 16px 18px;
+  border-radius: 22px 22px 56px 22px;
+}
+.destaque[data-curto='true']::after {
+  top: -58px;
+  right: -46px;
+  width: 160px;
+  height: 160px;
+}
+.destaque[data-curto='true'] .destaque-titulo {
+  margin: 8px 0 4px;
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+.destaque[data-curto='true'] .destaque-porque {
+  font-size: 0.9rem;
+}
+.destaque[data-curto='true'] .destaque-acoes {
+  gap: 6px;
+  margin-top: 12px;
+}
+.destaque[data-curto='true'] .botao {
+  padding: 0 14px;
+  font-size: 0.92rem;
+}
+.agora-depois-titulo {
+  margin: 4px 0 0;
+  color: var(--tinta3);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.agora-depois {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.agora-depois li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--tinta2);
+  font-size: 0.93rem;
+}
+.agora-depois li span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agora-abrir {
+  margin: 2px 0 0;
+}
+.agora-vazio-curto {
+  margin: 0;
+  color: var(--tinta2);
+}
+/* Janela baixa (notebook): o chat embaixo precisa de altura; os próximos ficam no Agora. */
+@media (max-height: 880px) {
+  .agora-depois-titulo,
+  .agora-depois {
+    display: none;
+  }
+}
+.agora-vazio {
+  padding: 16px 18px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+}
+
+/* ---- Agora: a página, com abas ---- */
+
+.agora-pagina {
+  max-width: 54rem;
+}
+.abas {
+  display: flex;
+  max-width: 32rem;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: var(--poco-in);
+}
+.aba {
+  flex: 1 1 auto;
+  min-height: var(--toque);
+  padding: 0 14px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--tinta2);
+  font: 500 0.95rem var(--ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.aba:hover {
+  color: var(--tinta);
+}
+.aba:focus-visible {
+  outline-offset: -3px;
+}
+.aba[aria-selected='true'] {
+  background: var(--folha);
+  color: var(--tinta);
+  font-weight: 600;
+  box-shadow: var(--relevo-p);
+}
+.aba-painel {
+  margin-top: 20px;
+}
+.agora-conteudo {
+  display: grid;
+  gap: 18px;
+}
+.agora-conteudo > .tempo-livre {
+  margin: 0;
+}
+.agora-conteudo > .tempo-livre .tempo-livre-ate {
+  font-size: 2rem;
+  line-height: 1.12;
+}
+.agora-conteudo > .tarefa-apagada {
+  margin: 0;
+}
+.triagem-conta {
+  margin: 4px 0 10px;
+  font-family: var(--titulo);
+  font-size: 1.35rem;
+}
+
+/* ---- Celular ---- */
+
+@media (max-width: 699px) {
+  .mensagem-saudacao {
+    font-size: 1.95rem;
+  }
+  /* As salas viram uma faixa que corre de lado (só ela; a página não rola de lado). */
+  .caixas-salas-lista {
+    display: flex;
+    gap: 10px;
+    margin: 0 -14px;
+    padding: 2px 14px 12px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-left: 14px;
+    scrollbar-width: none;
+  }
+  .caixas-salas-lista li {
+    flex: 0 0 8.75rem;
+    scroll-snap-align: start;
+  }
+  .destaque {
+    padding: 18px 18px 22px;
+    border-radius: 24px 24px 60px 24px;
+  }
+  .destaque-titulo {
+    font-size: 2rem;
+  }
+  .agora-conteudo > .tempo-livre .tempo-livre-ate {
+    font-size: 1.6rem;
+  }
+  .aba {
+    padding: 0 10px;
+    font-size: 0.9rem;
+  }
+  .fechar-final .botao {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caixa-sala:hover {
+    transform: none;
+  }
+}

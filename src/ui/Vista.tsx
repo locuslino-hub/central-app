@@ -1,22 +1,19 @@
-// A página de cada rota. Painel do dia (checklist, agenda de hoje, Por responder e Sem prazo), Semana, Mês,
-// Ano, Caixa, Sem prazo, Atividades, Salas (com o cadastro de pessoas), Conectar e Chat existem; as
-// demais mostram o título e dizem que ainda não estão prontas, até a tarefa delas chegar.
+// A página de cada rota. Painel do dia, Agora, Semana, Mês, Ano, Caixa, Sem prazo, Atividades, Salas
+// (com o cadastro de pessoas), Conectar e Chat existem; as demais mostram o título e dizem que ainda não
+// estão prontas, até a tarefa delas chegar.
 import type { ComponentChildren } from 'preact';
 import { hrefDe, type RotaAtual } from '../rotas';
-import { AgendaHoje } from './AgendaHoje';
+import { AgoraPagina } from './Agora';
 import { Ano } from './Ano';
 import { Atividades } from './Atividades';
-import { AvisoDaFila } from './AvisoDaFila';
-import { AvisosDeConflito } from './AvisosDeConflito';
 import { Caixa } from './Caixa';
 import { Chat } from './Chat';
-import { Checklist } from './Checklist';
 import { Conectar } from './Conectar';
 import { usePessoa, useSala, useSalas, useTituloDaAba } from './hooks';
 import { corDaSala } from './Menu';
 import { Mes } from './Mes';
+import { Painel } from './Painel';
 import { Pessoas } from './Pessoas';
-import { PorResponder } from './PorResponder';
 import { SemPrazo } from './SemPrazo';
 import { Semana } from './Semana';
 import './tarefas.css';
@@ -118,22 +115,15 @@ function ConectarNaCasca({ titulo }: { titulo: string }) {
 export function Vista({ rota }: { rota: RotaAtual }) {
   switch (rota.id) {
     case 'hoje':
-      // A Tarefa 17 monta o resto do Painel (mensagem do dia, linha do dia, caixas das salas...).
       return (
         <Pagina titulo={rota.titulo}>
-          <AvisosDeConflito />
-          <AvisoDaFila />
-          <div class="hoje-grade">
-            <Checklist />
-            <AgendaHoje />
-          </div>
-          {/* A Tarefa 16 põe Por responder ao lado de A seguir; por ora ele tem a sua linha. */}
-          <div class="hoje-grade">
-            <PorResponder />
-          </div>
-          <div class="hoje-grade">
-            <SemPrazo />
-          </div>
+          <Painel />
+        </Pagina>
+      );
+    case 'agora':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <AgoraPagina />
         </Pagina>
       );
     case 'semana':

@@ -19,6 +19,7 @@ export const GRUPOS_DO_MAIS: { titulo: string; destinos: Destino[] }[] = [
   {
     titulo: 'Ver',
     destinos: [
+      { id: 'agora', icone: 'agora' },
       { id: 'quadro', icone: 'quadro' },
       { id: 'atividades', icone: 'atividades' },
       { id: 'sem-prazo', icone: 'sem-prazo' },

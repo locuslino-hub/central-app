@@ -27,7 +27,6 @@ export type IdDaRota =
  * dizem "Em breve" nelas, e a página mostra um cartão que diz o mesmo.
  */
 export const ROTAS_EM_BREVE: ReadonlySet<IdDaRota> = new Set<IdDaRota>([
-  'agora',
   'quadro',
   'sala',
   'pessoa',
