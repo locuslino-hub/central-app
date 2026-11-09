@@ -5,7 +5,8 @@
     "enabledAdvancedServices": [
       { "userSymbol": "Drive", "serviceId": "drive", "version": "v3" },
       { "userSymbol": "Calendar", "serviceId": "calendar", "version": "v3" },
-      { "userSymbol": "Gmail", "serviceId": "gmail", "version": "v1" }
+      { "userSymbol": "Gmail", "serviceId": "gmail", "version": "v1" },
+      { "userSymbol": "Tasks", "serviceId": "tasks", "version": "v1" }
     ]
   },
   "webapp": {
@@ -19,6 +20,7 @@
     "https://www.googleapis.com/auth/calendar.events.owned",
     "https://www.googleapis.com/auth/calendar.events.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/script.scriptapp"
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/tasks"
   ]
 }

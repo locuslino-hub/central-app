@@ -4,6 +4,7 @@ import { provarAgenda, type ServicoDeAgenda } from './agenda';
 import { novoCodigo, resumoDoErro, tratarCorpo, type Ambiente } from './api';
 import { NOME_DO_ARQUIVO, Ocupado, type Armazem } from './dados';
 import { atualizarEmails as atualizarListaDeEmails, type GuardaDeEmails, type ServicoDeGmail } from './email';
+import { provarTarefas, type ServicoDeTarefas } from './tarefas-google';
 
 const CHAVE_DO_CODIGO = 'CODIGO_DO_APARELHO';
 const CHAVE_DO_ARQUIVO = 'ID_DO_ARQUIVO_DE_DADOS';
@@ -171,6 +172,15 @@ function calendario(): ServicoDeAgenda {
 }
 
 /**
+ * Serviço avançado do Google Tarefas (Tasks API v1), com o escopo tasks: o
+ * script só mexe na lista "Central", que ele mesmo cria (tarefas-google.ts).
+ */
+function tarefasGoogle(): ServicoDeTarefas {
+  if (typeof Tasks === 'undefined' || !Tasks) throw new Error('Serviço avançado do Google Tarefas desligado');
+  return Tasks as unknown as ServicoDeTarefas;
+}
+
+/**
  * Serviço avançado do Gmail (API v1, R11), com o escopo gmail.readonly: o
  * Google recusa qualquer pedido que mude, envie ou apague. email.ts usa só a
  * busca e a leitura de conversas em metadados.
@@ -227,6 +237,7 @@ const ambiente: Ambiente = {
   armazem,
   calendario,
   gmail,
+  tarefasGoogle,
   emailsGuardados,
 };
 
@@ -261,17 +272,29 @@ function provaDaAgenda(): string {
   }
 }
 
+/** Lê as listas do Google Tarefas. Só contagem: nenhum nome nem id. */
+function provaDasTarefas(): string {
+  try {
+    const { listas, temCentral } = provarTarefas(tarefasGoogle());
+    const central = temCentral ? 'a lista Central já existe' : 'a lista Central será criada na primeira tarefa';
+    return `Permissão do Google Tarefas aprovada: ${listas} ${listas === 1 ? 'lista' : 'listas'}; ${central}.`;
+  } catch (erro) {
+    return `Google Tarefas falhou (${resumoDoErro(erro)}). Rode autorizarDrive de novo e aprove o Google Tarefas.`;
+  }
+}
+
 /**
  * O dono roda pelo editor depois de publicar uma versão com permissão nova: o
  * Google pede todas as permissões do manifesto (arquivos do Drive criados por
- * este script, chamada externa usada só para ler esse arquivo, e Google
- * Agenda). Usa cada uma: procura e lê o arquivo de dados, lê a lista de
- * agendas e os eventos de hoje. Não grava nada (nem evento), não troca o
- * código do aparelho e registra só tamanhos, contagens e status.
+ * este script, chamada externa usada só para ler esse arquivo, Google Agenda e
+ * Google Tarefas). Usa cada uma: procura e lê o arquivo de dados, lê a lista de
+ * agendas e os eventos de hoje, lê as listas de tarefas. Não grava nada (nem
+ * evento, nem tarefa), não troca o código do aparelho e registra só tamanhos,
+ * contagens e status.
  */
 export function autorizarDrive() {
   ScriptApp.getOAuthToken();
-  Logger.log([provaDoDrive(), provaDaAgenda()].join('\n'));
+  Logger.log([provaDoDrive(), provaDaAgenda(), provaDasTarefas()].join('\n'));
 }
 
 function porResponder(quantos: number): string {

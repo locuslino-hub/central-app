@@ -3,6 +3,7 @@
 import { criarEvento, listarEventos, marcarEventoFeito, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 import { listarEmails, pedirAtualizacao, type GuardaDeEmails, type ServicoDeGmail } from './email';
+import { espelharTarefas, type ServicoDeTarefas } from './tarefas-google';
 
 export type ErroDoScript = 'codigo-invalido' | 'ocupado' | 'interno';
 
@@ -15,6 +16,8 @@ export interface Ambiente {
   calendario?(): ServicoDeAgenda;
   /** Serviço avançado do Gmail (v1), só leitura. Sem ele, as ações de e-mail dão `interno`. */
   gmail?(): ServicoDeGmail;
+  /** Serviço avançado do Google Tarefas (v1), só para o espelho. Sem ele, `espelharTarefas` dá `interno`. */
+  tarefasGoogle?(): ServicoDeTarefas;
   /** Onde fica a lista de e-mails entre o gatilho e o app (cache do script). */
   emailsGuardados?: GuardaDeEmails;
 }
@@ -26,6 +29,11 @@ const TAMANHO_MINIMO_DO_CODIGO = 32;
 function calendario(ambiente: Ambiente): ServicoDeAgenda {
   if (!ambiente.calendario) throw new Error('Google Agenda indisponível');
   return ambiente.calendario();
+}
+
+function tarefasGoogle(ambiente: Ambiente): ServicoDeTarefas {
+  if (!ambiente.tarefasGoogle) throw new Error('Google Tarefas indisponível');
+  return ambiente.tarefasGoogle();
 }
 
 function gmail(ambiente: Ambiente): ServicoDeGmail {
@@ -49,6 +57,12 @@ const acoes = new Map<unknown, Acao>([
   ['removerEvento', (dados, ambiente) => removerEvento(dados, calendario(ambiente))],
   ['trocarSalaEvento', (dados, ambiente) => trocarSalaEvento(dados, calendario(ambiente))],
   ['marcarEventoFeito', (dados, ambiente) => marcarEventoFeito(dados, calendario(ambiente))],
+  // Na trava do script: dois aparelhos ao mesmo tempo não criam duas listas
+  // "Central" nem duas espelhos da mesma tarefa.
+  ['espelharTarefas', (dados, ambiente) => {
+    const servico = tarefasGoogle(ambiente);
+    return ambiente.armazem.comTrava(() => espelharTarefas(dados, servico));
+  }],
   // E-mail só se lê: não há ação que mude o Gmail. Nenhuma das duas usa `dados`.
   ['emails', (_dados, ambiente) => listarEmails(() => gmail(ambiente), emailsGuardados(ambiente))],
   // Com limite de 60 s (email.ts): toques repetidos devolvem a lista guardada.

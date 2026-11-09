@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { agendasDoDono } from '../apoio/calendario';
 import { gmailFalso, naoLida, respostaDoDono } from '../apoio/gmail';
+import { tarefasGoogleFalso } from '../apoio/tarefas-google';
 
 let pacote: string;
 
@@ -178,7 +179,11 @@ function gatilhosFalsos() {
 }
 
 /** Roda o pacote como o Apps Script roda: sem módulos, serviços como globais. */
-function carregar({ semAgenda = false, semGmail = false }: { semAgenda?: boolean; semGmail?: boolean } = {}) {
+function carregar({
+  semAgenda = false,
+  semGmail = false,
+  semTarefas = false,
+}: { semAgenda?: boolean; semGmail?: boolean; semTarefas?: boolean } = {}) {
   const propriedades = new Map<string, string>();
   const leituras = new Map<string, number>();
   const registros: string[] = [];
@@ -209,12 +214,14 @@ function carregar({ semAgenda = false, semGmail = false }: { semAgenda?: boolean
   let uuids = 0;
   const calendario = agendasDoDono();
   const gmail = gmailFalso();
+  const tarefasGoogle = tarefasGoogleFalso();
   const gatilhos = gatilhosFalsos();
   const contexto = vm.createContext({
     Drive: drive.servico,
     // Serviço avançado desligado: o global nem existe.
     ...(semAgenda ? {} : { Calendar: calendario.servico }),
     ...(semGmail ? {} : { Gmail: gmail.servico }),
+    ...(semTarefas ? {} : { Tasks: tarefasGoogle.servico }),
     UrlFetchApp: rede.UrlFetchApp,
     ScriptApp: { ...rede.ScriptApp, ...gatilhos.servico },
     CacheService: { getScriptCache: () => cacheDoScript() },
@@ -283,7 +290,7 @@ function carregar({ semAgenda = false, semGmail = false }: { semAgenda?: boolean
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache, calendario, gmail, gatilhos };
+  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache, calendario, gmail, tarefasGoogle, gatilhos };
 }
 
 // O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
@@ -532,6 +539,8 @@ describe('manifesto publicado', () => {
       'https://www.googleapis.com/auth/gmail.readonly',
       // Instalar o gatilho de 30 min dos e-mails (ScriptApp.newTrigger) e evitar duplicados.
       'https://www.googleapis.com/auth/script.scriptapp',
+      // Google Tarefas: o espelho das tarefas na lista "Central" (spec do feito espelhado).
+      'https://www.googleapis.com/auth/tasks',
     ]);
   });
 
@@ -554,6 +563,7 @@ describe('manifesto publicado', () => {
         { userSymbol: 'Drive', serviceId: 'drive', version: 'v3' },
         { userSymbol: 'Calendar', serviceId: 'calendar', version: 'v3' },
         { userSymbol: 'Gmail', serviceId: 'gmail', version: 'v1' },
+        { userSymbol: 'Tasks', serviceId: 'tasks', version: 'v1' },
       ],
     });
   });
@@ -987,6 +997,47 @@ describe('Tarefa 10: autorizarDrive também prova o Google Agenda', () => {
     const { globais, registros } = carregar({ semAgenda: true });
     (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
     expect(registros.at(-1)).toMatch(/Google Agenda falhou/);
+  });
+});
+
+describe('feito espelhado: Google Tarefas pelo pacote', () => {
+  it('autorizarDrive lê as listas do Google Tarefas, registra só a contagem e não cria nada', () => {
+    const { globais, registros, tarefasGoogle } = carregar();
+    tarefasGoogle.lista('Minhas tarefas');
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    expect(tarefasGoogle.de('Tasklists.list').length).toBeGreaterThan(0);
+    expect(tarefasGoogle.chamadas.filter((c) => /insert|patch|remove/.test(c.metodo))).toEqual([]);
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Permissão do Google Tarefas aprovada: 1 lista; a lista Central será criada/);
+    expect(mensagem).not.toContain('Minhas tarefas');
+  });
+
+  it('sem o serviço avançado, o registro diz que o Google Tarefas falhou, e o resto segue relatado', () => {
+    const { globais, registros } = carregar({ semTarefas: true });
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    expect(registros.at(-1)).toMatch(/Permissão do Drive aprovada/);
+    expect(registros.at(-1)).toMatch(/Google Tarefas falhou/);
+  });
+
+  it('espelharTarefas pelo doPost cria a lista Central e a tarefa', () => {
+    const { pedir, tarefasGoogle } = conectado();
+    const resposta = pedir('espelharTarefas', {
+      tarefas: [{ id: 'tarefa-1', titulo: 'Ligar para a Renata', data: '2026-11-09', feito: false, apagado: false }],
+    });
+    expect(resposta).toEqual({ ok: true, dados: { resultados: [{ id: 'tarefa-1', ok: true, googleId: expect.any(String) }] } });
+    expect(tarefasGoogle.vivas().map((t) => t.title)).toEqual(['Ligar para a Renata']);
+  });
+
+  it('marcarEventoFeito pelo doPost grava o "✓ " no Google Agenda', () => {
+    const { pedir, calendario } = conectado();
+    calendario.evento('marina.ficticia@example.com', {
+      id: 'meu1',
+      summary: 'Café com Aurora',
+      inicio: '2026-10-23T11:00:00+01:00',
+      fim: '2026-10-23T12:00:00+01:00',
+    });
+    expect(pedir('marcarEventoFeito', { id: 'meu1', feito: true })).toEqual({ ok: true, dados: { feito: true, gravado: true } });
+    expect(calendario.agendas.get('marina.ficticia@example.com')!.eventos.get('meu1')!.summary).toBe('✓ Café com Aurora');
   });
 });
 
