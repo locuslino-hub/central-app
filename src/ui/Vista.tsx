@@ -1,5 +1,5 @@
-// A página de cada rota. Painel do dia (checklist, agenda de hoje e Sem prazo), Semana, Mês,
-// Ano, Sem prazo, Atividades, Salas (com o cadastro de pessoas), Conectar e Chat existem; as
+// A página de cada rota. Painel do dia (checklist, agenda de hoje, Por responder e Sem prazo), Semana, Mês,
+// Ano, Caixa, Sem prazo, Atividades, Salas (com o cadastro de pessoas), Conectar e Chat existem; as
 // demais mostram o título e dizem que ainda não estão prontas, até a tarefa delas chegar.
 import type { ComponentChildren } from 'preact';
 import { hrefDe, type RotaAtual } from '../rotas';
@@ -8,6 +8,7 @@ import { Ano } from './Ano';
 import { Atividades } from './Atividades';
 import { AvisoDaFila } from './AvisoDaFila';
 import { AvisosDeConflito } from './AvisosDeConflito';
+import { Caixa } from './Caixa';
 import { Chat } from './Chat';
 import { Checklist } from './Checklist';
 import { Conectar } from './Conectar';
@@ -15,6 +16,7 @@ import { usePessoa, useSala, useSalas, useTituloDaAba } from './hooks';
 import { corDaSala } from './Menu';
 import { Mes } from './Mes';
 import { Pessoas } from './Pessoas';
+import { PorResponder } from './PorResponder';
 import { SemPrazo } from './SemPrazo';
 import { Semana } from './Semana';
 import './tarefas.css';
@@ -125,6 +127,10 @@ export function Vista({ rota }: { rota: RotaAtual }) {
             <Checklist />
             <AgendaHoje />
           </div>
+          {/* A Tarefa 16 põe Por responder ao lado de A seguir; por ora ele tem a sua linha. */}
+          <div class="hoje-grade">
+            <PorResponder />
+          </div>
           <div class="hoje-grade">
             <SemPrazo />
           </div>
@@ -153,6 +159,14 @@ export function Vista({ rota }: { rota: RotaAtual }) {
         <Pagina titulo={rota.titulo}>
           <div class="semprazo-pagina">
             <SemPrazo semCabecalho />
+          </div>
+        </Pagina>
+      );
+    case 'caixa':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <div class="semprazo-pagina">
+            <Caixa />
           </div>
         </Pagina>
       );

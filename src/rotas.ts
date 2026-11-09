@@ -28,7 +28,6 @@ export type IdDaRota =
  */
 export const ROTAS_EM_BREVE: ReadonlySet<IdDaRota> = new Set<IdDaRota>([
   'agora',
-  'caixa',
   'quadro',
   'sala',
   'pessoa',

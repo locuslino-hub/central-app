@@ -332,7 +332,6 @@ describe('páginas', () => {
 
   it.each([
     '#/agora',
-    '#/caixa',
     '#/quadro',
     '#/sala/sala-mba',
   ])('%s é uma tela que ainda não existe e diz isso com o mesmo cartão', async (hash) => {
@@ -342,7 +341,7 @@ describe('páginas', () => {
   });
 
   it('as telas que existem não dizem "Em breve"', async () => {
-    for (const hash of ['#/', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat']) {
+    for (const hash of ['#/', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat', '#/caixa']) {
       const { unmount } = render(<App />);
       navegar(hash);
       expect(within(document.querySelector('main') as HTMLElement).queryByText('Esta tela chega numa próxima versão.')).toBeNull();
@@ -635,13 +634,11 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
   const emBreve = (li: Element | null) => li?.querySelector('.em-breve')?.textContent ?? null;
   const itemDe = (nome: string, dentro: HTMLElement) => within(dentro).getByRole('link', { name: nome }).closest('li');
 
-  it('no menu do computador: Caixa e Quadro têm a marca; o que existe (inclusive o calendário), não', async () => {
+  it('no menu do computador: só o Quadro tem a marca; o que existe (inclusive o calendário e a Caixa), não', async () => {
     await mostrar('#/', 1280);
     const menu = principal();
-    for (const nome of ['Caixa', 'Quadro']) {
-      expect(emBreve(itemDe(nome, menu))).toBe('Em breve');
-    }
-    for (const nome of ['Esta semana', 'Novembro', '2026', 'Salas', 'Atividades', 'Sem prazo']) {
+    expect(emBreve(itemDe('Quadro', menu))).toBe('Em breve');
+    for (const nome of ['Esta semana', 'Novembro', '2026', 'Salas', 'Caixa', 'Atividades', 'Sem prazo']) {
       expect(emBreve(itemDe(nome, menu))).toBeNull();
     }
   });

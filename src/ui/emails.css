@@ -1,0 +1,211 @@
+/* Por responder e Caixa (Tarefa 14). Só classes, como o resto do app.
+   Os botões usam .botao e .botao-link (casca.css); o aviso com Desfazer, .tarefa-apagada (tarefas.css). */
+
+.por-responder h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.email-contagem {
+  color: var(--tinta2);
+  font: 500 0.95rem var(--ui);
+}
+
+/* ---- Atualizar agora e o estado da leitura ---- */
+
+.email-estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+}
+.email-estado-texto {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.email-aviso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  margin: 0 0 12px;
+  padding: 2px 6px 2px 16px;
+  border-radius: var(--r-m);
+  background: var(--pessego);
+  color: var(--tinta);
+}
+.email-aviso p {
+  margin: 8px 0;
+}
+.email-aviso .botao-link {
+  margin: 2px 0;
+}
+.email-acao-feita {
+  margin: 0 0 12px;
+}
+.email-erro {
+  margin: 0 0 12px;
+  color: var(--alerta);
+  font-size: 0.93rem;
+}
+
+/* ---- Filtro por sala (Caixa) ---- */
+
+.email-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.email-filtro {
+  min-height: var(--toque);
+  padding: 0 16px;
+  border: 1px solid var(--campo);
+  border-radius: 99px;
+  background: var(--folha);
+  color: var(--tinta);
+  font: 500 0.93rem var(--ui);
+  cursor: pointer;
+}
+.email-filtro:hover {
+  background: var(--poco);
+}
+.email-filtro[aria-pressed='true'] {
+  border-color: var(--acao);
+  background: var(--acao);
+  color: #fff;
+}
+
+/* ---- Um e-mail ---- */
+
+.emails {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.email {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 0 16px;
+  border-top: 1px solid var(--fio);
+}
+.email:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+.email-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 12px;
+}
+.email-remetente {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.email-quando {
+  color: var(--tinta2);
+  font-size: 0.87rem;
+  white-space: nowrap;
+}
+.email-assunto {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.email-trecho {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tinta2);
+  font-size: 0.93rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.email-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+.email-sem-sala {
+  color: var(--tinta2);
+  font-size: 0.87rem;
+}
+.email-tarefa {
+  --c: var(--tinta);
+  --f: var(--cabe);
+}
+/* "Sem sala · escolher": parece o texto ao lado, mas tem a altura do toque. */
+.email-escolher {
+  min-height: var(--toque);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--acao2);
+  font: 500 0.87rem var(--ui);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.email-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.email-acoes .botao {
+  padding: 0 18px;
+  font-size: 0.93rem;
+}
+
+/* ---- Pergunta "de quem é?" ---- */
+
+.email-pergunta {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+}
+.email-pergunta label {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.email-pergunta-campos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.email-pergunta .campo {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.email-pergunta-nota {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.87rem;
+}
+
+.email-ver-todos {
+  margin: 12px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-filtro,
+  .email-acoes .botao {
+    transition: none;
+  }
+}

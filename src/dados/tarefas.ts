@@ -84,14 +84,20 @@ const diaExiste = (dia: string) => {
 /**
  * Tarefa escrita pelo dono, sem passar pelo chat: Sem prazo, ou do dia dado.
  * Título vazio ou dia que não existe: `undefined`, sem escrever. A sala fica
- * em branco; o dono a escolhe ao editar.
+ * em branco (o dono a escolhe ao editar), salvo quando quem chama já sabe: a
+ * tarefa que vem de um e-mail (`emailId`) leva a sala e a pessoa dele.
  */
-export async function criarTarefa(titulo: string, { data }: { data?: string } = {}): Promise<Tarefa | undefined> {
+export async function criarTarefa(
+  titulo: string,
+  { data, salaId, pessoaId, emailId }: { data?: string; salaId?: string | null; pessoaId?: string; emailId?: string } = {},
+): Promise<Tarefa | undefined> {
   const limpo = titulo.trim();
   if (!limpo || (data !== undefined && !diaExiste(data))) return undefined;
   const nova: ParaSalvar<Tarefa> = {
     titulo: limpo,
-    salaId: null,
+    salaId: salaId ?? null,
+    ...(pessoaId !== undefined ? { pessoaId } : {}),
+    ...(emailId !== undefined ? { emailId } : {}),
     ...(data !== undefined ? { data } : {}),
     duracaoMin: 60,
     duracaoConfirmada: false,
