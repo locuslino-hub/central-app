@@ -2,6 +2,7 @@
 // dias anteriores, com progresso. Cada linha tem Desfazer ao concluir. O
 // progresso conta também os compromissos de hoje da Agenda de hoje (feito
 // espelhado), menos os marcados como livres e os recusados.
+import { somarDias } from '../chat/datas';
 import type { Evento } from '../dados/agenda';
 import { useDia, useSalas, useTarefas } from './hooks';
 import { AvisoDeApagada, LinhaDeTarefa, useConclusoes } from './LinhaDeTarefa';
@@ -65,10 +66,16 @@ export function Checklist() {
   );
 }
 
-/** O compromisso conta no progresso de hoje? Começa ou termina hoje, não é livre nem recusado. */
+/**
+ * O compromisso conta no progresso de hoje? Acontece hoje e não é livre nem
+ * recusado. Terminar à meia-noite em ponto não toca o dia seguinte (como na
+ * Agenda de hoje, src/dados/calendario.ts).
+ */
 function contaNoDia(evento: Evento, hoje: string): boolean {
   if (evento.livre || evento.recusado) return false;
   const inicio = evento.inicio.slice(0, 10);
-  const fim = evento.fim.slice(0, 10);
-  return evento.diaInteiro ? inicio <= hoje && hoje < fim : inicio <= hoje && hoje <= fim;
+  if (evento.diaInteiro) return inicio <= hoje && hoje < evento.fim;
+  let ultimo = evento.fim.slice(0, 10);
+  if (ultimo > inicio && evento.fim.slice(11, 16) === '00:00') ultimo = somarDias(ultimo, -1);
+  return inicio <= hoje && hoje <= ultimo;
 }

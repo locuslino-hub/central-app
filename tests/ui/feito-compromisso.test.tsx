@@ -130,6 +130,21 @@ describe('progresso do dia com os compromissos', () => {
     expect(barra.getAttribute('aria-valuenow')).toBe('1');
   });
 
+  it('compromisso de ontem que termina à meia-noite em ponto não conta hoje', async () => {
+    const agenda = await agendaDeTeste();
+    agenda.responder([
+      orientacao(),
+      evento('Jantar de ontem', { inicio: '2026-11-04T22:00:00+00:00', fim: '2026-11-05T00:00:00+00:00' }),
+    ]);
+    render(
+      <>
+        <Checklist />
+        <AgendaHoje />
+      </>,
+    );
+    await waitFor(() => expect(screen.getByText('0 de 1 feita')).toBeTruthy());
+  });
+
   it('sem tarefas, mas com compromissos: a barra aparece e a Checklist ainda diz que não há tarefas', async () => {
     const agenda = await agendaDeTeste();
     agenda.responder([orientacao()]);
