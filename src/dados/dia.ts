@@ -82,6 +82,6 @@ export function vigiarODia(
   agendar();
   return () => {
     clearTimeout(temporizador);
-    document.removeEventListener('visibilitychange', aoVoltar);
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoVoltar);
   };
 }
