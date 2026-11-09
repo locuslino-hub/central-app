@@ -129,10 +129,48 @@ test.describe('celular, 390 px', () => {
 test.describe('computador, 1280 px', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
+  test('o chat do painel começa recolhido no pé da coluna; abre, recolhe com Esc e o aparelho lembra', async ({ page }) => {
+    const erros = vigiarErros(page);
+    await page.goto('/central-app/');
+    const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    const botao = painel.getByRole('button', { name: 'Chat' });
+    const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
+
+    // Recolhido: a barra fica no pé da coluna e o Agora ocupa o resto.
+    await expect(botao).toHaveAttribute('aria-expanded', 'false');
+    await expect(campo).toBeHidden();
+    const barra = (await painel.locator('.cartao-chat').boundingBox())!;
+    const coluna = (await painel.boundingBox())!;
+    expect(barra.height).toBeLessThan(80);
+    expect(coluna.y + coluna.height - (barra.y + barra.height)).toBeLessThan(30);
+    const agora = (await painel.locator('.cartao-agora').boundingBox())!;
+    expect(barra.y - (agora.y + agora.height)).toBeLessThan(30);
+    expect(await pequenos(page)).toEqual([]);
+
+    // Abrir: o foco vai para o campo.
+    await botao.click();
+    await expect(botao).toHaveAttribute('aria-expanded', 'true');
+    await expect(campo).toBeFocused();
+
+    // Esc recolhe e devolve o foco ao botão.
+    await page.keyboard.press('Escape');
+    await expect(botao).toHaveAttribute('aria-expanded', 'false');
+    await expect(botao).toBeFocused();
+    await expect(campo).toBeHidden();
+
+    // Aberto fica guardado no aparelho.
+    await botao.click();
+    await page.reload();
+    await expect(painel.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(campo).toBeVisible();
+    expect(erros).toEqual([]);
+  });
+
   test('o chat do painel direito funciona e todo toque tem 44 px', async ({ page }) => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/');
     const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    await painel.getByRole('button', { name: 'Chat' }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
 
     await campo.fill('Adicione reunião sobre o projeto na sexta feira com inicio às 11:00 e termino 12:00');
@@ -152,6 +190,7 @@ test.describe('computador, 1280 px', () => {
   test('conversa longa no painel: a conversa rola dentro do cartão e o campo fica à vista', async ({ page }) => {
     await page.goto('/central-app/');
     const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    await painel.getByRole('button', { name: 'Chat' }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
     for (const frase of ['Comprar pão', 'Mandar mensagem para Renata', 'Preciso parafusar o apoio do banheiro', 'asdf qwer']) {
       await campo.fill(frase);

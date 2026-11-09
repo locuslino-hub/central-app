@@ -624,15 +624,22 @@ describe('conversa', () => {
 });
 
 describe('o chat na casca', () => {
+  /** O chat do painel começa recolhido (e o aparelho lembra se ficou aberto). */
+  function abrirChatDoPainel(painel: HTMLElement) {
+    const botao = within(painel).getByRole('button', { name: /^Chat/ });
+    if (botao.getAttribute('aria-expanded') === 'false') fireEvent.click(botao);
+  }
+
   function irPara(hash: string, largura: number) {
     Object.defineProperty(window, 'innerWidth', { value: largura, configurable: true, writable: true });
     history.replaceState(null, '', `/${hash}`);
   }
 
-  it('no computador, o painel direito tem o chat', async () => {
+  it('no computador, o painel direito tem o chat (recolhido até tocar na barra)', async () => {
     irPara('#/', 1280);
     render(<App />);
     const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
+    abrirChatDoPainel(painel);
 
     dizer('Preciso parafusar o apoio do banheiro', painel);
 
@@ -663,6 +670,7 @@ describe('o chat na casca', () => {
     irPara('#/', 1280);
     render(<App />);
     const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
+    abrirChatDoPainel(painel);
     dizer('Preciso parafusar o apoio do banheiro', painel);
     await within(painel).findByRole('article');
     await esperarTarefas(1);

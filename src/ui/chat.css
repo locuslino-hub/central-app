@@ -179,3 +179,126 @@
   margin: -4px;
   padding: 4px;
 }
+
+/*
+ * Chat do painel aberto ou recolhido (computador). O título é o botão que abre e
+ * recolhe (aria-expanded), com 44 px de altura. Recolhido, o cartão vira uma barra
+ * no pé da coluna, com o campo em miniatura, e o Agora fica com o espaço.
+ */
+.chat-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.chat-corpo[hidden] {
+  display: none;
+}
+.chat-alternar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--toque);
+  margin: -6px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-alternar:focus-visible {
+  outline-offset: 3px;
+}
+.chat-alternar-icone {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--acao);
+}
+/* Resposta nova com o chat recolhido: um ponto discreto no ícone (e o leitor de tela ouve). */
+.chat-sinal {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--folha);
+  border-radius: 50%;
+  background: var(--coral2);
+}
+.chat-alternar-seta {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--toque);
+  height: var(--toque);
+  margin-left: auto;
+  border-radius: 50%;
+  color: var(--tinta2);
+  transition: background-color 0.15s ease;
+}
+.chat-alternar:hover .chat-alternar-seta {
+  background: var(--poco);
+  color: var(--tinta);
+}
+/* Aberto: a seta aponta para baixo (recolher). Recolhido: para cima (abrir). */
+.chat-alternar-seta .icone {
+  transform: rotate(-90deg);
+}
+.chat-alternar[aria-expanded='false'] .chat-alternar-seta .icone {
+  transform: rotate(90deg);
+}
+
+.painel-direito > .cartao-chat[data-aberto='false'] {
+  position: relative;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  min-height: 0;
+  margin-top: auto;
+  padding: 8px 8px 8px 18px;
+  border-radius: 99px;
+}
+.painel-direito > .cartao-chat[data-aberto='false'] > h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.5rem;
+}
+.cartao-chat[data-aberto='false'] .chat-alternar {
+  margin: 0;
+}
+/* O campo em miniatura: só desenho; o toque vai para o botão por baixo. */
+.chat-miniatura {
+  position: absolute;
+  top: 50%;
+  right: 60px;
+  left: 6.6rem;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  overflow: hidden;
+  border: 1px solid var(--campo);
+  border-radius: 99px;
+  background: var(--folha);
+  box-shadow: var(--poco-in);
+  color: var(--tinta3);
+  font-size: 0.92rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  translate: 0 -50%;
+  pointer-events: none;
+}
+.cartao-chat[data-aberto='false']:hover .chat-miniatura {
+  border-color: var(--acao);
+}
+.painel-direito[data-chat='recolhido'] > .cartao-agora {
+  flex: 1 0 auto;
+}

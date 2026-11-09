@@ -8,7 +8,8 @@ import { Cartao } from './Cartao';
 import { useSalas } from './hooks';
 import './chat.css';
 
-function useConversa(): readonly Mensagem[] {
+/** A conversa compartilhada (painel e página), sempre a mais nova. */
+export function useConversa(): readonly Mensagem[] {
   const [conversa, setConversa] = useState(lerConversa);
   useEffect(() => {
     setConversa(lerConversa());
