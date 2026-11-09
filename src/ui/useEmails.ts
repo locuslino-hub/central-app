@@ -37,7 +37,7 @@ export function useEmails(): { leitura: LeituraDeEmails; atualizar: () => Promis
     }, ATUALIZAR_A_CADA_MS);
     return () => {
       parar();
-      document.removeEventListener('visibilitychange', aoVoltar);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoVoltar);
       clearInterval(relogio);
     };
   }, []);

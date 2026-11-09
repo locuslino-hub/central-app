@@ -44,7 +44,7 @@ export function useHoje(): Date {
     document.addEventListener('visibilitychange', renovar);
     const relogio = setInterval(renovar, 60_000);
     return () => {
-      document.removeEventListener('visibilitychange', renovar);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', renovar);
       clearInterval(relogio);
     };
   }, []);
@@ -73,7 +73,7 @@ export function useAgora(): Date {
     const relogio = setInterval(renovar, 60_000);
     renovar();
     return () => {
-      document.removeEventListener('visibilitychange', renovar);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', renovar);
       clearInterval(relogio);
     };
   }, []);

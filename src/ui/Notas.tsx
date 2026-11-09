@@ -92,8 +92,8 @@ export function Notas({ colecao, id, notas, dica }: Props) {
     document.addEventListener('visibilitychange', aoEsconder);
     window.addEventListener('pagehide', aoSair);
     return () => {
-      document.removeEventListener('visibilitychange', aoEsconder);
-      window.removeEventListener('pagehide', aoSair);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoEsconder);
+      if (typeof window !== 'undefined') window.removeEventListener('pagehide', aoSair);
       clearTimeout(relogio.current);
       // Trocar de página com o texto ainda por gravar: grava agora.
       if (sujo.current) void gravar();

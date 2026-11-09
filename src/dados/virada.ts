@@ -179,6 +179,6 @@ export function iniciarVirada({
     ligada = false;
     clearTimeout(novaTentativa);
     pararDeVigiar();
-    document.removeEventListener('visibilitychange', aoVoltar);
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoVoltar);
   };
 }

@@ -370,7 +370,7 @@ export function iniciarSincronia(opcoes: OpcoesInicio = {}): () => void {
     pararDeOuvir();
     clearTimeout(espera);
     clearInterval(relogio);
-    document.removeEventListener('visibilitychange', aoMudarVisibilidade);
-    window.removeEventListener('online', disparar);
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoMudarVisibilidade);
+    if (typeof window !== 'undefined') window.removeEventListener('online', disparar);
   };
 }

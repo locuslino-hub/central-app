@@ -43,7 +43,7 @@ export function useEventos(de: string, ate: string): { leitura: Leitura; atualiz
     }, ATUALIZAR_A_CADA_MS);
     return () => {
       parar();
-      document.removeEventListener('visibilitychange', aoVoltar);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoVoltar);
       clearInterval(relogio);
     };
   }, [de, ate]);

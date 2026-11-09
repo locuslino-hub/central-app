@@ -299,9 +299,9 @@ export function ListaDeEmails({ itens, caixa }: { itens: ItemDeEmail[]; caixa: C
     window.addEventListener('focus', voltou);
     document.addEventListener('visibilitychange', aoMudarAVisibilidade);
     return () => {
-      window.removeEventListener('blur', saiu);
-      window.removeEventListener('focus', voltou);
-      document.removeEventListener('visibilitychange', aoMudarAVisibilidade);
+      if (typeof window !== 'undefined') window.removeEventListener('blur', saiu);
+      if (typeof window !== 'undefined') window.removeEventListener('focus', voltou);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoMudarAVisibilidade);
       clearTimeout(prazo.current);
     };
   }, []);

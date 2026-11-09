@@ -37,7 +37,7 @@ function useAparelhoConectado(estado: EstadoSync): boolean | undefined {
     window.addEventListener('hashchange', ler);
     return () => {
       ativo = false;
-      window.removeEventListener('hashchange', ler);
+      if (typeof window !== 'undefined') window.removeEventListener('hashchange', ler);
     };
   }, [estado]);
   return conectado;
