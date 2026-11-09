@@ -19,7 +19,12 @@ export function useEventos(de: string, ate: string): { leitura: Leitura; atualiz
 
   useEffect(() => {
     refazer((n) => n + 1); // a leitura pode ter mudado entre o desenho e a assinatura
-    const parar = assinarEventos(() => refazer((n) => n + 1));
+    const parar = assinarEventos(() => {
+      refazer((n) => n + 1);
+      // Um evento foi criado ou removido por este aparelho: lê de novo sem esperar o intervalo.
+      const atual = lerEventos(de, ate);
+      if (atual.obsoleta && !atual.carregando) void atualizarEventos(de, ate);
+    });
     const tentar = (forcar: boolean) => {
       const atual = lerEventos(de, ate);
       if (atual.carregando) return;

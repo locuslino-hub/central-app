@@ -119,7 +119,7 @@ describe('salvar', () => {
     const b = await salvar('pessoas', { nome: 'Prof. Souza', salaId: 'sala-orientacoes' });
     await salvar('tarefas', { ...a, feito: true });
 
-    const pendentes = await listarPendentes();
+    const pendentes = (await listarPendentes()).filter((p) => p.tipo === 'registro');
     expect(pendentes.map((p) => [p.colecao, p.id])).toEqual([
       ['tarefas', a.id],
       ['pessoas', b.id],
@@ -135,7 +135,7 @@ describe('salvar', () => {
     const config = await salvar('config', { id: 'geral', fimDoDia: '21:00' });
     const email = await salvar('estadosEmail', { id: 'email-ficticio-1', feito: false, adiadaAte: '2026-11-06' });
 
-    expect((await listarPendentes()).map((p) => [p.colecao, p.id])).toEqual([
+    expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => [p.colecao, p.id])).toEqual([
       ['rascunhos', rascunho.id],
       ['config', 'geral'],
       ['estadosEmail', email.id],
@@ -181,7 +181,7 @@ describe('apagar', () => {
     expect(await listar('tarefas', { comApagados: true })).toEqual([
       { ...salva, apagado: true, atualizadoEm: AGORA + CINCO_MIN },
     ]);
-    expect((await listarPendentes()).map((p) => [p.colecao, p.id])).toEqual([
+    expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => [p.colecao, p.id])).toEqual([
       ['tarefas', salva.id],
       ['tarefas', salva.id],
     ]);

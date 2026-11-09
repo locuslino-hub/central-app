@@ -2,6 +2,7 @@
 // camadas, regras e memória. A Tarefa 21 acrescenta a IA local em
 // `completarComIA`, sem mudar quem chama `interpretar`.
 
+import { criarCompromisso, desfazerCompromisso, type SituacaoDaAgenda } from '../dados/compromisso';
 import { desfazer } from '../dados/desfazer';
 import { hojeEmLisboa } from '../dados/dia';
 import { apagar, salvar } from '../dados/loja';
@@ -74,9 +75,10 @@ function duracaoDita(item: Item): number | null {
 }
 
 /**
- * A Tarefa que o item vira: só campos da Tarefa, nenhum vazio. Até a Tarefa
- * 10–12 levar compromissos ao Google Agenda, eles também são Tarefa: com a
- * data, a hora de início (`inicio`, R28) e a duração de `inicio` a `fim`.
+ * A Tarefa que o item vira: só campos da Tarefa, nenhum vazio. Compromisso com
+ * dia e horas não passa por aqui: vai para o Google Agenda (`criarItem`). Um
+ * compromisso sem dia ou sem as duas horas, que as regras não produzem, ainda
+ * vira tarefa, sem hora de início.
  */
 export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
   const dita = duracaoDita(item);
@@ -94,17 +96,34 @@ export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
   if (item.data) tarefa.data = item.data;
   else if (item.semana) tarefa.semana = item.semana;
   if (item.tipo === 'tarefa' && item.data && item.prazoHora) tarefa.prazoHora = item.prazoHora;
-  // R28: o compromisso guarda a hora de início até a Tarefa 10 levá-lo ao Google Agenda.
-  if (item.tipo === 'compromisso' && item.data && item.inicio) tarefa.inicio = item.inicio;
   return tarefa;
 }
 
+/** O compromisso que tem tudo para ir ao Google Agenda: dia e as duas horas. */
+type Compromisso = Item & { tipo: 'compromisso'; data: string; inicio: string; fim: string };
+const vaiParaAgenda = (item: Item): item is Compromisso =>
+  item.tipo === 'compromisso' && !!item.data && !!item.inicio && !!item.fim && item.fim > item.inicio;
+
+/** Item que vira tarefa. */
+export type ItemDeTarefa = Item & { tipo: 'tarefa' };
+
+export type ItemCriado =
+  | { tarefa: Tarefa; eventoId?: undefined; agenda?: undefined; desfazer: () => Promise<void> }
+  | { tarefa?: undefined; eventoId: string; agenda: SituacaoDaAgenda; desfazer: () => Promise<void> };
+
 /**
- * Guarda o item (pela loja: sincroniza) e registra o desfazer na pilha do app.
- * O `desfazer` devolvido desfaz este item, mesmo que outro tenha vindo depois.
- * Se apagar falhar, chamar de novo tenta de novo; depois de dar certo, nada faz.
+ * Guarda o item e registra o desfazer na pilha do app. O `desfazer` devolvido
+ * desfaz este item, mesmo que outro tenha vindo depois. Se desfazer falhar,
+ * chamar de novo tenta de novo; depois de dar certo, nada faz.
+ * - tarefa: grava pela loja (sincroniza); desfazer apaga.
+ * - compromisso: cria o evento no Google Agenda (sem internet, o pedido fica na
+ *   fila `pendentes`, e `agenda` diz isso); desfazer remove o evento ou tira o
+ *   pedido da fila.
  */
-export async function criarItem(item: Item): Promise<{ tarefa: Tarefa; desfazer: () => Promise<void> }> {
+export function criarItem(item: ItemDeTarefa): Promise<{ tarefa: Tarefa; desfazer: () => Promise<void> }>;
+export function criarItem(item: Item): Promise<ItemCriado>;
+export async function criarItem(item: Item): Promise<ItemCriado> {
+  if (vaiParaAgenda(item)) return criarNaAgenda(item);
   const tarefa = await salvar('tarefas', paraTarefa(item));
   let apagada = false;
   const apagarEsta = async () => {
@@ -119,6 +138,31 @@ export async function criarItem(item: Item): Promise<{ tarefa: Tarefa; desfazer:
     desfazer: async () => {
       await entrada.reverter();
       await apagarEsta();
+    },
+  };
+}
+
+async function criarNaAgenda(item: Compromisso): Promise<ItemCriado> {
+  const { eventoId, situacao } = await criarCompromisso({
+    titulo: item.titulo,
+    data: item.data,
+    inicio: item.inicio,
+    fim: item.fim,
+    salaId: item.salaId,
+  });
+  let removido = false;
+  const removerEste = async () => {
+    if (removido) return;
+    await desfazerCompromisso(eventoId);
+    removido = true;
+  };
+  const entrada = desfazer.registrar(`Item do chat: ${item.titulo}`, removerEste);
+  return {
+    eventoId,
+    agenda: situacao,
+    desfazer: async () => {
+      await entrada.reverter();
+      await removerEste();
     },
   };
 }

@@ -3,18 +3,22 @@
 // antes de o servidor confirmar.
 import { TAMANHO_MAXIMO_DO_CORPO } from '../../script/dados';
 import { ErroConexao, ErroScript, chamar as chamarScript } from '../conexao/cliente';
+import { ErroAgenda, criarEvento, removerEvento } from './agenda';
+import { marcarEventosObsoletos } from './eventos';
 import {
   assinar as assinarLoja,
   concluirEnvio,
+  enfileirarAgenda,
   gravarDoServidor,
   lerDesde,
+  lerPendente,
   lerRegistros,
   listarPendentes,
   removerPendentes,
   salvarDesde,
   salvarRelogioDoServidor,
 } from './loja';
-import type { Colecao, Mudanca, PendenteRegistro, Registro } from './tipos';
+import type { Colecao, Mudanca, PendenteAgenda, PendenteRegistro, Registro } from './tipos';
 
 export type EstadoSync = 'atualizado' | 'atualizando' | 'sem-internet' | 'por-enviar' | 'erro-codigo';
 
@@ -199,9 +203,58 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
   }
 }
 
+/**
+ * Ações do Google Agenda na fila (Tarefa 12), na ordem em que entraram. Cada
+ * uma sai só depois de o script confirmar; o id do evento é do cliente, então
+ * tentar de novo nunca duplica.
+ * - sem internet: para (a fila fica como está) e a rodada diz `por-enviar`;
+ * - pedido inválido: nunca daria certo, sai da fila;
+ * - o script ou o Google recusou (ex.: permissão ainda não aprovada, ou script
+ *   que ainda não conhece a ação, que responde "código inválido"): fica na fila,
+ *   em silêncio, e a próxima rodada tenta de novo. Código de fato recusado já
+ *   parou a rodada em `puxar`.
+ */
+async function enviarAgenda(chamar: Chamar) {
+  const acoes = (await listarPendentes()).filter((p): p is PendenteAgenda => p.tipo === 'agenda');
+  let mudou = false;
+  for (const acao of acoes) {
+    // Lê de novo: o dono pode ter desfeito a criação desde que a fila foi lida.
+    if (!(await lerPendente(acao.seq))) continue;
+    try {
+      if (acao.acao === 'criarEvento') {
+        await criarEvento(acao.evento, { chamar });
+        mudou = true;
+        if (await lerPendente(acao.seq)) {
+          await removerPendentes([acao.seq]);
+        } else {
+          // Desfeito enquanto era enviado: o evento já existe e precisa sair.
+          await removerEventoCriadoSemQuerer(acao.evento.id, chamar);
+        }
+      } else {
+        await removerEvento(acao.id, { chamar });
+        mudou = true;
+        await removerPendentes([acao.seq]);
+      }
+    } catch (erro) {
+      if (!(erro instanceof ErroAgenda)) throw erro;
+      if (erro.falha === 'sem-internet') throw new ErroConexao();
+      if (erro.falha === 'invalido') await removerPendentes([acao.seq]);
+    }
+  }
+  if (mudou) marcarEventosObsoletos();
+}
+
+async function removerEventoCriadoSemQuerer(id: string, chamar: Chamar) {
+  try {
+    await removerEvento(id, { chamar });
+  } catch {
+    await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id });
+  }
+}
+
 async function temPendentes(): Promise<boolean> {
   try {
-    return (await listarPendentes()).some((p) => p.tipo === 'registro');
+    return (await listarPendentes()).length > 0;
   } catch {
     return true;
   }
@@ -227,6 +280,7 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
   try {
     await puxar(chamar, esperar);
     await enviar(chamar, esperar);
+    await enviarAgenda(chamar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';
   } catch (erro) {
     final = await estadoDoErro(erro);

@@ -47,6 +47,23 @@ describe('iniciarApp (o que o main.tsx liga ao abrir)', () => {
     });
   });
 
+  it('leva para o Google Agenda as tarefas antigas com hora de início, uma vez só', async () => {
+    const { listar, listarPendentes, salvar } = await import('../src/dados/loja');
+    await salvar('tarefas', {
+      titulo: 'Reunião com a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
+      duracaoConfirmada: true, feito: false, fixada: false, marcar: false,
+    });
+    const { iniciarApp } = await import('../src/inicio');
+
+    iniciarApp();
+    await vi.waitFor(async () => expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toHaveLength(1));
+    expect(await listar('tarefas')).toEqual([]);
+
+    iniciarApp();
+    await new Promise((pronto) => setTimeout(pronto, 100));
+    expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toHaveLength(1);
+  });
+
   it('pede armazenamento persistente uma vez, sem mostrar nada e sem quebrar se não houver', async () => {
     const persist = vi.fn(() => Promise.resolve(false));
     vi.stubGlobal('navigator', { storage: { persist } });

@@ -111,7 +111,9 @@ test.describe('celular, 390 px', () => {
     await semPrazo.getByRole('button', { name: 'Cancelar' }).click();
 
     // Concluir tem Desfazer.
+    // Tarefa de marcar: concluir pergunta antes; "Concluir sem agenda" só conclui.
     await checklist.getByRole('checkbox', { name: /Marcar reunião com a Marina/ }).click();
+    await page.getByRole('dialog', { name: 'Quando ficou marcado?' }).getByRole('button', { name: 'Concluir sem agenda' }).click();
     await expect(checklist.getByText('1 de 1 feita')).toBeVisible();
     await checklist.getByRole('button', { name: /^Desfazer/ }).click();
     await expect(checklist.getByText('0 de 1 feita')).toBeVisible();

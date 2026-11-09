@@ -436,7 +436,7 @@ describe('envio', () => {
     };
 
     expect(await sincronizar({ chamar: semUmaAceita, esperar: semEspera })).toBe('por-enviar');
-    const fila = await listarPendentes();
+    const fila = (await listarPendentes()).filter((p) => p.tipo === 'registro');
     expect(fila.map((p) => p.id)).toEqual([esquecida.id]);
     expect(fila.map((p) => p.id)).not.toContain(confirmada.id);
   });
@@ -788,7 +788,7 @@ describe('fix 1: recusadas pelo servidor', () => {
     expect(await sincronizarAqui()).toBe('por-enviar');
     const [envio] = servidor.de('enviar');
     expect(envio.dados.mudancas).toHaveLength(2);
-    expect((await listarPendentes()).map((p) => p.id)).toEqual(['id com espaço']);
+    expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => p.id)).toEqual(['id com espaço']);
     no(celular);
     await sincronizarAqui();
     expect((await listar('tarefas')).map((t) => t.id)).toEqual([boa.id]);
@@ -1081,7 +1081,7 @@ describe('fix 2: avisos de substituidas e pendentes juntos', () => {
       [pa.seq],
       AGORA,
     );
-    expect((await listarPendentes()).map((p) => p.id)).toEqual(['b']);
+    expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => p.id)).toEqual(['b']);
     expect(await listarAvisos()).toMatchObject([{ registroId: 'a', perdedora: { titulo: 'A de outro' } }]);
   });
 });

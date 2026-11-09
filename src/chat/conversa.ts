@@ -6,6 +6,7 @@
 // Cada cartão tem a sua fila: guardar, trocar a sala e desfazer o mesmo
 // cartão acontecem um depois do outro, na ordem em que o dono apertou.
 
+import { avisoDaAgenda, trocarSalaDoCompromisso } from '../dados/compromisso';
 import { lerRegistros, salvar } from '../dados/loja';
 import type { Tarefa } from '../dados/tipos';
 import { criarItem, interpretar, type ItemDoChat } from './interpretar';
@@ -40,6 +41,8 @@ export type EstadoCartao = {
   /** Falha que o dono precisa saber ("Não consegui desfazer…"). */
   aviso?: string;
   tarefaId?: string;
+  /** Compromisso: o id do evento no Google Agenda (do cliente, também na fila se ainda não saiu). */
+  eventoId?: string;
   /** Cresce a cada ação concluída no cartão: a tela usa para mover o foco. */
   passos: number;
   /** Qual ação concluiu por último (mesmo sem mudar nada). */
@@ -133,11 +136,7 @@ function mudarMensagem(id: string, mudanca: Partial<Extract<Mensagem, { de: 'cen
 export function fala(itens: readonly ItemDoChat[]): string {
   if (itens.some((item) => item.certeza === 'baixa')) return 'Não tenho certeza. Confira o cartão.';
   const nova = itens.find((item) => item.pessoaNova)?.pessoaNova;
-  // Até a agenda do Google chegar (Tarefa 10), compromisso é tarefa com hora: o dono precisa saber.
-  const base = itens.some((item) => item.tipo === 'compromisso')
-    ? 'Anotei como tarefa com hora. A agenda do Google chega depois.'
-    : 'Anotei.';
-  return nova ? `${base} Ainda não conheço ${nova}.` : base;
+  return nova ? `Anotei. Ainda não conheço ${nova}.` : 'Anotei.';
 }
 
 /** Grava na memória o que a escolha ensinou, e devolve o item com a pessoa, se houver. */
@@ -158,9 +157,17 @@ async function gravar(id: string) {
   mudarCartao(id, { situacao: 'salvando' });
   try {
     const item = cartao.pendente ? await aplicar(cartao.pendente, cartao.item) : cartao.item;
-    const { tarefa, desfazer } = await criarItem(item);
-    desfazeres.set(id, desfazer);
-    concluir(id, 'guardar', { situacao: 'salvo', item, tarefaId: tarefa.id, pendente: undefined, aviso: undefined });
+    const criado = await criarItem(item);
+    desfazeres.set(id, criado.desfazer);
+    concluir(id, 'guardar', {
+      situacao: 'salvo',
+      item,
+      tarefaId: criado.tarefa?.id,
+      eventoId: criado.eventoId,
+      pendente: undefined,
+      // Compromisso que não chegou à agenda: o dono sabe, e a fila tenta de novo.
+      aviso: criado.agenda ? (avisoDaAgenda(criado.agenda) ?? undefined) : undefined,
+    });
   } catch (erro) {
     console.error('Não consegui guardar o item do chat', erro);
     concluir(id, 'guardar', { situacao: 'erro' });
@@ -319,6 +326,7 @@ export function escolherSala(id: string, salaId: string): Promise<void> {
     }
     concluir(id, 'escolher', { item: novo, trocando: false, escolha, pendente: guardado ? undefined : aprendizado });
     if (guardado && cartao.tarefaId) await moverTarefa(id, cartao.tarefaId, novo);
+    else if (guardado && cartao.eventoId) await moverCompromisso(id, cartao.eventoId, novo);
   });
 }
 
@@ -337,5 +345,16 @@ async function moverTarefa(cartaoId: string, tarefaId: string, item: ItemDoChat)
     await salvar('tarefas', tarefa);
   } catch (erro) {
     console.error('Não consegui trocar a sala do item', erro);
+  }
+}
+
+/** Troca a sala do compromisso (na fila ou no Google Agenda); se falhar, o cartão avisa. */
+async function moverCompromisso(cartaoId: string, eventoId: string, item: ItemDoChat) {
+  try {
+    if (acharCartao(cartaoId)?.situacao !== 'salvo') return;
+    await trocarSalaDoCompromisso(eventoId, item.salaId);
+  } catch (erro) {
+    console.error('Não consegui trocar a sala do compromisso', erro);
+    mudarCartao(cartaoId, { aviso: 'Não consegui trocar a sala na agenda.' });
   }
 }

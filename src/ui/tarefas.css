@@ -454,3 +454,26 @@
     transition: none;
   }
 }
+
+/* ---- Caixa da tarefa de marcar (Tarefa 12) ---- */
+
+.marcar-form {
+  display: grid;
+  gap: 12px;
+}
+.marcar-form .campo {
+  width: 100%;
+  font-size: 16px;
+}
+.marcar-horas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.marcar-aviso {
+  margin: 0;
+  color: var(--tinta2);
+}
+.marcar .botao {
+  width: 100%;
+}

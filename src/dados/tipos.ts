@@ -18,8 +18,9 @@ export type Pessoa = Base & { nome: string; salaId: string; papel?: string; emai
 /**
  * `data`: `AAAA-MM-DD`. `semana`: a segunda-feira da semana, `AAAA-MM-DD`.
  * Sem `data` e sem `semana` = Sem prazo. `prazoHora` só existe em tarefa com prazo.
- * `inicio` (`HH:MM`, R28): hora de início de compromisso criado pelo chat, até a
- * Tarefa 10 levar compromissos ao Google Agenda.
+ * `inicio` (`HH:MM`, R28): só em tarefas antigas, de quando o chat guardava
+ * compromisso como tarefa com hora. Hoje o compromisso vai para o Google Agenda;
+ * `migrarCompromissos` leva essas tarefas para lá e o app não cria mais nenhuma.
  */
 export type Tarefa = Base & {
   titulo: string;
@@ -93,9 +94,10 @@ export type Registro = Colecoes[Colecao];
 export type ParaSalvar<T extends Base> = Omit<T, keyof Base> & Partial<Base>;
 
 /**
- * Entrada da fila `pendentes`, que a sincronia (Tarefa 5) envia ao script.
- * `tipo` discrimina: a fila de ações de agenda (Tarefa 12, R10) acrescenta
- * a sua variante nesta mesma união e no mesmo armazenamento.
+ * Entradas da fila `pendentes`, que a sincronia (Tarefa 5) envia ao script.
+ * `tipo` discrimina. `registro`: um registro de coleção a enviar. `agenda`
+ * (Tarefa 12, R10): uma ação do Google Agenda que ainda não saiu; o id do
+ * evento é do cliente e vai junto, então repetir a ação não duplica nada.
  */
 export type PendenteRegistro = {
   /** Ordem de chegada, dada pelo IndexedDB. */
@@ -105,7 +107,23 @@ export type PendenteRegistro = {
   id: string;
 };
 
-export type Pendente = PendenteRegistro;
+/** O evento a criar na agenda principal; `id` é o do cliente (`novoIdDeEvento`). */
+export type EventoPendente = {
+  id: string;
+  titulo: string;
+  /** `AAAA-MM-DD`. */
+  data: string;
+  /** `HH:MM`, de Lisboa. */
+  inicio: string;
+  fim: string;
+  salaId: string | null;
+};
+
+export type PendenteCriarEvento = { seq: number; tipo: 'agenda'; acao: 'criarEvento'; evento: EventoPendente };
+export type PendenteRemoverEvento = { seq: number; tipo: 'agenda'; acao: 'removerEvento'; id: string };
+export type PendenteAgenda = PendenteCriarEvento | PendenteRemoverEvento;
+
+export type Pendente = PendenteRegistro | PendenteAgenda;
 
 /** `remota`: a escrita veio de outro aparelho, pela sincronia. */
 export type Mudanca = { colecao: Colecao; id: string; remota?: true };

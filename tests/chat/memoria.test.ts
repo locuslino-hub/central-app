@@ -1,7 +1,7 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { aprender, carregarMemoria, lembrarPessoa, pessoaDesconhecida } from '../../src/chat/memoria';
-import { criarItem, hojeEmLisboa, interpretar } from '../../src/chat/interpretar';
+import { criarItem, hojeEmLisboa, interpretar, type ItemDeTarefa } from '../../src/chat/interpretar';
 import type { Item } from '../../src/chat/regras';
 import { desfazer } from '../../src/dados/desfazer';
 import {
@@ -400,12 +400,12 @@ describe('interpretar', () => {
 });
 
 describe('criarItem', () => {
-  const tarefa = (extra: Partial<Item> = {}): Item => ({
-    tipo: 'tarefa',
+  const tarefa = (extra: Partial<Item> = {}): ItemDeTarefa => ({
     titulo: 'Parafusar o apoio do banheiro',
     salaId: 'sala-casa',
     marcar: false,
     ...extra,
+    tipo: 'tarefa',
   });
 
   it('salva uma Tarefa com a duração padrão de 60 min, pela loja (sincroniza)', async () => {
@@ -441,7 +441,7 @@ describe('criarItem', () => {
       termoSala: 'banheiro',
       pessoaNova: 'Renata',
       pessoaNome: 'Marina',
-    } as Item);
+    } as ItemDeTarefa);
     for (const campo of ['motivoSala', 'certeza', 'termoSala', 'pessoaNova', 'pessoaNome', 'tipo', 'inicio', 'fim']) {
       expect(campo in salva).toBe(false);
     }
@@ -455,28 +455,15 @@ describe('criarItem', () => {
     expect(daSemana).toMatchObject({ semana: '2026-11-09', pessoaId: 'p1', marcar: true });
   });
 
-  it('compromisso vira Tarefa com data e duração tirada de início e fim, sem prazoHora', async () => {
-    const { tarefa: uma } = await criarItem({
-      tipo: 'compromisso', titulo: 'Reunião sobre o projeto', salaId: 'sala-investigacao',
-      data: '2026-11-06', inicio: '11:00', fim: '12:00', marcar: false,
-    });
-    expect(uma).toMatchObject({ data: '2026-11-06', inicio: '11:00', duracaoMin: 60, duracaoConfirmada: true });
-    expect('prazoHora' in uma).toBe(false);
-
-    const { tarefa: outra } = await criarItem({
-      tipo: 'compromisso', titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '14:00', fim: '15:30', marcar: false,
-    });
-    expect(outra.duracaoMin).toBe(90);
-  });
-
   it('tarefa não leva inicio, mesmo que o item traga', async () => {
     const { tarefa: salva } = await criarItem(tarefa({ data: '2026-11-06', inicio: '10:00' }));
     expect('inicio' in salva).toBe(false);
   });
 
-  it('a hora de início do compromisso vai e volta pela sincronia; hora malformada é recusada', async () => {
-    const { tarefa: salva } = await criarItem({
-      tipo: 'compromisso', titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '14:00', fim: '15:30', marcar: false,
+  it('uma Tarefa antiga com hora de início ainda vai e volta pela sincronia; hora malformada é recusada', async () => {
+    const salva = await salvar('tarefas', {
+      titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '14:00', duracaoMin: 90,
+      duracaoConfirmada: true, feito: false, fixada: false, marcar: false,
     });
     const doServidor = { ...salva, id: 'vinda', aparelho: 'celular', atualizadoEm: Date.now() };
 
@@ -491,22 +478,9 @@ describe('criarItem', () => {
     expect(guardadas.map((t) => t.id).sort()).toEqual([salva.id, 'vinda'].sort());
   });
 
-  it('prazoHora só vai em tarefa com dia: nunca em compromisso nem em tarefa sem prazo', async () => {
-    const { tarefa: compromisso } = await criarItem({
-      tipo: 'compromisso', titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '14:00', fim: '15:00',
-      prazoHora: '17:00', marcar: false,
-    });
-    expect('prazoHora' in compromisso).toBe(false);
-
+  it('prazoHora só vai em tarefa com dia: nunca em tarefa sem prazo', async () => {
     const { tarefa: semDia } = await criarItem(tarefa({ prazoHora: '17:00' }));
     expect('prazoHora' in semDia).toBe(false);
-  });
-
-  it('compromisso sem horas válidas fica com 60 min', async () => {
-    const { tarefa: salva } = await criarItem({
-      tipo: 'compromisso', titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '15:00', fim: '14:00', marcar: false,
-    });
-    expect(salva.duracaoMin).toBe(60);
   });
 
   it('Desfazer remove: o desfazer devolvido apaga a tarefa, uma vez só', async () => {

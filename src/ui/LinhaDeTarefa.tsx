@@ -5,8 +5,11 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { segundaDaSemana } from '../chat/datas';
 import type { Desfazivel } from '../dados/desfazer';
+import type { SituacaoDaAgenda } from '../dados/compromisso';
+import { colocarNaAgenda, type Marcacao } from '../dados/marcar';
 import { apagarTarefa, concluirTarefa, darCiencia, editarTarefa, reabrirTarefa, type Edicao } from '../dados/tarefas';
 import type { Sala, Tarefa } from '../dados/tipos';
+import { CaixaMarcar } from './CaixaMarcar';
 import { DuracaoTarefa } from './DuracaoTarefa';
 import { corDaSala } from './Menu';
 import { diaMes, nomeDaSemana } from './quando';
@@ -22,6 +25,8 @@ export type Conclusoes = {
   apagada: Apagada | null;
   temDesfazer(id: string): boolean;
   alternar(tarefa: Tarefa): Promise<void>;
+  /** Tarefa de marcar: cria o compromisso no Google Agenda e conclui (Desfazer remove os dois). */
+  colocarNaAgenda(tarefa: Tarefa, marcacao: Marcacao): Promise<SituacaoDaAgenda>;
   desfazer(id: string): Promise<void>;
   apagar(tarefa: Tarefa): Promise<void>;
   desfazerApagada(): Promise<void>;
@@ -57,6 +62,24 @@ export function useConclusoes(): Conclusoes {
       if (entrada) {
         entradas.current.set(tarefa.id, entrada);
         atualizar();
+      }
+    },
+    async colocarNaAgenda(tarefa, marcacao) {
+      setConcluidas((antes) => new Set(antes).add(tarefa.id));
+      try {
+        const { entrada, agenda } = await colocarNaAgenda(tarefa, marcacao);
+        if (entrada) {
+          entradas.current.set(tarefa.id, entrada);
+          atualizar();
+        }
+        return agenda;
+      } catch (erro) {
+        setConcluidas((antes) => {
+          const depois = new Set(antes);
+          depois.delete(tarefa.id);
+          return depois;
+        });
+        throw erro;
       }
     },
     async desfazer(id) {
@@ -331,6 +354,7 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
   const botaoEditar = useRef<HTMLButtonElement>(null);
   const [falha, setFalha] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [marcando, setMarcando] = useState(false);
   const sala = tarefa.salaId === null ? undefined : salas.find((s) => s.id === tarefa.salaId);
   const quando = quandoNaLista(tarefa, hoje);
   const atrasada = estaAtrasada(tarefa, hoje);
@@ -347,6 +371,12 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
     caixa.current?.focus();
   }
 
+  // Fecha a caixa de marcar e devolve o foco à caixa de concluir (a caixa de marcar sai da tela).
+  const fecharMarcar = () => {
+    setMarcando(false);
+    caixa.current?.focus();
+  };
+
   const fecharEdicao = () => {
     setEditando(false);
     botaoEditar.current?.focus();
@@ -361,7 +391,11 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
         aria-checked={tarefa.feito}
         aria-label={String(tarefa.titulo ?? '')}
         ref={caixa}
-        onClick={() => void executar(() => conclusoes.alternar(tarefa))}
+        onClick={() => {
+          // Tarefa de marcar: concluir pergunta antes quando fica marcado.
+          if (!tarefa.feito && tarefa.marcar) setMarcando(true);
+          else void executar(() => conclusoes.alternar(tarefa));
+        }}
       >
         <span class="tarefa-marca" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" focusable="false">
@@ -425,6 +459,17 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
               return true;
             }}
             aoApagar={() => conclusoes.apagar(tarefa)}
+          />
+        )}
+        {marcando && (
+          <CaixaMarcar
+            tarefaId={tarefa.id}
+            titulo={tarefa.titulo}
+            dia={tarefa.data}
+            hoje={hoje}
+            aoColocar={(marcacao) => conclusoes.colocarNaAgenda(tarefa, marcacao)}
+            aoConcluirSemAgenda={() => conclusoes.alternar(tarefa)}
+            aoFechar={fecharMarcar}
           />
         )}
         {falha && (

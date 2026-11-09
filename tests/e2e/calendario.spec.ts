@@ -83,6 +83,8 @@ type Roteiro = { eventos?: 'normal' | 'codigo-invalido' | 'rede' };
 
 /** O script de mentira: eventos por período, e o resto aceito sem mudar nada. */
 async function responderComoOScript(page: Page, roteiro: Roteiro = {}) {
+  // Eventos que o app criou por `criarEvento` (Tarefa 12): entram na leitura seguinte, como no Google.
+  const criados: EventoDeTeste[] = [];
   await page.route(URL_FICTICIA, async (rota) => {
     const { acao, dados } = rota.request().postDataJSON();
     const cabecalhos = { 'access-control-allow-origin': '*' };
@@ -90,7 +92,13 @@ async function responderComoOScript(page: Page, roteiro: Roteiro = {}) {
     if (acao === 'eventos') {
       if (roteiro.eventos === 'rede') return rota.abort();
       if (roteiro.eventos === 'codigo-invalido') return json({ ok: false, erro: 'codigo-invalido' });
-      return json({ ok: true, dados: { eventos: EVENTOS.filter((e) => cabe(e, dados.de, dados.ate)), incompleto: false } });
+      return json({ ok: true, dados: { eventos: [...EVENTOS, ...criados].filter((e) => cabe(e, dados.de, dados.ate)), incompleto: false } });
+    }
+    if (acao === 'criarEvento') {
+      const existente = criados.find((e) => e.id === dados.id);
+      const criado = existente ?? evento(dados.titulo, { id: dados.id, salaId: dados.salaId, inicio: `${dados.data}T${dados.inicio}:00+00:00`, fim: `${dados.data}T${dados.fim}:00+00:00` });
+      if (!existente) criados.push(criado);
+      return json({ ok: true, dados: criado });
     }
     if (acao === 'puxar') return json({ ok: true, dados: { registros: [], agora: 0 } });
     if (acao === 'enviar') {
@@ -177,6 +185,7 @@ test.describe('computador, 1280 px', () => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/');
     await dizerAoChat(page, 'Entrega do relatório sexta 17h');
+    // Sem conexão ainda: o compromisso fica na fila e sai para o Google Agenda quando o app conecta.
     await dizerAoChat(page, 'Reunião com a Marina hoje às 15h30');
     await abrir(page, '#/semana');
 
@@ -207,7 +216,7 @@ test.describe('computador, 1280 px', () => {
     const prazo = principal.locator('.cal-item[data-tipo="prazo"]', { hasText: 'Entrega do relatório' });
     await expect(prazo).toBeVisible();
     await expect(prazo.getByText('Prazo às 17:00')).toBeVisible();
-    await expect(hoje.locator('.cal-item[data-tipo="bloco"]', { hasText: 'Reunião com a Marina' })).toBeVisible();
+    await expect(hoje.locator('.cal-item[data-tipo="evento"]', { hasText: 'Reunião com a Marina' })).toBeVisible();
 
     expect(await semRolagemDeLado(page)).toBe(true);
     expect(await pequenos(page)).toEqual([]);

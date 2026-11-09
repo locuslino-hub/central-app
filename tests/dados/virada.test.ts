@@ -48,7 +48,7 @@ describe('virarDia: tarefas com dia', () => {
     expect(salva.atualizadoEm).toBeGreaterThan(ontem.atualizadoEm);
     expect(resultado).toEqual({ movidas: 1, semanasVencidas: 0 });
     // Uma entrada da criação e uma da virada: a sincronia envia a versão atual.
-    expect((await listarPendentes()).filter((p) => p.id === ontem.id)).toHaveLength(2);
+    expect((await listarPendentes()).filter((p) => p.tipo === 'registro' && p.id === ontem.id)).toHaveLength(2);
   });
 
   it('tarefa de muitos dias atrás também vem para hoje', async () => {

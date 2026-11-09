@@ -135,7 +135,11 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       {situacao === 'confirmar' && <p class="chat-pergunta">Confira antes de guardar.</p>}
       {situacao === 'erro' && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
-      {cartao.aviso && <p class="chat-pergunta">{cartao.aviso}</p>}
+      {cartao.aviso && (
+        <p class="chat-pergunta" role="status">
+          {cartao.aviso}
+        </p>
+      )}
       {mostrarSalas && (
         <div class="chat-salas" role="group" aria-label={pergunta ?? 'Escolher sala'} ref={grupoDeSalas}>
           {salas.map((sala) => (

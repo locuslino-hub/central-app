@@ -30,12 +30,15 @@ export async function reabrirTarefa(id: string): Promise<boolean> {
 /**
  * Conclui e devolve a entrada do desfazer (a mesma da pilha do app), ou
  * `undefined` se a tarefa não existe mais. Desfazer só reabre: o resto da
- * tarefa fica como está agora.
+ * tarefa fica como está agora. `aoDesfazer` roda antes de reabrir, para o que
+ * a conclusão fez por fora (o compromisso da tarefa de marcar); se falhar, a
+ * tarefa continua concluída.
  */
-export async function concluirTarefa(id: string): Promise<Desfazivel | undefined> {
+export async function concluirTarefa(id: string, aoDesfazer?: () => Promise<void>): Promise<Desfazivel | undefined> {
   const feita = await atualizar(id, (tarefa) => ({ ...tarefa, feito: true }));
   if (!feita) return undefined;
   return desfazer.registrar(`Tarefa concluída: ${feita.titulo}`, async () => {
+    await aoDesfazer?.();
     await reabrirTarefa(id);
   });
 }

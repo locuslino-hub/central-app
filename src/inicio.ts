@@ -2,6 +2,7 @@
 // poder ser testado: main.tsx só liga isto e desenha a tela.
 import { lerConexao } from './conexao/guarda';
 import { semear, semearPalavras } from './dados/loja';
+import { migrarCompromissos } from './dados/migrar';
 import { iniciarSincronia, sincronizar } from './dados/sincronia';
 import { iniciarVirada } from './dados/virada';
 
@@ -19,6 +20,8 @@ export function iniciarApp() {
   semear().catch((erro: unknown) => console.error('Não consegui criar as salas iniciais', erro));
   // As palavras que a memória do chat já conhece ("banheiro" é Casa...).
   semearPalavras().catch((erro: unknown) => console.error('Não consegui criar as palavras iniciais', erro));
+  // Compromissos que o chat guardava como tarefa com hora vão para o Google Agenda (uma vez, sem duplicar).
+  migrarCompromissos().catch((erro: unknown) => console.error('Não consegui levar os compromissos para a agenda', erro));
   iniciarSincronia();
   // Vira o dia ao abrir, na meia-noite e ao voltar ao app. Sincroniza antes de virar:
   // este aparelho pode ter ficado dias fechado, e virar em cima de uma cópia velha

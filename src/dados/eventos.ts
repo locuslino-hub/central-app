@@ -28,6 +28,11 @@ export type Leitura = {
   /** Hora (ms) da última tentativa, deu certo ou não. */
   tentadoEm: number | null;
   carregando: boolean;
+  /**
+   * Um evento foi criado ou removido por este aparelho depois desta leitura: ela
+   * ainda aparece na tela, mas quem a mostra lê de novo (`useEventos`).
+   */
+  obsoleta?: boolean;
 };
 
 export type Dependencias = {
@@ -96,6 +101,18 @@ export function esquecerEventos() {
   emAndamento.clear();
 }
 
+/**
+ * A Central criou ou removeu um evento: as leituras guardadas ficam na tela,
+ * mas obsoletas, e quem as mostra lê de novo. O que estava sendo lido agora
+ * pode ter saído antes da mudança, então é descartado.
+ */
+export function marcarEventosObsoletos() {
+  geracao++;
+  emAndamento.clear();
+  for (const [id, leitura] of [...leituras]) leituras.set(id, { ...leitura, carregando: false, obsoleta: true });
+  avisar();
+}
+
 async function falhaDe(erro: unknown, dep: Dependencias): Promise<FalhaDeEventos> {
   if (!(erro instanceof ErroAgenda)) return 'falhou';
   if (erro.falha === 'sem-internet') return 'sem-internet';
@@ -121,13 +138,13 @@ async function ler(id: string, de: string, ate: string, dep: Dependencias): Prom
   let depois: Leitura;
   try {
     if (!(await dep.conectado())) {
-      depois = { ...antes, falha: 'nao-conectado', tentadoEm, carregando: false };
+      depois = { ...antes, falha: 'nao-conectado', tentadoEm, carregando: false, obsoleta: undefined };
     } else {
       const { eventos, incompleto } = await dep.listar({ de, ate });
-      depois = { eventos, incompleto, falha: null, lidoEm: tentadoEm, tentadoEm, carregando: false };
+      depois = { eventos, incompleto, falha: null, lidoEm: tentadoEm, tentadoEm, carregando: false, obsoleta: undefined };
     }
   } catch (erro) {
-    depois = { ...antes, falha: await falhaDe(erro, dep), tentadoEm, carregando: false };
+    depois = { ...antes, falha: await falhaDe(erro, dep), tentadoEm, carregando: false, obsoleta: undefined };
   }
   if (minha === geracao) guardar(id, depois);
   return depois;
@@ -142,8 +159,8 @@ export function atualizarEventos(de: string, ate: string, dep: Partial<Dependenc
   const id = chave(de, ate);
   const andando = emAndamento.get(id);
   if (andando) return andando;
-  const promessa = ler(id, de, ate, { ...PADRAO, ...dep }).finally(() => {
-    emAndamento.delete(id);
+  const promessa: Promise<Leitura> = ler(id, de, ate, { ...PADRAO, ...dep }).finally(() => {
+    if (emAndamento.get(id) === promessa) emAndamento.delete(id);
     avisar();
   });
   emAndamento.set(id, promessa);

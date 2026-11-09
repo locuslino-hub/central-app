@@ -6,10 +6,13 @@ import type {
   Colecao,
   Colecoes,
   Config,
+  EventoPendente,
   Mudanca,
   Palavra,
   ParaSalvar,
   Pendente,
+  PendenteAgenda,
+  PendenteRegistro,
   Registro,
   Remoto,
   Sala,
@@ -185,7 +188,7 @@ function carimbo(atual: Registro | undefined): number {
 }
 
 function enfileirar(tx: Escrita, colecao: Colecao, id: string) {
-  const entrada: Omit<Pendente, 'seq'> = { tipo: 'registro', colecao, id };
+  const entrada: Omit<PendenteRegistro, 'seq'> = { tipo: 'registro', colecao, id };
   return tx.objectStore(PENDENTES).add(entrada);
 }
 
@@ -233,6 +236,94 @@ export function assinar(ouvinte: Ouvinte): () => void {
 /** Fila do que ainda não foi enviado, na ordem das escritas. */
 export async function listarPendentes(): Promise<Pendente[]> {
   return comBanco((banco) => banco.getAll(PENDENTES));
+}
+
+// ---- Ações do Google Agenda na fila (Tarefa 12) ----
+
+/**
+ * Leva tarefas antigas com hora de início para a agenda, numa escrita só por
+ * tarefa: a tarefa vira lápide (sincroniza) e o `criarEvento` entra na fila.
+ * Lê a tarefa de novo dentro da escrita; a que já foi levada, concluída por
+ * outro caminho ou apagada é pulada. Devolve quantas foram.
+ */
+export async function levarTarefasParaAgenda(planos: readonly { tarefaId: string; evento: EventoPendente }[]): Promise<number> {
+  let levadas = 0;
+  for (const { tarefaId, evento } of planos) {
+    const levou = await comBanco(async (banco) => {
+      const tx = escrever(banco, ['tarefas', PENDENTES, LOCAL]);
+      const loja = tx.objectStore('tarefas');
+      const atual: Colecoes['tarefas'] | undefined = await loja.get(tarefaId);
+      if (!atual || atual.apagado || !atual.inicio) {
+        await tx.done;
+        return false;
+      }
+      const aparelho = await aparelhoNa(tx);
+      await loja.put({ ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho });
+      await enfileirar(tx, 'tarefas', tarefaId);
+      await tx.objectStore(PENDENTES).add({ tipo: 'agenda', acao: 'criarEvento', evento });
+      await tx.done;
+      return true;
+    });
+    if (levou) {
+      levadas++;
+      notificar({ colecao: 'tarefas', id: tarefaId });
+    }
+  }
+  return levadas;
+}
+
+/** A ação, sem o `seq` que o IndexedDB dá. */
+export type AcaoDeAgenda =
+  | Omit<Extract<PendenteAgenda, { acao: 'criarEvento' }>, 'seq'>
+  | Omit<Extract<PendenteAgenda, { acao: 'removerEvento' }>, 'seq'>;
+
+/** Põe a ação na fila `pendentes`, junto das de registro. Devolve o `seq`. */
+export async function enfileirarAgenda(acao: AcaoDeAgenda): Promise<number> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const seq = (await tx.objectStore(PENDENTES).add(acao)) as number;
+    await tx.done;
+    return seq;
+  });
+}
+
+/** Uma entrada da fila, ou `undefined` se já saiu (enviada ou desfeita). */
+export async function lerPendente(seq: number): Promise<Pendente | undefined> {
+  return comBanco((banco) => banco.get(PENDENTES, seq));
+}
+
+/**
+ * Tira da fila o `criarEvento` ainda não enviado desse evento, de uma vez só.
+ * `true` se havia: o evento nunca chegou à agenda por aqui e não há o que remover.
+ */
+export async function retirarCriacaoPendente(eventoId: string): Promise<boolean> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const todas: Pendente[] = await fila.getAll();
+    const achadas = todas.filter((p) => p.tipo === 'agenda' && p.acao === 'criarEvento' && p.evento.id === eventoId);
+    for (const achada of achadas) await fila.delete(achada.seq);
+    await tx.done;
+    return achadas.length > 0;
+  });
+}
+
+/** Troca a sala de um `criarEvento` ainda na fila. `false` se ele já não está lá. */
+export async function trocarSalaPendente(eventoId: string, salaId: string | null): Promise<boolean> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const todas: Pendente[] = await fila.getAll();
+    let achou = false;
+    for (const p of todas) {
+      if (p.tipo === 'agenda' && p.acao === 'criarEvento' && p.evento.id === eventoId) {
+        await fila.put({ ...p, evento: { ...p.evento, salaId } });
+        achou = true;
+      }
+    }
+    await tx.done;
+    return achou;
+  });
 }
 
 /**
