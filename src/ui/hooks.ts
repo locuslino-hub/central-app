@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
+import { lerNome, NOME_MUDOU } from '../dados/nome';
 import type { Colecoes, Config, Documento, EstadoEmail, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
@@ -186,4 +187,19 @@ export function useConfig(): Config | undefined {
     };
   }, []);
   return config;
+}
+
+/** O nome da saudação, guardado neste aparelho. Muda na hora quando é guardado (aqui ou noutra aba). */
+export function useNome(): string {
+  const [nome, setNome] = useState(lerNome);
+  useEffect(() => {
+    const ler = () => setNome(lerNome());
+    window.addEventListener(NOME_MUDOU, ler);
+    window.addEventListener('storage', ler);
+    return () => {
+      window.removeEventListener(NOME_MUDOU, ler);
+      window.removeEventListener('storage', ler);
+    };
+  }, []);
+  return nome;
 }

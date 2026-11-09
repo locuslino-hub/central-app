@@ -574,3 +574,26 @@
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
+
+/* ---- Ajustes do aparelho (Conectar e o nome da saudação) ---- */
+
+.ajustes-do-aparelho {
+  display: grid;
+  gap: 18px;
+}
+.seu-nome {
+  max-width: 44rem;
+}
+.seu-nome-nota {
+  margin: 0 0 12px;
+  color: var(--tinta2);
+}
+.seu-nome-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.seu-nome-linha .campo {
+  flex: 1 1 14rem;
+}
