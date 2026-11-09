@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ArquivosDoMotor, Runtime } from '../../src/ia/runtime';
 import {
   criarTratador, guardaNaPasta, MODELO, type Dependencias, type Guarda, type Motor, type Pasta, type Resposta,
 } from '../../src/ia/trabalhador';
@@ -52,16 +53,28 @@ function motorFalso(texto = '{"itens":[]}'): Motor & { perguntas: string[]; canc
   return motor;
 }
 
+/** Os arquivos do motor (src/ia/runtime.ts), sem rede nem Cache Storage. */
+function runtimeFalso() {
+  const arquivos: ArquivosDoMotor = { js: 'blob:js#litertlm_wasm_internal.js', wasm: 'blob:wasm', liberar: () => {} };
+  return {
+    arquivos,
+    guardar: vi.fn<Runtime['guardar']>(async () => {}),
+    abrir: vi.fn<Runtime['abrir']>(async () => arquivos),
+    apagar: vi.fn<Runtime['apagar']>(async () => {}),
+  };
+}
+
 function montar(deps: Partial<Dependencias> = {}) {
   const respostas: Resposta[] = [];
   const guarda = (deps.guarda as ReturnType<typeof guardaFalsa>) ?? guardaFalsa();
   const motor = motorFalso();
-  const completas: Dependencias = {
+  const completas: Dependencias & { runtime: ReturnType<typeof runtimeFalso> } = {
     guarda,
+    runtime: runtimeFalso(),
     baixar: vi.fn(async () => new Response(corpo([10]))),
     espacoLivre: async () => null,
     criarMotor: vi.fn(async () => motor),
-    ...deps,
+    ...(deps as Partial<Dependencias & { runtime: ReturnType<typeof runtimeFalso> }>),
   };
   const tratar = criarTratador(completas, (r) => respostas.push(r));
   return { tratar, respostas, guarda, motor, deps: completas };
@@ -96,7 +109,7 @@ describe('tratador do trabalhador', () => {
       guarda.bytes = tamanho;
     };
     const { tratar, respostas } = montar({ baixar, guarda });
-    await tratar({ tipo: 'baixar' });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
     expect(baixar).toHaveBeenCalledTimes(1);
     expect(respostas).toEqual([
       { tipo: 'progresso', baixados: 0, total: tamanho },
@@ -112,7 +125,7 @@ describe('tratador do trabalhador', () => {
       for (let n = 1; n <= 1000; n++) aoProgredir(Math.floor((total * n) / 1000));
     };
     const { tratar, respostas } = montar({ guarda });
-    await tratar({ tipo: 'baixar' });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
     const avisos = respostas.filter((r) => r.tipo === 'progresso');
     expect(avisos.length).toBeLessThanOrEqual(102);
     expect(avisos.at(-1)).toEqual({ tipo: 'progresso', baixados: MODELO.tamanho, total: MODELO.tamanho });
@@ -121,28 +134,28 @@ describe('tratador do trabalhador', () => {
   it('sem espaço livre não baixa nada', async () => {
     const baixar = vi.fn(async () => new Response(corpo([10])));
     const { tratar, respostas } = montar({ baixar, espacoLivre: async () => MODELO.tamanho / 2 });
-    await tratar({ tipo: 'baixar' });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
     expect(baixar).not.toHaveBeenCalled();
     expect(respostas).toEqual([{ tipo: 'erro', etapa: 'baixar', motivo: 'sem-espaco' }]);
   });
 
   it('sem internet vira "sem-internet" e não apaga nada (outra aba pode ter o modelo)', async () => {
     const { tratar, respostas, guarda } = montar({ baixar: async () => Promise.reject(new TypeError('Failed to fetch')) });
-    await tratar({ tipo: 'baixar' });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
     expect(respostas.at(-1)).toEqual({ tipo: 'erro', etapa: 'baixar', motivo: 'sem-internet' });
     expect(guarda.apagou).toBe(0);
   });
 
   it('resposta de erro do servidor vira "falhou"', async () => {
     const { tratar, respostas } = montar({ baixar: async () => new Response('não', { status: 404 }) });
-    await tratar({ tipo: 'baixar' });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
     expect(respostas.at(-1)).toEqual({ tipo: 'erro', etapa: 'baixar', motivo: 'falhou', mensagem: 'HTTP 404' });
   });
 
   it('download incompleto vira "falhou"; quem limpa o pedaço é a guarda, não o trabalhador', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { tratar, respostas, guarda } = montar({ baixar: async () => new Response(corpo([3])) });
-    await tratar({ tipo: 'baixar' });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
     expect(respostas.at(-1)).toEqual({ tipo: 'erro', etapa: 'baixar', motivo: 'falhou' });
     expect(guarda.apagou).toBe(0);
   });
@@ -162,7 +175,7 @@ describe('tratador do trabalhador', () => {
         return new Response(corpo([1]));
       },
     });
-    const download = tratar({ tipo: 'baixar' });
+    const download = tratar({ tipo: 'baixar', wasm: 'x/' });
     await new Promise((r) => setTimeout(r, 0));
     await tratar({ tipo: 'cancelar-download' });
     liberar();
@@ -199,7 +212,7 @@ describe('tratador do trabalhador', () => {
           }),
         ),
     });
-    const download = tratar({ tipo: 'baixar' });
+    const download = tratar({ tipo: 'baixar', wasm: 'x/' });
     await new Promise((r) => setTimeout(r, 0));
     await tratar({ tipo: 'apagar' });
     await download;
@@ -207,11 +220,53 @@ describe('tratador do trabalhador', () => {
     expect(respostas).toContainEqual({ tipo: 'apagado' });
   });
 
-  it('carregar abre o modelo guardado com os arquivos do próprio app', async () => {
+  it('carregar abre o modelo guardado com os arquivos do motor guardados no aparelho', async () => {
     const { tratar, respostas, deps } = montar({ guarda: guardaFalsa(true) });
-    await tratar({ tipo: 'carregar', wasm: 'https://exemplo.test/central-app/litertlm/' });
-    expect(deps.criarMotor).toHaveBeenCalledWith(expect.any(Blob), 'https://exemplo.test/central-app/litertlm/');
+    await tratar({ tipo: 'carregar', wasm: 'https://exemplo.test/central-app/litertlm/0.19.0/' });
+    // Quem já tinha o modelo de antes ganha os arquivos do motor na primeira abertura com internet.
+    expect(deps.runtime.guardar).toHaveBeenCalledWith('https://exemplo.test/central-app/litertlm/0.19.0/');
+    expect(deps.runtime.abrir).toHaveBeenCalledWith('https://exemplo.test/central-app/litertlm/0.19.0/');
+    expect(deps.criarMotor).toHaveBeenCalledWith(expect.any(Blob), deps.runtime.arquivos);
     expect(respostas).toEqual([{ tipo: 'carregada' }]);
+  });
+
+  it('sem internet e sem os arquivos do motor guardados, carregar vira "falhou" sem abrir o motor', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { tratar, respostas, deps } = montar({ guarda: guardaFalsa(true) });
+    deps.runtime.guardar.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await tratar({ tipo: 'carregar', wasm: 'x/' });
+    expect(deps.criarMotor).not.toHaveBeenCalled();
+    expect(respostas).toEqual([{ tipo: 'erro', etapa: 'carregar', motivo: 'falhou', mensagem: 'TypeError: Failed to fetch' }]);
+  });
+
+  it('baixar o modelo guarda também os arquivos do motor', async () => {
+    const guarda = guardaFalsa();
+    guarda.gravar = async () => {
+      guarda.bytes = MODELO.tamanho;
+    };
+    const { tratar, respostas, deps } = montar({ guarda });
+    await tratar({ tipo: 'baixar', wasm: 'https://exemplo.test/central-app/litertlm/0.19.0/' });
+    expect(deps.runtime.guardar).toHaveBeenCalledWith('https://exemplo.test/central-app/litertlm/0.19.0/');
+    expect(respostas.at(-1)).toEqual({ tipo: 'baixado' });
+  });
+
+  it('falha ao guardar os arquivos do motor não perde o modelo baixado (a abertura tenta de novo)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const guarda = guardaFalsa();
+    guarda.gravar = async () => {
+      guarda.bytes = MODELO.tamanho;
+    };
+    const { tratar, respostas, deps } = montar({ guarda });
+    deps.runtime.guardar.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
+    expect(respostas.at(-1)).toEqual({ tipo: 'baixado' });
+    expect(guarda.apagou).toBe(0);
+  });
+
+  it('download que falha não guarda os arquivos do motor', async () => {
+    const { tratar, deps } = montar({ baixar: async () => Promise.reject(new TypeError('offline')) });
+    await tratar({ tipo: 'baixar', wasm: 'x/' });
+    expect(deps.runtime.guardar).not.toHaveBeenCalled();
   });
 
   it('dois pedidos de carregar abrem um motor só', async () => {
@@ -292,11 +347,12 @@ describe('tratador do trabalhador', () => {
     expect(respostas).toContainEqual({ tipo: 'erro', etapa: 'perguntar', motivo: 'cancelado', id: 2 });
   });
 
-  it('apagar tira o modelo do aparelho', async () => {
-    const { tratar, respostas, guarda } = montar({ guarda: guardaFalsa(true) });
+  it('apagar tira o modelo e os arquivos do motor do aparelho', async () => {
+    const { tratar, respostas, guarda, deps } = montar({ guarda: guardaFalsa(true) });
     await tratar({ tipo: 'carregar', wasm: 'x/' });
     await tratar({ tipo: 'apagar' });
     expect(guarda.apagou).toBe(1);
+    expect(deps.runtime.apagar).toHaveBeenCalledTimes(1);
     expect(respostas.at(-1)).toEqual({ tipo: 'apagado' });
   });
 });

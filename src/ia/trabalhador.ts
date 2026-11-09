@@ -5,15 +5,19 @@
 //   privada do app no aparelho (OPFS). O cache do navegador não guardou o
 //   modelo na prova de 8/11 (PROVAS.md): por isso a gravação é explícita.
 // - Abre o modelo com o `@litert-lm/core` empacotado no app; os arquivos wasm
-//   saem do próprio site (`litertlm/`), não de CDN (R18).
+//   saem do próprio site (`litertlm/<versão>/`), não de CDN (R18), e ficam
+//   guardados no aparelho junto do modelo (src/ia/runtime.ts): sem internet a
+//   IA abre do mesmo jeito.
 // - Responde às frases do chat. A frase só chega por `postMessage` e só vai ao
-//   modelo, no aparelho: a única chamada de rede daqui é o download do modelo.
+//   modelo, no aparelho: as únicas chamadas de rede daqui são o download do
+//   modelo e dos arquivos do motor.
 //
 // A lógica fica em `criarTratador`, com as dependências de fora, para ser
 // testada sem modelo, sem rede e sem pasta privada.
 
 import { Engine, loadLiteRtLm, type Conversation, type Message } from '@litert-lm/core';
 import { MODELO } from './modelo';
+import { runtimeGuardado, varianteDoNavegador, type ArquivosDoMotor, type Runtime } from './runtime';
 
 export { MODELO };
 
@@ -25,9 +29,9 @@ export type Motivo = 'sem-suporte' | 'sem-espaco' | 'sem-internet' | 'falhou' | 
 /** Da tela para o trabalhador. */
 export type Pedido =
   | { tipo: 'verificar' }
-  | { tipo: 'baixar' }
+  /** `wasm`: endereço completo da pasta com os arquivos wasm do app (`litertlm/<versão>/`), com `/` no fim. */
+  | { tipo: 'baixar'; wasm: string }
   | { tipo: 'cancelar-download' }
-  /** `wasm`: endereço completo da pasta com os arquivos wasm do app, com `/` no fim. */
   | { tipo: 'carregar'; wasm: string }
   | { tipo: 'perguntar'; id: number; sistema: string; frase: string }
   | { tipo: 'cancelar'; id: number }
@@ -68,11 +72,13 @@ export type Motor = {
 
 export type Dependencias = {
   guarda: Guarda;
-  /** O download do modelo (a única chamada de rede). */
+  /** Os arquivos do motor (carregador `.js` e `.wasm`), guardados junto do modelo. */
+  runtime: Runtime;
+  /** O download do modelo. */
   baixar(sinal: AbortSignal): Promise<Response>;
   /** Bytes livres para o app, ou `null` se o navegador não diz. */
   espacoLivre(): Promise<number | null>;
-  criarMotor(modelo: Blob, wasm: string): Promise<Motor>;
+  criarMotor(modelo: Blob, arquivos: ArquivosDoMotor): Promise<Motor>;
 };
 
 const ehCancelamento = (erro: unknown) => erro instanceof DOMException && erro.name === 'AbortError';
@@ -90,11 +96,11 @@ export function criarTratador(deps: Dependencias, responder: (resposta: Resposta
   const canceladas = new Set<number>();
   let filaDePerguntas: Promise<void> = Promise.resolve();
 
-  function baixar(): Promise<void> {
+  function baixar(wasm: string): Promise<void> {
     if (baixando) return baixando; // já está baixando
     const controle = new AbortController();
     download = controle;
-    baixando = baixarAgora(controle).finally(() => {
+    baixando = baixarAgora(controle, wasm).finally(() => {
       download = null;
       baixando = null;
     });
@@ -104,7 +110,7 @@ export function criarTratador(deps: Dependencias, responder: (resposta: Resposta
   // O pedaço de um download que falhou é limpo pela própria guarda, e só se
   // ela chegou a abrir o arquivo: com o app em duas abas, a outra pode estar
   // gravando ou já ter o modelo inteiro.
-  async function baixarAgora(controle: AbortController) {
+  async function baixarAgora(controle: AbortController, wasm: string) {
     const livre = await deps.espacoLivre();
     if (livre !== null && livre < MODELO.tamanho * FOLGA) {
       responder({ tipo: 'erro', etapa: 'baixar', motivo: 'sem-espaco' });
@@ -141,13 +147,20 @@ export function criarTratador(deps: Dependencias, responder: (resposta: Resposta
       responder({ tipo: 'erro', etapa: 'baixar', motivo: cancelado ? 'cancelado' : espaco ? 'sem-espaco' : 'falhou' });
       return;
     }
+    // Os arquivos do motor vão junto, para a IA abrir sem internet. Se falhar aqui,
+    // o modelo continua guardado e a abertura (logo em seguida) tenta de novo.
+    await deps.runtime.guardar(wasm).catch((erro) => console.warn('Arquivos do motor da IA não guardados', erro));
     responder({ tipo: 'baixado' });
   }
 
   async function carregar(wasm: string) {
     try {
       if (!motor) {
-        abrindo ??= (async () => deps.criarMotor(await deps.guarda.ler(), wasm))().finally(() => {
+        abrindo ??= (async () => {
+          // Já guardados, nada vai à rede; quem baixou o modelo antes disso ganha os arquivos agora (com internet).
+          await deps.runtime.guardar(wasm);
+          return deps.criarMotor(await deps.guarda.ler(), await deps.runtime.abrir(wasm));
+        })().finally(() => {
           abrindo = null;
         });
         motor = await abrindo;
@@ -191,6 +204,7 @@ export function criarTratador(deps: Dependencias, responder: (resposta: Resposta
       motor = null;
       await aberto?.liberar().catch(() => {});
       await deps.guarda.apagar();
+      await deps.runtime.apagar();
       responder({ tipo: 'apagado' });
     } catch (erro) {
       responder({ tipo: 'erro', etapa: 'apagar', motivo: 'falhou', mensagem: String(erro) });
@@ -207,7 +221,7 @@ export function criarTratador(deps: Dependencias, responder: (resposta: Resposta
         }
         return;
       case 'baixar':
-        return baixar();
+        return baixar(pedido.wasm);
       case 'cancelar-download':
         download?.abort();
         return;
@@ -317,13 +331,32 @@ function textoDa(mensagem: Message): string {
   return (content ?? []).map((parte) => (parte.type === 'text' ? String(parte.text) : '')).join('');
 }
 
-/** Abre o modelo com o LiteRT-LM empacotado, lendo os wasm de `wasm` (do próprio app). */
-async function criarMotorReal(modelo: Blob, wasm: string): Promise<Motor> {
-  // O carregador do wasm procura os arquivos ao lado do script do trabalhador;
-  // `locateFile` aponta para a pasta `litertlm/` do app.
-  (self as unknown as { Module?: unknown }).Module = { locateFile: (arquivo: string) => wasm + arquivo };
-  await loadLiteRtLm(wasm);
-  const motor = await Engine.create({ model: modelo, mainExecutorSettings: { maxNumTokens: 2048 } });
+/** O LiteRT-LM carrega uma vez por trabalhador; numa nova tentativa só o modelo abre de novo. */
+let motorCarregado: Promise<unknown> | null = null;
+
+/** Abre o modelo com o LiteRT-LM empacotado, lendo os arquivos do motor guardados no aparelho. */
+async function criarMotorReal(modelo: Blob, arquivos: ArquivosDoMotor): Promise<Motor> {
+  try {
+    motorCarregado ??= (async () => {
+      // O carregador procura o `.wasm` ao lado do script; `locateFile` aponta para o guardado.
+      (self as unknown as { Module?: unknown }).Module = {
+        locateFile: (arquivo: string) => (arquivo.endsWith('.wasm') ? arquivos.wasm : arquivo),
+      };
+      return loadLiteRtLm(arquivos.js);
+    })().catch((erro) => {
+      motorCarregado = null;
+      throw new Error(`O motor da IA não carregou: ${erro}`);
+    });
+    await motorCarregado;
+  } finally {
+    arquivos.liberar();
+  }
+  let motor: Engine;
+  try {
+    motor = await Engine.create({ model: modelo, mainExecutorSettings: { maxNumTokens: 2048 } });
+  } catch (erro) {
+    throw new Error(`O modelo não abriu: ${erro}`);
+  }
   let conversa: Conversation | null = null;
   return {
     async perguntar(sistema, frase) {
@@ -358,6 +391,14 @@ function ligar() {
   const tratar = criarTratador(
     {
       guarda: guardaNaPasta(() => navigator.storage.getDirectory() as unknown as Promise<Pasta>, MODELO),
+      runtime: runtimeGuardado({
+        armazem: caches,
+        versao: __VERSAO_LITERTLM__,
+        variante: varianteDoNavegador,
+        baixar: (url) => fetch(url, { credentials: 'same-origin' }),
+        criarUrl: (blob) => URL.createObjectURL(blob),
+        revogarUrl: (url) => URL.revokeObjectURL(url),
+      }),
       baixar: (sinal) => fetch(MODELO.url, { signal: sinal, credentials: 'omit', referrerPolicy: 'no-referrer' }),
       async espacoLivre() {
         try {

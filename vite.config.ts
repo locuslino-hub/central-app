@@ -59,7 +59,8 @@ export default defineConfig({
     preact(),
     wasmDaIA(),
     // Offline (Tarefa 22). Só o app (HTML, JS, CSS, fontes, ícones) fica guardado para abrir sem internet.
-    //  - `litertlm/` (~120 MB de wasm da IA) NÃO entra: a IA tem o próprio armazenamento (Tarefa 21).
+    //  - `litertlm/` (~120 MB de wasm da IA, quatro variantes) NÃO entra: quem baixa a IA guarda só a variante
+    //    do seu navegador, junto do modelo, num armazenamento próprio (`litertlm-<versão>`, src/ia/runtime.ts).
     //  - Nenhuma regra de cache em tempo de execução: o script do Google (script.google.com) e qualquer
     //    outro endereço de fora passam direto pela rede. Os dados vão por sincronia/IndexedDB, não por cache HTTP.
     //  - Atualização: `skipWaiting` + `clientsClaim`. A versão nova assume sozinha assim que baixa, sem
@@ -71,7 +72,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ['index.html', 'assets/**/*.{js,css,woff,woff2}', 'icones/*.{png,svg}', 'manifest.webmanifest'],
         globIgnores: ['litertlm/**', 'teste-*.html'],
-        maximumFileSizeToCacheInBytes: 2 * 1024 * 1024, // o que passar disso é de IA, não do app
+        // O que passar disso não é do app. Teste (tests/e2e/service-worker.spec.ts) confere que nada de
+        // `assets/` fica de fora em silêncio.
+        maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
         // O index.html é o único guardado sem hash no nome: leva a integridade. Se o CDN ainda entrega o HTML
         // velho quando o service worker novo instala, a instalação falha (e tenta de novo na próxima conferência)
         // em vez de guardar um HTML que pede arquivos que não existem mais.

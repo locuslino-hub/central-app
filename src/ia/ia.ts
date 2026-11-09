@@ -203,7 +203,7 @@ export function criarIA(ambiente: Ambiente = ambienteDoNavegador()): IALocal {
         persistente = null;
       }
       mudar({ estado: 'baixando', persistente, progresso: undefined });
-      const resposta = await pedir({ tipo: 'baixar' }, daEtapa('baixado', 'baixar'));
+      const resposta = await pedir({ tipo: 'baixar', wasm: ambiente.caminhoWasm }, daEtapa('baixado', 'baixar'));
       if (!resposta) return;
       if (resposta.tipo === 'baixado') {
         await carregar();
