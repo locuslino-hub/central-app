@@ -172,12 +172,13 @@ describe('Caixas das salas', () => {
       'Casa: em dia',
     ]);
     expect(caixas.getByRole('link', { name: 'Orientações: 2 tarefas' }).getAttribute('href')).toBe('#/sala/sala-orientacoes');
-    // Na tela: o número grande e a palavra no plural certo.
+    // Na tela, como no modelo: o nome e, embaixo, o número e a palavra no plural certo.
     const tile = (nome: string) => caixas.getByRole('link', { name: nome });
     expect(tile('Investigação: 1 tarefa').querySelector('.caixa-sala-numero')?.textContent).toBe('1');
-    expect(tile('Investigação: 1 tarefa').querySelector('.caixa-sala-conta')?.textContent).toBe('tarefa');
-    expect(tile('Orientações: 2 tarefas').querySelector('.caixa-sala-conta')?.textContent).toBe('tarefas');
+    expect(tile('Investigação: 1 tarefa').querySelector('.caixa-sala-conta')?.textContent).toBe('1 tarefa');
+    expect(tile('Orientações: 2 tarefas').querySelector('.caixa-sala-conta')?.textContent).toBe('2 tarefas');
     expect(tile('Casa: em dia').querySelector('.caixa-sala-conta')?.textContent).toBe('Em dia');
+    expect(tile('Casa: em dia').querySelector('.caixa-sala-numero')).toBeNull();
   });
 
   it('o e-mail de quem é de uma sala conta na caixa dela', async () => {
