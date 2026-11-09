@@ -292,3 +292,17 @@ describe('revisão: sanitizador mais estrito', () => {
     expect(resumo).toMatch(/^Error: Campo /);
   });
 });
+
+describe('Tarefa 10: e-mails (ids de agenda) não vão ao registro', () => {
+  it.each([
+    ['agenda principal', 'Not Found: marina.ficticia@example.com', 'Error: Not Found: …'],
+    ['agenda de grupo', 'Calendar abc@group.calendar.example.com sumiu', 'Error: Calendar … sumiu'],
+    ['curto', 'de a@b.c falhou', 'Error: de … falhou'],
+  ])('%s', (_caso, mensagem, esperado) => {
+    expect(resumoDoErro(new Error(mensagem))).toBe(esperado);
+  });
+
+  it('arroba sozinha não é e-mail e fica', () => {
+    expect(resumoDoErro(new Error('falhou @ 10:00'))).toBe('Error: falhou @ 10:00');
+  });
+});

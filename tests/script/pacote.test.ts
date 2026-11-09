@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { agendasDoDono } from '../apoio/calendario';
 
 let pacote: string;
 
@@ -145,7 +146,7 @@ function redeFalsa(drive: ReturnType<typeof driveFalso>) {
 }
 
 /** Roda o pacote como o Apps Script roda: sem módulos, serviços como globais. */
-function carregar() {
+function carregar({ semAgenda = false }: { semAgenda?: boolean } = {}) {
   const propriedades = new Map<string, string>();
   const leituras = new Map<string, number>();
   const registros: string[] = [];
@@ -167,8 +168,11 @@ function carregar() {
   };
   const trava = { livre: true, presa: false, esperas: [] as number[] };
   let uuids = 0;
+  const calendario = agendasDoDono();
   const contexto = vm.createContext({
     Drive: drive.servico,
+    // Serviço avançado desligado: o global nem existe.
+    ...(semAgenda ? {} : { Calendar: calendario.servico }),
     UrlFetchApp: rede.UrlFetchApp,
     ScriptApp: rede.ScriptApp,
     CacheService: { getScriptCache: () => cacheDoScript() },
@@ -237,7 +241,7 @@ function carregar() {
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache };
+  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache, calendario };
 }
 
 // O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
@@ -472,16 +476,32 @@ describe('manifesto publicado', () => {
     });
   });
 
-  it('declara os escopos explicitamente: arquivos do próprio script no Drive e chamada externa (R24)', () => {
+  it('declara os escopos explicitamente: Drive do próprio script, chamada externa (R24) e Google Agenda mínimo (T10)', () => {
     expect(manifesto().oauthScopes).toEqual([
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/script.external_request',
+      // Lista de agendas, só leitura (calendarList.list).
+      'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+      // Criar, trocar sala e apagar só em agendas do próprio dono (events.insert/patch/delete).
+      'https://www.googleapis.com/auth/calendar.events.owned',
+      // Ler eventos de todas as agendas, inclusive assinadas (events.list/get).
+      'https://www.googleapis.com/auth/calendar.events.readonly',
     ]);
   });
 
-  it('liga o serviço avançado do Drive na v3', () => {
+  it('nenhum escopo largo do Google Agenda nem do Drive', () => {
+    const escopos = manifesto().oauthScopes as string[];
+    for (const largo of ['calendar', 'calendar.events', 'calendar.readonly', 'drive', 'drive.readonly']) {
+      expect(escopos).not.toContain(`https://www.googleapis.com/auth/${largo}`);
+    }
+  });
+
+  it('liga os serviços avançados do Drive e do Google Agenda na v3', () => {
     expect(manifesto().dependencies).toEqual({
-      enabledAdvancedServices: [{ userSymbol: 'Drive', serviceId: 'drive', version: 'v3' }],
+      enabledAdvancedServices: [
+        { userSymbol: 'Drive', serviceId: 'drive', version: 'v3' },
+        { userSymbol: 'Calendar', serviceId: 'calendar', version: 'v3' },
+      ],
     });
   });
 });
@@ -813,5 +833,98 @@ describe('revisão: redirecionamento e busca sem gravar o id', () => {
     propriedades.delete('ID_DO_ARQUIVO_DE_DADOS');
     pedir('puxar', { desde: 0 });
     expect(propriedades.get('ID_DO_ARQUIVO_DE_DADOS')).toBe('arquivo-1');
+  });
+});
+
+describe('Tarefa 10: Google Agenda pelo pacote', () => {
+  const reuniao = (data: string) => ({ titulo: 'Reunião com Prof. Souza', data, inicio: '11:00', fim: '12:00', salaId: 'sala-aulas' });
+
+  it.each([
+    ['2026-10-23', '+01:00'],
+    ['2026-10-26', '+00:00'],
+  ])('evento criado às 11:00 de %s volta às 11:00 pelo doPost', (data, fuso) => {
+    const { pedir } = conectado();
+    const criado = pedir('criarEvento', reuniao(data));
+    expect(criado).toMatchObject({ ok: true, dados: { inicio: `${data}T11:00:00${fuso}`, salaId: 'sala-aulas', agendaId: 'primary' } });
+    expect(pedir('eventos', { de: data, ate: data }).dados).toEqual([criado.dados]);
+  });
+
+  it('desfazer remove pelo doPost, sem notificar ninguém', () => {
+    const { pedir, calendario } = conectado();
+    const { dados } = pedir('criarEvento', reuniao('2026-10-23'));
+    expect(pedir('removerEvento', { id: dados.id })).toEqual({ ok: true, dados: { removido: true } });
+    expect(pedir('eventos', { de: '2026-10-23', ate: '2026-10-23' }).dados).toEqual([]);
+    expect(calendario.notificacoes).toEqual([]);
+    const gravacoes = calendario.chamadas.filter((c) => /insert|patch|remove/.test(c.metodo));
+    expect(gravacoes.length).toBe(2);
+    for (const { args } of gravacoes) expect(args.at(-1)).toEqual({ sendUpdates: 'none' });
+  });
+
+  it('trocar a sala pelo doPost', () => {
+    const { pedir } = conectado();
+    const { dados } = pedir('criarEvento', reuniao('2026-10-23'));
+    expect(pedir('trocarSalaEvento', { id: dados.id, salaId: 'sala-casa' })).toMatchObject({ ok: true, dados: { salaId: 'sala-casa' } });
+  });
+
+  it('serviço avançado do Google Agenda desligado: interno, sem quebrar o resto', () => {
+    const carregado = carregar({ semAgenda: true });
+    carregado.globais.gerarCodigo();
+    const codigo = carregado.propriedades.get('CODIGO_DO_APARELHO')!;
+    const pedir = (acao: string, dados: unknown) =>
+      carregado.postar(JSON.stringify({ codigo, acao, dados })).resposta as RespostaDoPacote;
+    expect(pedir('eventos', { de: '2026-10-23', ate: '2026-10-23' })).toEqual({ ok: false, erro: 'interno' });
+    expect(pedir('ping', {})).toEqual({ ok: true, dados: {} });
+  });
+
+  it('pedido inválido não chama o Google Agenda', () => {
+    const { pedir, calendario } = conectado();
+    expect(pedir('criarEvento', { ...reuniao('2026-10-23'), salaId: 'sala-x' })).toEqual({ ok: false, erro: 'interno' });
+    expect(calendario.chamadas).toEqual([]);
+  });
+});
+
+describe('Tarefa 10: autorizarDrive também prova o Google Agenda', () => {
+  it('lê a lista de agendas e os eventos de hoje, registra só a contagem e não grava nada', () => {
+    const { globais, registros, calendario } = carregar();
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+
+    expect(calendario.de('CalendarList.list').length).toBeGreaterThan(0);
+    expect(calendario.de('Events.list').length).toBeGreaterThan(0);
+    expect(calendario.chamadas.filter((c) => /insert|patch|remove/.test(c.metodo))).toEqual([]);
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Permissão do Drive aprovada/);
+    expect(mensagem).toMatch(/Permissão do Google Agenda aprovada: 3 agendas/);
+    for (const proibido of ['marina', 'Aurora', 'Feriados', 'example.com']) expect(mensagem).not.toContain(proibido);
+  });
+
+  it('faz a mesma leitura da ação eventos (mesmos campos e opções), para o passo do dono provar o pedido real', () => {
+    const { globais, calendario, pedir } = conectado();
+    pedir('eventos', { de: '2026-10-23', ate: '2026-10-23' });
+    const doApp = calendario.de('Events.list').at(-1)!.args[1] as Record<string, unknown>;
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    const doEditor = calendario.de('Events.list').at(-1)!.args[1] as Record<string, unknown>;
+    const { timeMin: _a, timeMax: _b, ...opcoesDoApp } = doApp;
+    const { timeMin: _c, timeMax: _d, ...opcoesDoEditor } = doEditor;
+    expect(opcoesDoEditor).toEqual(opcoesDoApp);
+  });
+
+  it('Google Agenda recusado aparece no registro, sem e-mail, e o Drive continua relatado', () => {
+    const { globais, registros, calendario } = carregar();
+    calendario.servico.CalendarList.list = () => {
+      throw new Error(
+        'API call to calendar.calendarList.list failed with error: Request had insufficient authentication scopes. marina.ficticia@example.com',
+      );
+    };
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Permissão do Drive aprovada/);
+    expect(mensagem).toMatch(/Google Agenda falhou/);
+    expect(mensagem).not.toContain('marina');
+  });
+
+  it('sem o serviço avançado, o registro diz que o Google Agenda falhou', () => {
+    const { globais, registros } = carregar({ semAgenda: true });
+    (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
+    expect(registros.at(-1)).toMatch(/Google Agenda falhou/);
   });
 });

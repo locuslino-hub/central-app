@@ -1,5 +1,6 @@
 // Pontos de entrada do Apps Script. Cada função exportada aqui vira uma função
 // global no pacote (ver build.mjs). O resto fica em api.ts e dados.ts, sem serviços do Google.
+import { provarAgenda, type ServicoDeAgenda } from './agenda';
 import { novoCodigo, resumoDoErro, tratarCorpo, type Ambiente } from './api';
 import { NOME_DO_ARQUIVO, Ocupado, type Armazem } from './dados';
 
@@ -158,9 +159,20 @@ const armazem: Armazem = {
   },
 };
 
+/**
+ * Serviço avançado do Google Agenda (Calendar API v3, R9). Os escopos do
+ * manifesto limitam o que ele pode: ler a lista de agendas e os eventos, e
+ * gravar só em agendas do próprio dono (o app grava só na principal).
+ */
+function calendario(): ServicoDeAgenda {
+  if (typeof Calendar === 'undefined' || !Calendar) throw new Error('Serviço avançado do Google Agenda desligado');
+  return Calendar as unknown as ServicoDeAgenda;
+}
+
 const ambiente: Ambiente = {
   lerCodigo,
   armazem,
+  calendario,
 };
 
 export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
@@ -170,21 +182,10 @@ export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
   );
 }
 
-/**
- * O dono roda uma vez pelo editor depois de publicar: o Google pede as duas
- * permissões (arquivos do Drive criados por este script e chamada externa,
- * usada só para ler esse arquivo pela API do Drive). Usa as duas: procura o
- * arquivo pelo serviço avançado e, se ele existe, lê pela API. Não grava nada
- * e não troca o código do aparelho. Registra só tamanhos e status.
- */
-export function autorizarDrive() {
-  ScriptApp.getOAuthToken();
+function provaDoDrive(): string {
   const id = idDoArquivo({ guardar: false });
   if (id === null) {
-    Logger.log(
-      'Permissão do Drive aprovada. O arquivo central-dados.json será criado na primeira sincronia.',
-    );
-    return;
+    return 'Permissão do Drive aprovada. O arquivo central-dados.json será criado na primeira sincronia.';
   }
   let leitura: string;
   try {
@@ -192,7 +193,30 @@ export function autorizarDrive() {
   } catch (erro) {
     leitura = `leitura pela API do Drive falhou (${resumoDoErro(erro)})`;
   }
-  Logger.log(`Permissão do Drive aprovada. O arquivo central-dados.json já existe; ${leitura}.`);
+  return `Permissão do Drive aprovada. O arquivo central-dados.json já existe; ${leitura}.`;
+}
+
+/** Lê a lista de agendas e os eventos de hoje da principal. Só contagens: nenhum nome, id ou título. */
+function provaDaAgenda(): string {
+  try {
+    const { agendas } = provarAgenda(calendario(), Date.now());
+    return `Permissão do Google Agenda aprovada: ${agendas} ${agendas === 1 ? 'agenda' : 'agendas'} para ler; leitura de eventos: ok.`;
+  } catch (erro) {
+    return `Google Agenda falhou (${resumoDoErro(erro)}). Rode autorizarDrive de novo e aprove o Google Agenda.`;
+  }
+}
+
+/**
+ * O dono roda pelo editor depois de publicar uma versão com permissão nova: o
+ * Google pede todas as permissões do manifesto (arquivos do Drive criados por
+ * este script, chamada externa usada só para ler esse arquivo, e Google
+ * Agenda). Usa cada uma: procura e lê o arquivo de dados, lê a lista de
+ * agendas e os eventos de hoje. Não grava nada (nem evento), não troca o
+ * código do aparelho e registra só tamanhos, contagens e status.
+ */
+export function autorizarDrive() {
+  ScriptApp.getOAuthToken();
+  Logger.log([provaDoDrive(), provaDaAgenda()].join('\n'));
 }
 
 function jsonAbre(texto: string): string {

@@ -2,7 +2,10 @@
   "timeZone": "Europe/Lisbon",
   "runtimeVersion": "V8",
   "dependencies": {
-    "enabledAdvancedServices": [{ "userSymbol": "Drive", "serviceId": "drive", "version": "v3" }]
+    "enabledAdvancedServices": [
+      { "userSymbol": "Drive", "serviceId": "drive", "version": "v3" },
+      { "userSymbol": "Calendar", "serviceId": "calendar", "version": "v3" }
+    ]
   },
   "webapp": {
     "executeAs": "USER_DEPLOYING",
@@ -10,6 +13,9 @@
   },
   "oauthScopes": [
     "https://www.googleapis.com/auth/drive.file",
-    "https://www.googleapis.com/auth/script.external_request"
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    "https://www.googleapis.com/auth/calendar.events.owned",
+    "https://www.googleapis.com/auth/calendar.events.readonly"
   ]
 }

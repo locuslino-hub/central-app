@@ -1,5 +1,6 @@
 // Lógica pura do script: nada aqui toca serviços do Google. Tudo o que vem de
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
+import { criarEvento, listarEventos, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 
 export type ErroDoScript = 'codigo-invalido' | 'ocupado' | 'interno';
@@ -9,17 +10,29 @@ export type Resposta = { ok: true; dados: unknown } | { ok: false; erro: ErroDoS
 export interface Ambiente {
   lerCodigo(): string | null;
   armazem: Armazem;
+  /** Serviço avançado do Google Agenda (v3). Sem ele, as ações de agenda dão `interno`. */
+  calendario?(): ServicoDeAgenda;
 }
 
 type Acao = (dados: unknown, ambiente: Ambiente) => unknown;
 
 const TAMANHO_MINIMO_DO_CODIGO = 32;
 
+function calendario(ambiente: Ambiente): ServicoDeAgenda {
+  if (!ambiente.calendario) throw new Error('Google Agenda indisponível');
+  return ambiente.calendario();
+}
+
 // Map, e não objeto: `acoes.get('constructor')` não acha nada herdado.
+// As ações de agenda conferem o pedido antes de qualquer chamada ao Google (agenda.ts).
 const acoes = new Map<unknown, Acao>([
   ['ping', () => ({})],
   ['puxar', (dados, ambiente) => puxar(dados, ambiente.armazem)],
   ['enviar', (dados, ambiente) => enviar(dados, ambiente.armazem)],
+  ['eventos', (dados, ambiente) => listarEventos(dados, calendario(ambiente))],
+  ['criarEvento', (dados, ambiente) => criarEvento(dados, calendario(ambiente))],
+  ['removerEvento', (dados, ambiente) => removerEvento(dados, calendario(ambiente))],
+  ['trocarSalaEvento', (dados, ambiente) => trocarSalaEvento(dados, calendario(ambiente))],
 ]);
 
 function recusa(erro: ErroDoScript): Resposta {
@@ -46,7 +59,7 @@ const NOME_DE_ERRO = /^[A-Za-z]{1,40}$/;
 /**
  * Nome e mensagem do erro, para o registro de execuções, sem nada do dono:
  * corta o que vem depois de "Message:" (o Drive põe o conteúdo do arquivo
- * ali), troca texto entre aspas e sequências longas (ids, código) por "…" e
+ * ali), troca e-mails, texto entre aspas e sequências longas (ids, código) por "…" e
  * limita o tamanho. SyntaxError fica só com o nome: o JSON.parse cita o texto lido.
  */
 export function resumoDoErro(erro: unknown): string {
@@ -58,6 +71,8 @@ export function resumoDoErro(erro: unknown): string {
   let mensagem = partes.mensagem;
   const corte = mensagem.indexOf(MARCA_DO_CONTEUDO);
   if (corte >= 0) mensagem = `${mensagem.slice(0, corte + MARCA_DO_CONTEUDO.length)} …`;
+  // E-mails (ids de agenda do Google são e-mails) saem antes de tudo.
+  mensagem = mensagem.replace(/[^\s@]+@[^\s@]+/g, '…');
   mensagem = mensagem.replace(/"[^"]*"|'[^']*'/g, '…');
   // Aspa que sobrou sem par: o resto pode ser texto do dono, então sai tudo.
   const aspa = mensagem.search(/["']/);
