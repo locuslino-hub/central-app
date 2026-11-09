@@ -14,6 +14,10 @@ export type TarefaGuardada = {
   completed?: string;
   deleted?: boolean;
   hidden?: boolean;
+  /** Link para abrir no Google Tarefas: `https://tasks.google.com/task/<id da web>?sa=6`. */
+  webViewLink?: string;
+  /** Última mudança (RFC 3339), como a API devolve. */
+  updated?: string;
 };
 
 export type ListaGuardada = { id: string; title: string; tarefas: Map<string, TarefaGuardada> };
@@ -36,7 +40,10 @@ function dueDaApi(valor: unknown, metodo: string): string | undefined {
   return `${valor.slice(0, 10)}T00:00:00.000Z`;
 }
 
-export function tarefasGoogleFalso({ paginaMaxima = 100 }: { paginaMaxima?: number } = {}) {
+export function tarefasGoogleFalso({
+  paginaMaxima = 100,
+  agora = () => Date.parse('2026-11-05T12:00:00Z'),
+}: { paginaMaxima?: number; agora?: () => number } = {}) {
   const listas = new Map<string, ListaGuardada>();
   const chamadas: Chamada[] = [];
   let proximo = 0;
@@ -65,6 +72,7 @@ export function tarefasGoogleFalso({ paginaMaxima = 100 }: { paginaMaxima?: numb
     }
     if (t.status === 'completed') t.completed ??= '2026-11-05T12:00:00.000Z';
     else delete t.completed;
+    t.updated = new Date(agora()).toISOString();
   }
 
   const Tasklists = {
@@ -92,11 +100,20 @@ export function tarefasGoogleFalso({ paginaMaxima = 100 }: { paginaMaxima?: numb
       const todas = [...l.tarefas.values()]
         .filter((t) => args.showDeleted === true || !t.deleted)
         .filter((t) => args.showHidden === true || !t.hidden)
-        .filter((t) => args.showCompleted !== false || t.status !== 'completed');
+        .filter((t) => args.showCompleted !== false || t.status !== 'completed')
+        // dueMin/dueMax: só tarefas com dia, dentro do intervalo (dueMin incluído, dueMax excluído).
+        .filter((t) => typeof args.dueMin !== 'string' || (t.due !== undefined && Date.parse(t.due) >= Date.parse(args.dueMin)))
+        .filter((t) => typeof args.dueMax !== 'string' || (t.due !== undefined && Date.parse(t.due) < Date.parse(args.dueMax)));
       const tamanho = Math.min(typeof args.maxResults === 'number' ? args.maxResults : 20, paginaMaxima);
       const desde = typeof args.pageToken === 'string' ? Number(args.pageToken) : 0;
       const seguinte = desde + tamanho < todas.length ? String(desde + tamanho) : undefined;
       return { items: clonar(todas.slice(desde, desde + tamanho)), ...(seguinte ? { nextPageToken: seguinte } : {}) };
+    },
+    get(listaId: string, id: string) {
+      chamadas.push({ metodo: 'Tasks.get', args: [listaId, id] });
+      const t = lista(listaId, 'tasks.get').tarefas.get(id);
+      if (!t) throw erroDaApi('tasks.get', 'Not Found', 404);
+      return clonar(t);
     },
     insert(corpo: Record<string, unknown>, listaId: string) {
       chamadas.push({ metodo: 'Tasks.insert', args: [clonar(corpo), listaId] });
@@ -131,6 +148,21 @@ export function tarefasGoogleFalso({ paginaMaxima = 100 }: { paginaMaxima?: numb
       proximo += 1;
       const nova: ListaGuardada = { id: `lista${proximo}`, title, tarefas: new Map() };
       listas.set(nova.id, nova);
+      return nova;
+    },
+    /**
+     * Tarefa criada pelo dono no Google (agendada na Agenda): o id da API e o
+     * id da web (o do link na descrição do evento) podem ser diferentes.
+     */
+    tarefa(l: ListaGuardada, t: Partial<TarefaGuardada> & { id: string; idDaWeb?: string }) {
+      const { idDaWeb, ...resto } = t;
+      const nova: TarefaGuardada = {
+        status: 'needsAction',
+        updated: '2026-11-01T09:00:00.000Z',
+        ...(idDaWeb ? { webViewLink: `https://tasks.google.com/task/${idDaWeb}?sa=6` } : {}),
+        ...resto,
+      };
+      l.tarefas.set(nova.id, nova);
       return nova;
     },
     /** A lista "Central", se existe. */

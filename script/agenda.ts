@@ -16,6 +16,8 @@
 //   (centralCriado '1'), nunca outro evento do dono;
 // - o pedido é conferido antes de qualquer chamada ao Google;
 // - erros e registros nunca levam título, id, e-mail ou nome de agenda;
+// - a descrição é lida só para achar o link de uma tarefa do Google Tarefas
+//   (blocos agendados): sai só o id da tarefa, nunca o texto;
 // - o id de uma agenda que não é a principal nunca sai do script: o app
 //   recebe um apelido opaco e estável (`agenda-…`).
 
@@ -51,10 +53,27 @@ const POR_PAGINA = 2500;
 const PAGINAS_NO_MAXIMO = 20;
 const DIA_MS = 24 * 60 * 60 * 1000;
 
-/** Só os campos usados: sem descrição, local nem e-mail de convidados. */
-const CAMPOS_DOS_EVENTOS =
-  'items(id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)),nextPageToken';
-const CAMPOS_DA_LISTA = 'items(id,primary,selected,hidden,deleted),nextPageToken';
+/**
+ * Só os campos usados: sem local nem e-mail de convidados. A descrição vem só
+ * para achar o link do Google Tarefas (ver idDaTarefaNoTexto); o texto nunca
+ * sai do script.
+ */
+const CAMPOS_BASE_DO_EVENTO =
+  'id,status,eventType,summary,description,colorId,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)';
+/**
+ * Campos novos da API que o v3 do Apps Script pode não conhecer. Pedir um
+ * campo desconhecido em `fields` dá 400, então só entram quando o
+ * diagnosticoAgenda os viu (Codigo.ts guarda isso); um 400 volta aos campos de base.
+ */
+export const CAMPOS_EXTRAS = ['label', 'taskId'] as const;
+export type CampoExtra = (typeof CAMPOS_EXTRAS)[number];
+function camposDosEventos(extras: readonly CampoExtra[]): string {
+  const campos = [CAMPOS_BASE_DO_EVENTO];
+  if (extras.indexOf('label') >= 0) campos.push('label(id,backgroundColor)');
+  if (extras.indexOf('taskId') >= 0) campos.push('taskId');
+  return `items(${campos.join(',')}),nextPageToken`;
+}
+const CAMPOS_DA_LISTA = 'items(id,primary,selected,hidden,deleted,backgroundColor),nextPageToken';
 const CAMPOS_DA_MARCA = 'id,status,extendedProperties';
 /** Um evento inteiro, com os mesmos campos da lista (para o criarEvento repetido). */
 const CAMPOS_DO_EVENTO =
@@ -71,6 +90,29 @@ const ID_DO_APP = /^[a-v0-9]{5,1024}$/;
 const CONTROLE = /[\u0000-\u001f\u007f]/;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const LINK_DO_GOOGLE = /^https:\/\/(?:www\.google\.com\/calendar|calendar\.google\.com)\/\S*$/;
+/** O link que o Google Agenda põe na descrição de um bloco do Google Tarefas. */
+export const LINK_DA_TAREFA = /tasks\.google\.com\/task\/([\w-]+)/;
+/** Id de tarefa do Google (da web ou da API). */
+export const ID_DE_TAREFA = /^[A-Za-z0-9_-]{1,256}$/;
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const ID_DE_ETIQUETA = /^[A-Za-z0-9_-]{1,64}$/;
+/**
+ * Paleta de eventos do Google Agenda (colorId '1' a '11'), como a tela do
+ * Google mostra hoje. O hex é só para a amostra na Central.
+ */
+export const CORES_DOS_EVENTOS: Readonly<Record<string, string>> = {
+  '1': '#7986cb',
+  '2': '#33b679',
+  '3': '#8e24aa',
+  '4': '#e67c73',
+  '5': '#f6bf26',
+  '6': '#f4511e',
+  '7': '#039be5',
+  '8': '#616161',
+  '9': '#3f51b5',
+  '10': '#0b8043',
+  '11': '#d50000',
+};
 const ANO_MINIMO = 1900;
 const ANO_MAXIMO = 2200;
 
@@ -102,6 +144,37 @@ export type Evento = {
    * ou é de um tipo especial (aniversário...). Só vem quando é true.
    */
   somenteLeitura?: boolean;
+  /**
+   * Bloco de uma tarefa do Google Tarefas agendada na Agenda: o id da tarefa
+   * (o do link na descrição, ou o campo `taskId`). O feito destes vive no
+   * Google Tarefas (ação marcarTarefaGoogle), e eles contam sempre como ocupados.
+   */
+  tarefaGoogleId?: string;
+  /**
+   * Só em bloco de tarefa cujo estado foi lido no Google Tarefas: quando a
+   * tarefa mudou pela última vez (ms). O `feito` passa a ser o do Google
+   * Tarefas; o app usa esta hora para decidir entre ele e o da Central.
+   */
+  tarefaAtualizadaEm?: number;
+  /**
+   * A cor do evento no Google: `chave` estável (`label:<id>`, `cor:<colorId>`
+   * ou `agenda:<hex>`) para o dono ligar a uma sala, e `hex` para a amostra.
+   */
+  cor?: CorDoEvento;
+};
+
+export type CorDoEvento = { chave: string; hex: string };
+
+/** O que se sabe de uma tarefa do Google Tarefas na leitura dos eventos. */
+export type EstadoDaTarefa = { feito: boolean; atualizadaEm: number | null };
+/** Lê o estado das tarefas dos blocos, em lote. `de`/`ate` como no pedido `eventos`. */
+export type LerEstadosDasTarefas = (ids: readonly string[], periodo: { de: string; ate: string }) => Map<string, EstadoDaTarefa>;
+
+export type OpcoesDaLeitura = {
+  /** Campos novos que esta API devolve (ver CAMPOS_EXTRAS). */
+  extras?: readonly CampoExtra[];
+  /** Sem isto, ou se falhar, os blocos de tarefa vêm sem o estado do Google Tarefas. */
+  estadosDasTarefas?: LerEstadosDasTarefas;
 };
 
 export type NovoEvento = {
@@ -135,6 +208,10 @@ export interface EventoDaApi {
   attendees?: { self?: boolean; responseStatus?: string }[];
   organizer?: { self?: boolean };
   extendedProperties?: { private?: Record<string, string>; shared?: Record<string, string> };
+  description?: string;
+  colorId?: string;
+  label?: { id?: string; backgroundColor?: string };
+  taskId?: string;
 }
 
 export interface EntradaDaLista {
@@ -143,6 +220,7 @@ export interface EntradaDaLista {
   selected?: boolean;
   hidden?: boolean;
   deleted?: boolean;
+  backgroundColor?: string;
 }
 
 /** O pedaço do serviço avançado Calendar (v3) que o script usa. */
@@ -406,6 +484,49 @@ function registrar(texto: string) {
 
 // ---------- tradução para Evento ----------
 
+/** O id da tarefa no link `tasks.google.com/task/<id>` de um texto; null se não houver. */
+export function idDaTarefaNoTexto(texto: unknown): string | null {
+  if (typeof texto !== 'string') return null;
+  const id = LINK_DA_TAREFA.exec(texto)?.[1];
+  return id && ID_DE_TAREFA.test(id) ? id : null;
+}
+
+/** O id da tarefa de um bloco do Google Tarefas: o campo `taskId`, se vier, ou o link da descrição. */
+function idDaTarefa(api: unknown): string | null {
+  const campo = proprio(api, 'taskId');
+  if (typeof campo === 'string' && ID_DE_TAREFA.test(campo)) return campo;
+  return idDaTarefaNoTexto(proprio(api, 'description'));
+}
+
+/** Hex `#rrggbb` em minúsculas, ou null. */
+function hexValido(valor: unknown): string | null {
+  return typeof valor === 'string' && HEX.test(valor) ? valor.toLowerCase() : null;
+}
+
+/** A cor de uma agenda, que vale para os eventos dela sem cor própria. */
+export function corDaAgenda(hex: unknown): CorDoEvento | undefined {
+  const cor = hexValido(hex);
+  return cor ? { chave: `agenda:${cor.slice(1)}`, hex: cor } : undefined;
+}
+
+/**
+ * A cor do evento: a etiqueta (`label`), se vier; senão o `colorId`; senão a
+ * cor da agenda. Nada que não tenha a forma esperada passa.
+ */
+function corDoEvento(api: unknown, daAgenda: CorDoEvento | undefined): CorDoEvento | undefined {
+  const etiqueta = proprio(api, 'label');
+  const idDaEtiqueta = proprio(etiqueta, 'id');
+  const hexDaEtiqueta = hexValido(proprio(etiqueta, 'backgroundColor'));
+  if (typeof idDaEtiqueta === 'string' && ID_DE_ETIQUETA.test(idDaEtiqueta) && hexDaEtiqueta) {
+    return { chave: `label:${idDaEtiqueta}`, hex: hexDaEtiqueta };
+  }
+  const colorId = proprio(api, 'colorId');
+  if (typeof colorId === 'string' && Object.prototype.hasOwnProperty.call(CORES_DOS_EVENTOS, colorId)) {
+    return { chave: `cor:${colorId}`, hex: CORES_DOS_EVENTOS[colorId] };
+  }
+  return daAgenda;
+}
+
 function ponto(valor: unknown): { texto: string; ms: number; dia: boolean } | null {
   const data = proprio(valor, 'date');
   if (dataValida(data)) return { texto: data, ms: utcDoDia(data), dia: true };
@@ -452,7 +573,11 @@ function lerFeito(api: unknown): { titulo: string; feito: boolean } {
 }
 
 /** Evento da API -> Evento do app, ou null se faltar o essencial. `ordem` serve só para ordenar. */
-function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: number; fimMs: number } | null {
+function traduzir(
+  api: unknown,
+  agendaId: string,
+  daAgenda?: CorDoEvento,
+): { evento: Evento; ordem: number; fimMs: number } | null {
   const id = proprio(api, 'id');
   if (typeof id !== 'string' || id === '') return null;
   const inicio = ponto(proprio(api, 'start'));
@@ -465,6 +590,8 @@ function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: numb
   const recusado =
     Array.isArray(convidados) &&
     convidados.some((c) => proprio(c, 'self') === true && proprio(c, 'responseStatus') === 'declined');
+  const tarefaGoogleId = idDaTarefa(api);
+  const cor = corDoEvento(api, daAgenda);
   return {
     evento: {
       id,
@@ -473,12 +600,15 @@ function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: numb
       inicio: inicio.texto,
       fim: fim.texto,
       diaInteiro: inicio.dia,
-      livre: proprio(api, 'transparency') === 'transparent',
+      // Bloco de tarefa é tempo ocupado, mesmo marcado como disponível no Google.
+      livre: tarefaGoogleId === null && proprio(api, 'transparency') === 'transparent',
       recusado,
       salaId: typeof sala === 'string' && SALAS_FIXAS.indexOf(sala) >= 0 ? sala : null,
       link: linkValido(link) ? link : null,
       ...(feito ? { feito: true } : {}),
       ...(doDono(api, agendaId) ? {} : { somenteLeitura: true }),
+      ...(tarefaGoogleId !== null ? { tarefaGoogleId } : {}),
+      ...(cor ? { cor } : {}),
     },
     // Dia inteiro conta da meia-noite de Lisboa, para ordenar com os de horário.
     ordem: inicio.dia ? Date.parse(meiaNoiteEmLisboa(inicio.texto)) : inicio.ms,
@@ -512,7 +642,7 @@ function apelido(id: string): string {
   return `agenda-${valor.toString(36).padStart(11, '0')}`;
 }
 
-type AgendaALer = { id: string; apelido: string };
+type AgendaALer = { id: string; apelido: string; cor?: CorDoEvento };
 
 // ---------- ações ----------
 
@@ -522,6 +652,7 @@ type AgendaALer = { id: string; apelido: string };
  */
 function agendasMarcadas(servico: ServicoDeAgenda): { agendas: AgendaALer[]; cortada: boolean } {
   const ids: string[] = [];
+  const cores = new Map<string, CorDoEvento>();
   let pagina: string | undefined;
   for (let vez = 0; vez < PAGINAS_NO_MAXIMO; vez++) {
     const args: Args = { maxResults: 250, fields: CAMPOS_DA_LISTA };
@@ -531,7 +662,10 @@ function agendasMarcadas(servico: ServicoDeAgenda): { agendas: AgendaALer[]; cor
       const id = proprio(entrada, 'id');
       if (typeof id !== 'string' || id === '' || id.length > 1024) continue;
       if (proprio(entrada, 'deleted') === true || proprio(entrada, 'hidden') === true) continue;
-      if (proprio(entrada, 'primary') === true) ids.unshift(PRINCIPAL);
+      const primaria = proprio(entrada, 'primary') === true;
+      const cor = corDaAgenda(proprio(entrada, 'backgroundColor'));
+      if (cor) cores.set(primaria ? PRINCIPAL : id, cor);
+      if (primaria) ids.unshift(PRINCIPAL);
       else if (proprio(entrada, 'selected') === true) ids.push(id);
     }
     pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
@@ -540,30 +674,53 @@ function agendasMarcadas(servico: ServicoDeAgenda): { agendas: AgendaALer[]; cor
   // Mesmo se a lista não marcar a principal, ela é lida: é onde o app grava.
   if (ids.indexOf(PRINCIPAL) < 0) ids.unshift(PRINCIPAL);
   return {
-    agendas: ids.slice(0, AGENDAS_NO_MAXIMO).map((id) => ({ id, apelido: id === PRINCIPAL ? PRINCIPAL : apelido(id) })),
+    agendas: ids.slice(0, AGENDAS_NO_MAXIMO).map((id) => ({
+      id,
+      apelido: id === PRINCIPAL ? PRINCIPAL : apelido(id),
+      ...(cores.has(id) ? { cor: cores.get(id) } : {}),
+    })),
     cortada: pagina !== undefined || ids.length > AGENDAS_NO_MAXIMO,
   };
 }
 
-/** Eventos de uma agenda no período. `cortada`: sobrou página por ler (teto de eventos ou de páginas). */
-function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string, timeMax: string) {
+/** Uma página de eventos, sem `fields` (resposta inteira) quando `campos` é null. */
+function paginaDeEventos(servico: ServicoDeAgenda, agendaId: string, timeMin: string, timeMax: string, campos: string | null, pagina?: string) {
+  const args: Args = {
+    timeMin,
+    timeMax,
+    singleEvents: true,
+    orderBy: 'startTime',
+    timeZone: FUSO,
+    maxResults: POR_PAGINA,
+  };
+  if (campos !== null) args.fields = campos;
+  if (pagina) args.pageToken = pagina;
+  return google('events.list', () => servico.Events.list(agendaId, args));
+}
+
+/**
+ * Eventos de uma agenda no período. `cortada`: sobrou página por ler (teto de
+ * eventos ou de páginas). Com campos extras, um 400 na primeira página (a API
+ * não conhece o campo) faz ler de novo só com os campos de base.
+ */
+function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string, timeMax: string, extras: readonly CampoExtra[] = []) {
   const achados: NonNullable<ReturnType<typeof traduzir>>[] = [];
+  const base = camposDosEventos([]);
+  let campos = camposDosEventos(extras);
   let pagina: string | undefined;
   for (let vez = 0; vez < PAGINAS_NO_MAXIMO && achados.length < EVENTOS_NO_MAXIMO; vez++) {
-    const args: Args = {
-      timeMin,
-      timeMax,
-      singleEvents: true,
-      orderBy: 'startTime',
-      timeZone: FUSO,
-      maxResults: POR_PAGINA,
-      fields: CAMPOS_DOS_EVENTOS,
-    };
-    if (pagina) args.pageToken = pagina;
-    const resposta = google('events.list', () => servico.Events.list(agenda.id, args));
+    let resposta: { items?: EventoDaApi[]; nextPageToken?: string };
+    try {
+      resposta = paginaDeEventos(servico, agenda.id, timeMin, timeMax, campos, pagina);
+    } catch (erro) {
+      if (vez > 0 || campos === base || !(erro instanceof FalhaDoGoogle) || erro.status !== 400) throw erro;
+      registrar('campos novos da agenda recusados; lidos só os de base');
+      campos = base;
+      resposta = paginaDeEventos(servico, agenda.id, timeMin, timeMax, campos, pagina);
+    }
     for (const item of Array.isArray(resposta?.items) ? resposta.items : []) {
       if (proprio(item, 'status') === 'cancelled' || proprio(item, 'eventType') === 'workingLocation') continue;
-      const traduzido = traduzir(item, agenda.apelido);
+      const traduzido = traduzir(item, agenda.apelido, agenda.cor);
       if (traduzido) achados.push(traduzido);
     }
     pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
@@ -577,8 +734,9 @@ function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string
  * `incompleto` é true se uma agenda assinada falhou (e foi pulada) ou se um
  * teto (agendas, páginas, 2500 eventos) foi atingido.
  */
-export function listarEventos(dados: unknown, servico: ServicoDeAgenda): RespostaEventos {
+export function listarEventos(dados: unknown, servico: ServicoDeAgenda, opcoes: OpcoesDaLeitura = {}): RespostaEventos {
   const { de, ate } = lerPeriodo(dados);
+  const extras = (opcoes.extras ?? []).filter((c) => CAMPOS_EXTRAS.indexOf(c) >= 0);
   const timeMin = meiaNoiteEmLisboa(de);
   const timeMax = meiaNoiteEmLisboa(diaSeguinte(ate));
   const { agendas, cortada } = agendasMarcadas(servico);
@@ -586,7 +744,7 @@ export function listarEventos(dados: unknown, servico: ServicoDeAgenda): Respost
   const todos: NonNullable<ReturnType<typeof traduzir>>[] = [];
   for (const agenda of agendas) {
     try {
-      const lida = lerAgenda(servico, agenda, timeMin, timeMax);
+      const lida = lerAgenda(servico, agenda, timeMin, timeMax, extras);
       todos.push(...lida.achados);
       if (lida.cortada) incompleto = true;
     } catch (erro) {
@@ -598,7 +756,84 @@ export function listarEventos(dados: unknown, servico: ServicoDeAgenda): Respost
   }
   if (todos.length > EVENTOS_NO_MAXIMO) incompleto = true;
   todos.sort((a, b) => a.ordem - b.ordem || a.fimMs - b.fimMs);
-  return { eventos: todos.slice(0, EVENTOS_NO_MAXIMO).map((t) => t.evento), incompleto };
+  const eventos = todos.slice(0, EVENTOS_NO_MAXIMO).map((t) => t.evento);
+  aplicarEstadosDasTarefas(eventos, { de, ate }, opcoes.estadosDasTarefas);
+  return { eventos, incompleto };
+}
+
+/**
+ * O feito dos blocos de tarefa passa a ser o do Google Tarefas, lido em lote
+ * (uma leitura por lista, nunca uma por evento). Falha nessa leitura não
+ * derruba os eventos: os blocos só ficam sem o estado do Google Tarefas.
+ */
+function aplicarEstadosDasTarefas(eventos: Evento[], periodo: { de: string; ate: string }, ler?: LerEstadosDasTarefas) {
+  const ids = eventos.map((e) => e.tarefaGoogleId).filter((id): id is string => id !== undefined);
+  if (!ler || ids.length === 0) return;
+  let estados: Map<string, EstadoDaTarefa>;
+  try {
+    estados = ler(ids, periodo);
+  } catch (erro) {
+    // Só o método e o motivo curto (FalhaDasTarefas); nada do dono.
+    const falha = erro instanceof Error && /^Google Tarefas \([a-z.]+\): [A-Za-z ]+$/.test(erro.message) ? erro.message : 'falhou';
+    registrar(`estado das tarefas ignorado: ${falha}`);
+    return;
+  }
+  for (const evento of eventos) {
+    const estado = evento.tarefaGoogleId === undefined ? undefined : estados.get(evento.tarefaGoogleId);
+    if (!estado) continue;
+    if (estado.feito) evento.feito = true;
+    else delete evento.feito;
+    if (estado.atualizadaEm !== null) evento.tarefaAtualizadaEm = estado.atualizadaEm;
+  }
+}
+
+/**
+ * Para diagnosticoAgenda: lê os eventos da principal no período, com a
+ * resposta inteira da API (sem `fields`), e devolve só contagens e nomes de
+ * campos. Nunca título, id, descrição ou e-mail. `idsDasTarefas` fica na
+ * memória do script, para a busca no Google Tarefas.
+ */
+export function diagnosticarEventos(
+  servico: ServicoDeAgenda,
+  de: string,
+  ate: string,
+): {
+  eventos: number;
+  comDescricaoDeTarefa: number;
+  comTaskId: number;
+  comColorId: number;
+  comLabel: number;
+  transparentes: number;
+  tipos: Record<string, number>;
+  campos: string[];
+  camposDaEtiqueta: string[];
+  idsDasTarefas: string[];
+} {
+  const resposta = paginaDeEventos(servico, PRINCIPAL, meiaNoiteEmLisboa(de), meiaNoiteEmLisboa(diaSeguinte(ate)), null);
+  const itens = (Array.isArray(resposta?.items) ? resposta.items : []).filter((i) => proprio(i, 'status') !== 'cancelled');
+  const campos = new Set<string>();
+  const camposDaEtiqueta = new Set<string>();
+  const tipos: Record<string, number> = {};
+  const idsDasTarefas: string[] = [];
+  const conta = { comDescricaoDeTarefa: 0, comTaskId: 0, comColorId: 0, comLabel: 0, transparentes: 0 };
+  for (const item of itens) {
+    if (objeto(item)) for (const campo of Object.keys(item)) if (/^[A-Za-z]{1,40}$/.test(campo)) campos.add(campo);
+    const etiqueta = proprio(item, 'label');
+    if (objeto(etiqueta)) {
+      conta.comLabel += 1;
+      for (const campo of Object.keys(etiqueta)) if (/^[A-Za-z]{1,40}$/.test(campo)) camposDaEtiqueta.add(campo);
+    }
+    if (idDaTarefaNoTexto(proprio(item, 'description')) !== null) conta.comDescricaoDeTarefa += 1;
+    if (typeof proprio(item, 'taskId') === 'string') conta.comTaskId += 1;
+    if (typeof proprio(item, 'colorId') === 'string') conta.comColorId += 1;
+    if (proprio(item, 'transparency') === 'transparent') conta.transparentes += 1;
+    const tipo = proprio(item, 'eventType');
+    const nome = typeof tipo === 'string' && /^[A-Za-z]{1,40}$/.test(tipo) ? tipo : 'sem tipo';
+    tipos[nome] = (tipos[nome] ?? 0) + 1;
+    const id = idDaTarefa(item);
+    if (id !== null) idsDasTarefas.push(id);
+  }
+  return { eventos: itens.length, ...conta, tipos, campos: [...campos].sort(), camposDaEtiqueta: [...camposDaEtiqueta].sort(), idsDasTarefas };
 }
 
 /**

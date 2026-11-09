@@ -1,9 +1,23 @@
 // Lógica pura do script: nada aqui toca serviços do Google. Tudo o que vem de
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
-import { criarEvento, listarEventos, marcarEventoFeito, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
+import {
+  criarEvento,
+  listarEventos,
+  marcarEventoFeito,
+  removerEvento,
+  trocarSalaEvento,
+  type CampoExtra,
+  type ServicoDeAgenda,
+} from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 import { listarEmails, pedirAtualizacao, type GuardaDeEmails, type ServicoDeGmail } from './email';
-import { espelharTarefas, type ServicoDeTarefas } from './tarefas-google';
+import {
+  espelharTarefas,
+  estadosDasTarefas,
+  marcarTarefaGoogle,
+  type GuardaDeTarefas,
+  type ServicoDeTarefas,
+} from './tarefas-google';
 
 export type ErroDoScript = 'codigo-invalido' | 'ocupado' | 'interno';
 
@@ -20,6 +34,10 @@ export interface Ambiente {
   tarefasGoogle?(): ServicoDeTarefas;
   /** Onde fica a lista de e-mails entre o gatilho e o app (cache do script). */
   emailsGuardados?: GuardaDeEmails;
+  /** Cache do que se achou no Google Tarefas (blocos agendados). Sem ele, só se lê mais. */
+  guardaDeTarefas?: GuardaDeTarefas;
+  /** Campos novos da agenda que o diagnosticoAgenda viu (label, taskId). */
+  extrasDaAgenda?(): CampoExtra[];
 }
 
 type Acao = (dados: unknown, ambiente: Ambiente) => unknown;
@@ -34,6 +52,34 @@ function calendario(ambiente: Ambiente): ServicoDeAgenda {
 function tarefasGoogle(ambiente: Ambiente): ServicoDeTarefas {
   if (!ambiente.tarefasGoogle) throw new Error('Google Tarefas indisponível');
   return ambiente.tarefasGoogle();
+}
+
+/** O Google Tarefas, se ligado; null se não (os blocos só ficam sem o estado do Google Tarefas). */
+function tarefasOpcional(ambiente: Ambiente): ServicoDeTarefas | null {
+  try {
+    return ambiente.tarefasGoogle ? ambiente.tarefasGoogle() : null;
+  } catch {
+    return null;
+  }
+}
+
+function extras(ambiente: Ambiente): CampoExtra[] {
+  try {
+    return ambiente.extrasDaAgenda?.() ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** `eventos`: os blocos do Google Tarefas vêm com o feito lido no Google Tarefas. */
+function eventos(dados: unknown, ambiente: Ambiente) {
+  const servico = calendario(ambiente);
+  const tarefas = tarefasOpcional(ambiente);
+  const guarda = ambiente.guardaDeTarefas ?? null;
+  return listarEventos(dados, servico, {
+    extras: extras(ambiente),
+    ...(tarefas ? { estadosDasTarefas: (ids, periodo) => estadosDasTarefas(ids, periodo, tarefas, guarda) } : {}),
+  });
 }
 
 function gmail(ambiente: Ambiente): ServicoDeGmail {
@@ -52,11 +98,13 @@ const acoes = new Map<unknown, Acao>([
   ['ping', () => ({})],
   ['puxar', (dados, ambiente) => puxar(dados, ambiente.armazem)],
   ['enviar', (dados, ambiente) => enviar(dados, ambiente.armazem)],
-  ['eventos', (dados, ambiente) => listarEventos(dados, calendario(ambiente))],
+  ['eventos', eventos],
   ['criarEvento', (dados, ambiente) => criarEvento(dados, calendario(ambiente))],
   ['removerEvento', (dados, ambiente) => removerEvento(dados, calendario(ambiente))],
   ['trocarSalaEvento', (dados, ambiente) => trocarSalaEvento(dados, calendario(ambiente))],
   ['marcarEventoFeito', (dados, ambiente) => marcarEventoFeito(dados, calendario(ambiente))],
+  // Bloco do Google Tarefas: conclui ou reabre a tarefa. Sem o serviço, `gravado: false`.
+  ['marcarTarefaGoogle', (dados, ambiente) => marcarTarefaGoogle(dados, tarefasOpcional(ambiente), ambiente.guardaDeTarefas ?? null)],
   // Na trava do script: dois aparelhos ao mesmo tempo não criam duas listas
   // "Central" nem duas espelhos da mesma tarefa.
   ['espelharTarefas', (dados, ambiente) => {

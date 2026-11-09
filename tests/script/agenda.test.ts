@@ -310,15 +310,15 @@ describe('eventos: todas as agendas marcadas', () => {
     }
   });
 
-  it('só pede os campos usados: sem descrição nem e-mail de convidados', () => {
+  it('só pede os campos usados: sem local nem e-mail de convidados (a descrição só para achar o bloco de tarefa)', () => {
     const cal = semana();
     lista({ de: '2026-10-23', ate: '2026-10-23' }, servico(cal));
     const campos = (cal.de('Events.list')[0].args[1] as { fields: string }).fields;
     expect(campos).toContain('nextPageToken');
-    for (const campo of ['summary', 'start', 'end', 'transparency', 'htmlLink', 'extendedProperties', 'responseStatus', 'self']) {
+    for (const campo of ['summary', 'start', 'end', 'transparency', 'htmlLink', 'extendedProperties', 'responseStatus', 'self', 'description', 'colorId']) {
       expect(campos).toContain(campo);
     }
-    expect(campos).not.toMatch(/description|email|location/);
+    expect(campos).not.toMatch(/email|location|label|taskId/);
   });
 
   it('o Evento tem só os 10 campos, mesmo quando a API manda mais', () => {

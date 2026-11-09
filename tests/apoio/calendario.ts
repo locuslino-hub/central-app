@@ -32,6 +32,12 @@ export interface EventoGuardado {
   organizer?: { email?: string; self?: boolean };
   creator?: { email?: string; self?: boolean };
   htmlLink: string;
+  /** Cor própria do evento (paleta de eventos do Google, '1' a '11'). */
+  colorId?: string;
+  /** Etiqueta (campo novo, que o v3 do Apps Script pode não devolver). */
+  label?: { id?: string; backgroundColor?: string };
+  /** Id da tarefa do Google Tarefas (campo novo, idem). */
+  taskId?: string;
 }
 
 export interface AgendaGuardada {
@@ -43,6 +49,8 @@ export interface AgendaGuardada {
     hidden?: boolean;
     accessRole: string;
     timeZone: string;
+    backgroundColor?: string;
+    colorId?: string;
   };
   eventos: Map<string, EventoGuardado>;
 }
@@ -144,6 +152,20 @@ export interface OpcoesDoFalso {
    * O script tem de funcionar com os dois.
    */
   patch?: 'mescla' | 'substitui';
+  /**
+   * Campos novos (`label`, `taskId`) que esta API conhece. Os que não conhece
+   * dão 400 se pedidos em `fields` (como a API real, "Invalid field
+   * selection") e nunca vêm na resposta. Padrão: nenhum.
+   */
+  camposNovos?: readonly ('label' | 'taskId')[];
+}
+
+const CAMPOS_NOVOS = ['label', 'taskId'] as const;
+
+/** Os campos de `fields` (`items(id,summary),nextPageToken`) como nomes soltos. */
+function nomesDosCampos(fields: unknown): Set<string> | null {
+  if (typeof fields !== 'string') return null;
+  return new Set(fields.split(/[^A-Za-z]+/).filter(Boolean));
 }
 
 export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
@@ -196,7 +218,21 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       eventType: e.eventType ?? 'default',
       organizer: e.organizer,
       creator: e.creator,
+      colorId: e.colorId,
+      ...(CAMPOS_NOVOS.filter((c) => conhecidos.has(c) && e[c] !== undefined).reduce((o, c) => ({ ...o, [c]: e[c] }), {})),
     });
+  }
+
+  const conhecidos = new Set<string>(opcoes.camposNovos ?? []);
+
+  /** Como a API: campo novo desconhecido em `fields` dá 400; com `fields`, só vêm os pedidos. */
+  function filtrar<T extends Record<string, unknown>>(item: T, fields: unknown, metodo: string): T {
+    const nomes = nomesDosCampos(fields);
+    if (!nomes) return item;
+    for (const c of CAMPOS_NOVOS) if (nomes.has(c) && !conhecidos.has(c)) throw erroDaApi(metodo, `Invalid field selection ${c}`, 400);
+    const copia: Record<string, unknown> = { ...item };
+    for (const c of ['description', 'colorId', ...CAMPOS_NOVOS]) if (!nomes.has(c)) delete copia[c];
+    return copia as T;
   }
 
   const CalendarList = {
@@ -240,7 +276,7 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       const tamanho = pagina(args.maxResults, 250);
       const desde = typeof args.pageToken === 'string' ? Number(args.pageToken) : 0;
       const fusoPedido = typeof args.timeZone === 'string' ? args.timeZone : undefined;
-      const items = todos.slice(desde, desde + tamanho).map((e) => recurso(a, e, fusoPedido));
+      const items = todos.slice(desde, desde + tamanho).map((e) => filtrar(recurso(a, e, fusoPedido), args.fields, 'events.list'));
       const seguinte = desde + tamanho < todos.length ? String(desde + tamanho) : undefined;
       return { kind: 'calendar#events', items, ...(seguinte ? { nextPageToken: seguinte } : {}) };
     },
