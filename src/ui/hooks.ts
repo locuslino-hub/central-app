@@ -25,7 +25,7 @@ export function useTela(): Tela {
     const medir = () => setTela(telaPara(window.innerWidth));
     medir();
     window.addEventListener('resize', medir);
-    return () => window.removeEventListener('resize', medir);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('resize', medir); };
   }, []);
   return tela;
 }
@@ -86,7 +86,7 @@ export function useRota(hoje: Date): RotaAtual {
     const atualizar = () => setHash(location.hash);
     window.addEventListener('hashchange', atualizar);
     atualizar();
-    return () => window.removeEventListener('hashchange', atualizar);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('hashchange', atualizar); };
   }, []);
   return resolverRota(hash, hoje);
 }

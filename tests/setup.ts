@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { cleanup } from '@testing-library/preact';
-import { afterEach, beforeEach, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { esquecerEmails } from '../src/dados/emails';
 import { esquecerEventos } from '../src/dados/eventos';
 
@@ -18,4 +18,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+// O Preact roda efeitos adiados num temporizador depois da pintura. Espera esses
+// efeitos terminarem antes de o ambiente jsdom ser desmontado no fim do arquivo.
+afterAll(async () => {
+  await new Promise((resolver) => setTimeout(resolver, 150));
 });
