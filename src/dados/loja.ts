@@ -230,7 +230,8 @@ async function espelharSeMudou(tx: Escrita, antes: Tarefa | undefined, depois: T
 
 type AcaoDeEspelho =
   | Omit<Extract<PendenteEspelho, { acao: 'espelharTarefa' }>, 'seq' | 'criadoEm' | 'tentativas'>
-  | Omit<Extract<PendenteEspelho, { acao: 'marcarEventoFeito' }>, 'seq' | 'criadoEm' | 'tentativas'>;
+  | Omit<Extract<PendenteEspelho, { acao: 'marcarEventoFeito' }>, 'seq' | 'criadoEm' | 'tentativas'>
+  | Omit<Extract<PendenteEspelho, { acao: 'marcarTarefaGoogle' }>, 'seq' | 'criadoEm' | 'tentativas'>;
 
 function entradaDeEspelho(acao: AcaoDeEspelho): Omit<PendenteEspelho, 'seq'> {
   return { ...acao, criadoEm: Date.now(), tentativas: 0 };
@@ -249,6 +250,25 @@ export async function enfileirarMarcaDeFeito(id: string, feito: boolean): Promis
       if (p.tipo === 'espelho' && p.acao === 'marcarEventoFeito' && p.id === id) await fila.delete(p.seq);
     }
     const seq = (await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'marcarEventoFeito', id, feito }))) as number;
+    await tx.done;
+    return seq;
+  });
+}
+
+/**
+ * Põe o feito de um bloco do Google Tarefas na fila (conclui ou reabre a
+ * tarefa lá). Como no "✓ ": um pedido anterior da mesma tarefa que ainda não
+ * saiu é trocado por este.
+ */
+export async function enfileirarMarcaDeTarefa(taskId: string, feito: boolean): Promise<number> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const todas: Pendente[] = await fila.getAll();
+    for (const p of todas) {
+      if (p.tipo === 'espelho' && p.acao === 'marcarTarefaGoogle' && p.taskId === taskId) await fila.delete(p.seq);
+    }
+    const seq = (await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'marcarTarefaGoogle', taskId, feito }))) as number;
     await tx.done;
     return seq;
   });

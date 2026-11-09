@@ -5,7 +5,15 @@ import { TAMANHO_MAXIMO_DO_CORPO } from '../../script/dados';
 import { ErroConexao, ErroScript, chamar as chamarScript } from '../conexao/cliente';
 import { dataValida } from '../../script/agenda';
 import { LOTE_NO_MAXIMO } from '../../script/tarefas-google';
-import { ErroAgenda, criarEvento, espelharTarefas, marcarEventoFeito, removerEvento, type ItemDoEspelho } from './agenda';
+import {
+  ErroAgenda,
+  criarEvento,
+  espelharTarefas,
+  marcarEventoFeito,
+  marcarTarefaGoogle,
+  removerEvento,
+  type ItemDoEspelho,
+} from './agenda';
 import { marcarEventosObsoletos } from './eventos';
 import {
   assinar as assinarLoja,
@@ -298,8 +306,9 @@ function itemDoEspelho(tarefa: Tarefa, googleId: string | undefined): ItemDoEspe
 
 /**
  * O espelho no Google (feito espelhado), depois dos registros e da agenda:
- * - `marcarEventoFeito`, na ordem; `gravado: false` (convite, outra agenda)
- *   só tira da fila: o feito já está na Central;
+ * - `marcarEventoFeito` e `marcarTarefaGoogle` (bloco do Google Tarefas), na
+ *   ordem; `gravado: false` (convite, outra agenda, tarefa que sumiu, sem
+ *   permissão) só tira da fila: o feito já está na Central;
  * - `espelharTarefa`, uma por tarefa, com a versão atual dela, em lotes. Só
  *   saem da fila as entradas lidas antes do envio: mudança feita durante o
  *   envio vai na próxima rodada. O id da espelho que voltar fica só neste
@@ -314,9 +323,12 @@ async function enviarEspelhos(chamar: Chamar): Promise<void> {
   );
   let marcou = false;
   for (const acao of espelhos) {
-    if (acao.acao !== 'marcarEventoFeito' || !(await lerPendente(acao.seq))) continue;
+    if (acao.acao === 'espelharTarefa' || !(await lerPendente(acao.seq))) continue;
     try {
-      const { gravado } = await marcarEventoFeito(acao.id, acao.feito, { chamar });
+      const { gravado } =
+        acao.acao === 'marcarTarefaGoogle'
+          ? await marcarTarefaGoogle(acao.taskId, acao.feito, { chamar })
+          : await marcarEventoFeito(acao.id, acao.feito, { chamar });
       if (gravado) marcou = true;
       await retirarPendente(acao.seq);
     } catch (erro) {

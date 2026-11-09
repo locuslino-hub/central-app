@@ -5,11 +5,11 @@
 // o script pôr "✓ " no título do Google. Convites de outras pessoas e eventos
 // de outras agendas ficam só na Central, sem erro.
 import type { Evento } from './agenda';
-import { enfileirarMarcaDeFeito, lerRegistros, salvar } from './loja';
+import { enfileirarMarcaDeFeito, enfileirarMarcaDeTarefa, lerRegistros, salvar } from './loja';
 import type { EventoFeito } from './tipos';
 
 /** Hash de 53 bits (cyrb53) em base 36: id fixo, curto e válido para qualquer id de evento. */
-function resumo(texto: string): string {
+export function resumo(texto: string): string {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
   for (let i = 0; i < texto.length; i++) {
@@ -33,8 +33,15 @@ export function gravavelNoGoogle(evento: Pick<Evento, 'agendaId' | 'somenteLeitu
 }
 
 /**
- * Os eventos com o feito que vale: o registro da Central, se houver (é o
- * último toque do dono); senão, o que veio do Google ("✓ " no título).
+ * Os eventos com o feito que vale. Regra de conflito:
+ * - sem registro na Central, vale o do Google ("✓ " no título; num bloco do
+ *   Google Tarefas, o estado da tarefa);
+ * - compromisso comum: o registro da Central vale (é o último toque do dono;
+ *   o Google só espelha);
+ * - bloco do Google Tarefas com o estado lido lá (`tarefaAtualizadaEm`): vale
+ *   o mais recente. O Google vence só se a tarefa mudou depois do último toque
+ *   na Central (empate fica com a Central). Assim um ✓ dado no Google aparece
+ *   na Central, e um ✓ dado na Central não é desfeito por uma leitura antiga.
  * Devolve a mesma lista se nada muda.
  */
 export function aplicarFeitos(eventos: Evento[], registros: readonly EventoFeito[] | undefined): Evento[] {
@@ -44,6 +51,7 @@ export function aplicarFeitos(eventos: Evento[], registros: readonly EventoFeito
   const lista = eventos.map((evento) => {
     const registro = porId.get(idDoFeito(evento.agendaId, evento.id));
     if (!registro || registro.eventoId !== evento.id || !!evento.feito === registro.feito) return evento;
+    if (evento.tarefaAtualizadaEm !== undefined && evento.tarefaAtualizadaEm > registro.atualizadoEm) return evento;
     mudou = true;
     const { feito: _feito, ...resto } = evento;
     return registro.feito ? { ...resto, feito: true } : resto;
@@ -66,6 +74,8 @@ export async function marcarCompromissoFeito(evento: Evento, feito: boolean, dia
     data: dia,
     feito,
   });
-  if (gravavelNoGoogle(evento)) await enfileirarMarcaDeFeito(evento.id, feito);
+  // Bloco do Google Tarefas: o feito vai à tarefa (o título do bloco nunca muda).
+  if (evento.tarefaGoogleId !== undefined) await enfileirarMarcaDeTarefa(evento.tarefaGoogleId, feito);
+  else if (gravavelNoGoogle(evento)) await enfileirarMarcaDeFeito(evento.id, feito);
   return salvo;
 }

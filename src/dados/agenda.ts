@@ -4,6 +4,7 @@
 // aparelho. Erros viram `ErroAgenda` com um motivo curto para a tela.
 // Sem tela nesta tarefa: as telas de calendário (T11) e a criação pelo chat (T12) usam isto.
 import {
+  ID_DE_TAREFA,
   PedidoInvalido,
   dataValida,
   lerId,
@@ -17,7 +18,8 @@ import {
   type NovoEvento,
   type RespostaEventos,
 } from '../../script/agenda';
-import { lerLote, type ItemDoEspelho, type ResultadoDoEspelho } from '../../script/tarefas-google';
+import { CHAVE_DE_COR } from '../../script/colecoes';
+import { lerLote, lerMarcaDeTarefa, type ItemDoEspelho, type ResultadoDoEspelho } from '../../script/tarefas-google';
 import { ErroConexao, ErroScript, chamar as chamarOScript } from '../conexao/cliente';
 
 export type { ItemDoEspelho, ResultadoDoEspelho };
@@ -61,6 +63,13 @@ function horaValida(valor: unknown): valor is string {
   return typeof valor === 'string' && HORA_COM_FUSO.test(valor) && Number.isFinite(Date.parse(valor));
 }
 
+/** A cor do Google: chave estável (como o script calcula) e hex para a amostra. */
+function corValida(valor: unknown): boolean {
+  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) return false;
+  const { chave, hex } = valor as Record<string, unknown>;
+  return typeof chave === 'string' && CHAVE_DE_COR.test(chave) && typeof hex === 'string' && /^#[0-9a-f]{6}$/.test(hex);
+}
+
 /** O que chega do script tem a forma de `Evento`? (Dia inteiro: datas; senão, horas com fuso.) */
 export function eventoValido(valor: unknown): valor is Evento {
   if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) return false;
@@ -81,8 +90,18 @@ export function eventoValido(valor: unknown): valor is Evento {
     (e.link === null || linkValido(e.link)) &&
     // Script antigo não manda: ausente vale false.
     (e.feito === undefined || typeof e.feito === 'boolean') &&
-    (e.somenteLeitura === undefined || typeof e.somenteLeitura === 'boolean')
+    (e.somenteLeitura === undefined || typeof e.somenteLeitura === 'boolean') &&
+    // Blocos do Google Tarefas e cor (script novo; o antigo não manda).
+    (e.tarefaGoogleId === undefined || (typeof e.tarefaGoogleId === 'string' && ID_DE_TAREFA.test(e.tarefaGoogleId))) &&
+    (e.tarefaAtualizadaEm === undefined ||
+      (typeof e.tarefaAtualizadaEm === 'number' && Number.isFinite(e.tarefaAtualizadaEm) && e.tarefaAtualizadaEm >= 0)) &&
+    (e.cor === undefined || corValida(e.cor))
   );
+}
+
+/** Bloco do Google Tarefas é tempo ocupado, sempre (mesmo marcado como disponível no Google). */
+function comoOcupado(evento: Evento): Evento {
+  return evento.tarefaGoogleId !== undefined && evento.livre ? { ...evento, livre: false } : evento;
 }
 
 function falhaDe(erro: unknown): FalhaDaAgenda {
@@ -128,7 +147,7 @@ export async function listarEventos(
   opcoes: OpcoesDaAgenda = {},
 ): Promise<RespostaEventos> {
   const resposta = await pedir('eventos', () => lerPeriodo(periodo), respostaDeEventos, opcoes);
-  const eventos = resposta.eventos.filter(eventoValido);
+  const eventos = resposta.eventos.filter(eventoValido).map(comoOcupado);
   return { eventos, incompleto: resposta.incompleto || eventos.length !== resposta.eventos.length };
 }
 
@@ -164,7 +183,20 @@ export function marcarEventoFeito(
   return pedir('marcarEventoFeito', () => lerMarcaDeFeito({ id, feito }), marcaDeFeito, opcoes);
 }
 
-const resultadosDoEspelho = (valor: unknown): valor is { resultados: ResultadoDoEspelho[] } =>
+/**
+ * Conclui (ou reabre) no Google Tarefas a tarefa de um bloco agendado na
+ * Agenda. `gravado: false`: sem a tarefa, sem permissão ou sem o Google
+ * Tarefas no script; o feito fica só na Central, sem erro.
+ */
+export function marcarTarefaGoogle(
+  taskId: string,
+  feito: boolean,
+  opcoes: OpcoesDaAgenda = {},
+): Promise<{ feito: boolean; gravado: boolean }> {
+  return pedir('marcarTarefaGoogle', () => lerMarcaDeTarefa({ taskId, feito }), marcaDeFeito, opcoes);
+}
+
+const resultadosDoEspelho =(valor: unknown): valor is { resultados: ResultadoDoEspelho[] } =>
   typeof valor === 'object' &&
   valor !== null &&
   Array.isArray((valor as { resultados?: unknown }).resultados) &&

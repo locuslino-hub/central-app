@@ -182,7 +182,15 @@ export type PendenteMarcarEventoFeito = ControleDaFila & {
   id: string;
   feito: boolean;
 };
-export type PendenteEspelho = PendenteEspelharTarefa | PendenteMarcarEventoFeito;
+/** - `marcarTarefaGoogle`: o feito de um bloco do Google Tarefas (conclui ou reabre a tarefa lá). */
+export type PendenteMarcarTarefaGoogle = ControleDaFila & {
+  seq: number;
+  tipo: 'espelho';
+  acao: 'marcarTarefaGoogle';
+  taskId: string;
+  feito: boolean;
+};
+export type PendenteEspelho = PendenteEspelharTarefa | PendenteMarcarEventoFeito | PendenteMarcarTarefaGoogle;
 
 export type Pendente = PendenteRegistro | PendenteAgenda | PendenteEspelho;
 

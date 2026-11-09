@@ -45,7 +45,7 @@ export function AvisoDaFila() {
   const naoSairam = paradas.filter((p) => p.acao === 'removerEvento').length;
   // Uma tarefa pode ter várias entradas: conta tarefas.
   const tarefas = new Set(paradas.flatMap((p) => (p.acao === 'espelharTarefa' ? [p.tarefaId] : []))).size;
-  const feitos = paradas.filter((p) => p.acao === 'marcarEventoFeito').length;
+  const feitos = paradas.filter((p) => p.acao === 'marcarEventoFeito' || p.acao === 'marcarTarefaGoogle').length;
 
   async function agir(acao: () => Promise<unknown>) {
     setFalha(false);
