@@ -2,7 +2,7 @@
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
 import { criarEvento, listarEventos, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
-import { atualizarEmails, listarEmails, type GuardaDeEmails, type ServicoDeGmail } from './email';
+import { listarEmails, pedirAtualizacao, type GuardaDeEmails, type ServicoDeGmail } from './email';
 
 export type ErroDoScript = 'codigo-invalido' | 'ocupado' | 'interno';
 
@@ -50,7 +50,9 @@ const acoes = new Map<unknown, Acao>([
   ['trocarSalaEvento', (dados, ambiente) => trocarSalaEvento(dados, calendario(ambiente))],
   // E-mail só se lê: não há ação que mude o Gmail. Nenhuma das duas usa `dados`.
   ['emails', (_dados, ambiente) => listarEmails(() => gmail(ambiente), emailsGuardados(ambiente))],
-  ['atualizarEmails', (_dados, ambiente) => atualizarEmails(gmail(ambiente), emailsGuardados(ambiente))],
+  // Com limite de 60 s (email.ts): toques repetidos devolvem a lista guardada.
+  ['atualizarEmails', (_dados, ambiente) =>
+    pedirAtualizacao(() => gmail(ambiente), emailsGuardados(ambiente), ambiente.armazem.agora())],
 ]);
 
 function recusa(erro: ErroDoScript): Resposta {

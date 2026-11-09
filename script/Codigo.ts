@@ -181,6 +181,8 @@ function gmail(): ServicoDeGmail {
 }
 
 const CHAVE_DOS_EMAILS = 'EMAILS_POR_RESPONDER';
+/** Hora (ms) da última lista gravada: o limite de 60 s do botão "Atualizar agora". */
+const CHAVE_DA_HORA_DOS_EMAILS = 'EMAILS_ATUALIZADOS_EM';
 /** 6 h, o máximo do cache. O gatilho de 30 min renova muito antes. */
 const SEGUNDOS_DOS_EMAILS = 6 * 60 * 60;
 /** Nome da função global que o gatilho chama (a exportada abaixo). */
@@ -195,12 +197,28 @@ const MINUTOS_DO_GATILHO = 30;
  * (email.ts corta em 90 KB). Se o cache perder a lista, a ação `emails` lê
  * o Gmail na hora.
  */
+function cacheExigido() {
+  const cache = cacheDoScript();
+  if (!cache) throw new Error('sem cache');
+  return cache;
+}
+
 const emailsGuardados: GuardaDeEmails = {
   ler: () => cacheDoScript()?.get(CHAVE_DOS_EMAILS) ?? null,
   gravar(texto) {
-    const cache = cacheDoScript();
-    if (!cache) throw new Error('sem cache');
-    cache.put(CHAVE_DOS_EMAILS, texto, SEGUNDOS_DOS_EMAILS);
+    cacheExigido().put(CHAVE_DOS_EMAILS, texto, SEGUNDOS_DOS_EMAILS);
+  },
+  atualizadoEm() {
+    const texto = cacheDoScript()?.get(CHAVE_DA_HORA_DOS_EMAILS);
+    return typeof texto === 'string' && /^\d{1,16}$/.test(texto) ? Number(texto) : null;
+  },
+  marcarAtualizado(ms) {
+    cacheExigido().put(CHAVE_DA_HORA_DOS_EMAILS, String(ms), SEGUNDOS_DOS_EMAILS);
+  },
+  apagar() {
+    const cache = cacheExigido();
+    cache.remove(CHAVE_DOS_EMAILS);
+    cache.remove(CHAVE_DA_HORA_DOS_EMAILS);
   },
 };
 

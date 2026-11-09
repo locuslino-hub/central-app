@@ -304,12 +304,43 @@ export function lerTrocaDeSala(dados: unknown): { id: string; salaId: string | n
 
 // ---------- chamadas ao Google ----------
 
-/** Só o motivo curto da API ("Not Found", "Forbidden"): o resto pode trazer ids ou e-mails. */
-function motivoDe(erro: unknown): string {
+/**
+ * Motivos conhecidos das APIs do Google (Agenda e Gmail) que podem ir ao
+ * registro. Sai sempre o texto desta lista, nunca o da mensagem.
+ */
+const MOTIVOS_CONHECIDOS: readonly string[] = [
+  'Not Found',
+  'Resource has been deleted',
+  'Gone',
+  'The requested identifier already exists',
+  'Duplicate',
+  'Forbidden',
+  'Backend Error',
+  'Bad Request',
+  'Rate Limit Exceeded',
+  'User-rate limit exceeded',
+  'Too many concurrent requests for user',
+  'Calendar usage limits exceeded',
+  'Quota Exceeded',
+  'Insufficient Permission',
+  'Request had insufficient authentication scopes',
+  'Invalid Credentials',
+  'Service unavailable',
+  'Internal error',
+  'Precondition check failed',
+];
+
+/**
+ * O motivo da API ("Not Found", "Forbidden") se a mensagem começar por um da
+ * lista fechada; senão "falhou". O resto da mensagem pode trazer ids,
+ * endereços ou títulos, e nunca passa adiante.
+ */
+export function motivoDe(erro: unknown): string {
   const mensagem = typeof erro === 'object' && erro !== null ? (erro as { message?: unknown }).message : undefined;
-  const texto = typeof mensagem === 'string' ? mensagem : '';
-  const motivo = /failed with error: ([A-Za-z ]{1,40})/.exec(texto)?.[1]?.trim();
-  return motivo || 'falhou';
+  const depois = typeof mensagem === 'string' ? /failed with error: ([^\n]*)/.exec(mensagem)?.[1] : undefined;
+  if (!depois) return 'falhou';
+  const lido = depois.trim().toLowerCase();
+  return MOTIVOS_CONHECIDOS.filter((conhecido) => lido.startsWith(conhecido.toLowerCase()))[0] ?? 'falhou';
 }
 
 /**

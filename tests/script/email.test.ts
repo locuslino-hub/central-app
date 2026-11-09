@@ -7,8 +7,10 @@ import {
   BUSCA,
   BYTES_NO_MAXIMO,
   CONVERSAS_NO_MAXIMO,
+  INTERVALO_MINIMO_MS,
   TRECHO_NO_MAXIMO,
   atualizarEmails,
+  pedirAtualizacao,
   buscarEmails,
   lerGuardados,
   lerRemetente,
@@ -519,3 +521,109 @@ function exemplo(): Email {
     link: 'https://mail.google.com/mail/u/0/#all/18c0000000000001',
   };
 }
+
+describe('rodada 1: limite de 60 s no botão Atualizar agora', () => {
+  it('o limite é de 60 s', () => {
+    expect(INTERVALO_MINIMO_MS).toBe(60_000);
+  });
+
+  it('atualizarEmails marca a hora só depois de gravar a lista', () => {
+    const guarda = guardaNaMemoria();
+    atualizarEmails(servico(gmailFalso([naoLida()])), guarda, AGORA);
+    expect(guarda.quando).toBe(AGORA);
+  });
+
+  it('pedido menos de 60 s depois da última atualização devolve a lista guardada, sem ler o Gmail', () => {
+    const g = gmailFalso([naoLida()]);
+    const guarda = guardaNaMemoria();
+    const lista = atualizarEmails(servico(g), guarda, AGORA);
+    g.chamadas.length = 0;
+    g.mensagens.push(naoLida({ de: 'Renata <renata@exemplo.invalid>' }));
+    const pedir = vi.fn(() => servico(g));
+    expect(pedirAtualizacao(pedir, guarda, AGORA + 59_999)).toEqual(lista);
+    expect(pedir).not.toHaveBeenCalled();
+    expect(g.chamadas).toEqual([]);
+  });
+
+  it('a partir de 60 s lê o Gmail de novo e marca a hora nova', () => {
+    const g = gmailFalso([naoLida()]);
+    const guarda = guardaNaMemoria();
+    atualizarEmails(servico(g), guarda, AGORA);
+    g.mensagens.push(naoLida({ de: 'Renata <renata@exemplo.invalid>' }));
+    expect(pedirAtualizacao(() => servico(g), guarda, AGORA + 60_000)).toHaveLength(2);
+    expect(guarda.quando).toBe(AGORA + 60_000);
+  });
+
+  it('hora guardada no futuro (relógio torto) não segura a atualização', () => {
+    const g = gmailFalso([naoLida()]);
+    const guarda = guardaNaMemoria('[]', AGORA + 10 * 60_000);
+    expect(pedirAtualizacao(() => servico(g), guarda, AGORA)).toHaveLength(1);
+  });
+
+  it('hora recente mas lista sumida ou inválida: lê o Gmail', () => {
+    for (const texto of [null, '{quebrado']) {
+      const g = gmailFalso([naoLida()]);
+      expect(pedirAtualizacao(() => servico(g), guardaNaMemoria(texto, AGORA - 1000), AGORA)).toHaveLength(1);
+      expect(g.de('Messages.list')).toHaveLength(1);
+    }
+  });
+
+  it('guarda que falha ao ler a hora não impede a atualização', () => {
+    const g = gmailFalso([naoLida()]);
+    const guarda = guardaNaMemoria('[]', AGORA);
+    guarda.atualizadoEm = () => {
+      throw new Error('Cache fora do ar');
+    };
+    expect(pedirAtualizacao(() => servico(g), guarda, AGORA)).toHaveLength(1);
+  });
+
+  it('pelo tratar: dois toques seguidos em Atualizar agora leem o Gmail uma vez só', () => {
+    const g = gmailFalso([naoLida()]);
+    const ambiente: Ambiente = {
+      lerCodigo: () => CODIGO,
+      armazem: armazemNaMemoria(),
+      gmail: () => servico(g),
+      emailsGuardados: guardaNaMemoria(),
+    };
+    const primeira = tratar({ codigo: CODIGO, acao: 'atualizarEmails' }, ambiente);
+    const segunda = tratar({ codigo: CODIGO, acao: 'atualizarEmails' }, ambiente);
+    expect(segunda).toEqual(primeira);
+    expect(g.de('Messages.list')).toHaveLength(1);
+  });
+});
+
+describe('rodada 1: gravação que falha limpa o cache', () => {
+  it('lista antiga e hora saem do cache: o próximo emails lê o Gmail, sem mostrar itens velhos', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const marina = naoLida();
+    const g = gmailFalso([marina]);
+    const guarda = guardaNaMemoria();
+    atualizarEmails(servico(g), guarda, AGORA);
+
+    g.mensagens.find((m) => m.id === marina.id)!.casa = false;
+    guarda.falharGravacao = true;
+    expect(atualizarEmails(servico(g), guarda, AGORA + 60_000)).toEqual([]);
+    expect(guarda.apagamentos).toBe(1);
+    expect(guarda.texto).toBeNull();
+    expect(guarda.quando).toBeNull();
+
+    guarda.falharGravacao = false;
+    g.chamadas.length = 0;
+    expect(listarEmails(() => servico(g), guarda)).toEqual([]);
+    expect(g.de('Messages.list')).toHaveLength(1);
+  });
+
+  it('se apagar também falhar, a lista nova ainda volta e nada lança', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const guarda = guardaNaMemoria();
+    guarda.falharGravacao = true;
+    guarda.falharApagar = true;
+    expect(atualizarEmails(servico(gmailFalso([naoLida()])), guarda, AGORA)).toHaveLength(1);
+  });
+
+  it('gravação boa não apaga nada', () => {
+    const guarda = guardaNaMemoria();
+    atualizarEmails(servico(gmailFalso([naoLida()])), guarda, AGORA);
+    expect(guarda.apagamentos).toBe(0);
+  });
+});

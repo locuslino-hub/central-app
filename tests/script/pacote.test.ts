@@ -1058,9 +1058,11 @@ describe('Tarefa 13: Gmail pelo pacote', () => {
   });
 
   it('atualizarEmails pelo doPost lê o Gmail de novo (botão Atualizar agora)', () => {
-    const { pedir, gmail } = conectado();
+    const { pedir, gmail, cache } = conectado();
     expect(pedir('emails', {}).dados).toEqual([]);
     gmail.mensagens.push(naoLida());
+    // A leitura feita por `emails` conta para o limite de 60 s: passado o limite, lê de novo.
+    cache.valores.set('EMAILS_ATUALIZADOS_EM', String(Date.now() - 61_000));
     expect(pedir('atualizarEmails', {}).dados).toHaveLength(1);
   });
 
@@ -1164,5 +1166,40 @@ describe('Tarefa 13: autorizarGmail (passo do dono)', () => {
     autorizar(globais);
     expect(drive.arquivos.size).toBe(0);
     expect(propriedades).toEqual(antes);
+  });
+});
+
+describe('rodada 1 da T13: limite e limpeza do cache pelo pacote', () => {
+  const CHAVE = 'EMAILS_POR_RESPONDER';
+  const CHAVE_DA_HORA = 'EMAILS_ATUALIZADOS_EM';
+  type ComGmail = { atualizarEmails(): void };
+
+  it('dois atualizarEmails seguidos pelo doPost leem o Gmail uma vez; a hora fica no cache por 6 h', () => {
+    const { pedir, gmail, cache } = conectado();
+    gmail.mensagens.push(naoLida());
+    const primeira = pedir('atualizarEmails', {});
+    expect(pedir('atualizarEmails', {})).toEqual(primeira);
+    expect(gmail.de('Messages.list')).toHaveLength(1);
+    expect(cache.valores.get(CHAVE_DA_HORA)).toMatch(/^\d+$/);
+    expect(cache.prazoPorChave.get(CHAVE_DA_HORA)).toBe(21_600);
+  });
+
+  it('o gatilho não tem limite: sempre lê o Gmail', () => {
+    const { globais, gmail } = conectado();
+    gmail.mensagens.push(naoLida());
+    (globais as unknown as ComGmail).atualizarEmails();
+    (globais as unknown as ComGmail).atualizarEmails();
+    expect(gmail.de('Messages.list')).toHaveLength(2);
+  });
+
+  it('gravação recusada pelo cache tira a lista antiga e a hora', () => {
+    const { globais, gmail, cache } = conectado();
+    gmail.mensagens.push(naoLida());
+    (globais as unknown as ComGmail).atualizarEmails();
+    expect(cache.valores.has(CHAVE)).toBe(true);
+    cache.putQuebrado = true;
+    (globais as unknown as ComGmail).atualizarEmails();
+    expect(cache.valores.has(CHAVE)).toBe(false);
+    expect(cache.valores.has(CHAVE_DA_HORA)).toBe(false);
   });
 });

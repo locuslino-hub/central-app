@@ -11,7 +11,7 @@
 //   data e link para abrir no Gmail;
 // - erros e registros nunca levam endereço, nome, assunto, trecho nem ids.
 
-import { paraLisboa, statusDe } from './agenda';
+import { motivoDe, paraLisboa, statusDe } from './agenda';
 
 /** Busca do Gmail: não lidos da aba Principal nos últimos 14 dias [Dono]. */
 export const BUSCA = 'is:unread category:primary newer_than:14d';
@@ -27,6 +27,8 @@ export const ENDERECO_NO_MAXIMO = 254;
 export const CONVERSAS_NO_MAXIMO = 50;
 /** O cache do script aceita até 100 KB por valor: fica uma folga. */
 export const BYTES_NO_MAXIMO = 90_000;
+/** Menor intervalo entre duas leituras do Gmail pedidas pelo app. */
+export const INTERVALO_MINIMO_MS = 60_000;
 
 const EU = 'me';
 const DE_NO_MAXIMO = 1000;
@@ -91,35 +93,11 @@ export interface ServicoDeGmail {
 export interface GuardaDeEmails {
   ler(): string | null;
   gravar(texto: string): void;
-}
-
-/**
- * Motivos conhecidos que o registro pode mostrar. Qualquer outro texto da
- * mensagem pode trazer endereço ou assunto: vira "falhou".
- */
-const MOTIVOS = [
-  'Not Found',
-  'Forbidden',
-  'Backend Error',
-  'Bad Request',
-  'Rate Limit Exceeded',
-  'User-rate limit exceeded',
-  'Too many concurrent requests for user',
-  'Insufficient Permission',
-  'Request had insufficient authentication scopes',
-  'Invalid Credentials',
-  'Service unavailable',
-  'Internal error',
-  'Precondition check failed',
-];
-
-/** O motivo da API, se for um dos conhecidos; senão "falhou". O texto do erro nunca passa adiante. */
-function motivoConhecido(erro: unknown): string {
-  const mensagem = typeof erro === 'object' && erro !== null ? (erro as { message?: unknown }).message : undefined;
-  const depois = typeof mensagem === 'string' ? /failed with error: ([^\n]*)/.exec(mensagem)?.[1] : undefined;
-  if (!depois) return 'falhou';
-  const lido = depois.trim().toLowerCase();
-  return MOTIVOS.filter((conhecido) => lido.startsWith(conhecido.toLowerCase()))[0] ?? 'falhou';
+  /** Hora (ms) da última atualização que gravou a lista, ou null. */
+  atualizadoEm(): number | null;
+  marcarAtualizado(ms: number): void;
+  /** Tira a lista e a hora: o próximo pedido lê o Gmail. */
+  apagar(): void;
 }
 
 /** Falha numa chamada ao Gmail: só o método, um motivo conhecido e o status HTTP. */
@@ -127,7 +105,7 @@ class FalhaDoGmail extends Error {
   readonly status: number | null;
 
   constructor(metodo: string, erro: unknown) {
-    const motivo = motivoConhecido(erro);
+    const motivo = motivoDe(erro);
     super(`Gmail (${metodo}): ${motivo}`);
     this.name = 'FalhaDoGmail';
     this.status = statusDe(erro);
@@ -378,17 +356,33 @@ export function lerGuardados(guardado: string | null): Email[] | null {
 
 /**
  * Gatilho de 30 min e botão "Atualizar agora": lê o Gmail e troca a lista
- * guardada. Se o Gmail falhar, lança e a lista anterior fica. Se só a
- * gravação falhar, a lista nova ainda volta para quem pediu.
+ * guardada, com a hora. Se o Gmail falhar, lança e a lista anterior fica. Se
+ * a gravação falhar, a lista antiga e a hora saem do cache (o próximo
+ * `emails` lê o Gmail em vez de mostrar itens velhos), e a lista nova ainda
+ * volta para quem pediu.
  */
-export function atualizarEmails(servico: ServicoDeGmail, guarda: GuardaDeEmails): Email[] {
+export function atualizarEmails(servico: ServicoDeGmail, guarda: GuardaDeEmails, agora: number = Date.now()): Email[] {
   const { lista, texto: guardar } = caber(buscarEmails(servico));
   try {
     guarda.gravar(guardar);
+    guarda.marcarAtualizado(agora);
   } catch {
     registrar('lista de e-mails não foi guardada no cache');
+    try {
+      guarda.apagar();
+    } catch {
+      registrar('lista de e-mails antiga não saiu do cache');
+    }
   }
   return lista;
+}
+
+function lerSemFalhar<T>(ler: () => T): T | null {
+  try {
+    return ler();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -396,11 +390,20 @@ export function atualizarEmails(servico: ServicoDeGmail, guarda: GuardaDeEmails)
  * foi descartado), lê o Gmail agora em vez de dizer que não há nada.
  */
 export function listarEmails(servico: () => ServicoDeGmail, guarda: GuardaDeEmails): Email[] {
-  let guardado: string | null = null;
-  try {
-    guardado = guarda.ler();
-  } catch {
-    // sem cache: lê agora
+  return lerGuardados(lerSemFalhar(() => guarda.ler())) ?? atualizarEmails(servico(), guarda);
+}
+
+/**
+ * Ação `atualizarEmails` (botão "Atualizar agora"): se a última atualização
+ * gravada tem menos de 60 s, devolve a lista guardada sem ler o Gmail. Assim
+ * toques repetidos ou um app em laço não gastam a cota. Hora no futuro
+ * (relógio torto) ou lista sumida: lê o Gmail. O gatilho não passa por aqui.
+ */
+export function pedirAtualizacao(servico: () => ServicoDeGmail, guarda: GuardaDeEmails, agora: number): Email[] {
+  const quando = lerSemFalhar(() => guarda.atualizadoEm());
+  if (typeof quando === 'number' && agora >= quando && agora - quando < INTERVALO_MINIMO_MS) {
+    const guardados = lerGuardados(lerSemFalhar(() => guarda.ler()));
+    if (guardados) return guardados;
   }
-  return lerGuardados(guardado) ?? atualizarEmails(servico(), guarda);
+  return atualizarEmails(servico(), guarda, agora);
 }

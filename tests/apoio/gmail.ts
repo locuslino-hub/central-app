@@ -161,16 +161,31 @@ export function respostaDoDono(conversa: string, quando: number, extra: Partial<
 }
 
 /** Guarda na memória, como o cache do script. */
-export function guardaNaMemoria(inicial: string | null = null) {
+export function guardaNaMemoria(inicial: string | null = null, quando: number | null = null) {
   const guarda = {
     texto: inicial,
+    /** Hora (ms) da última atualização que gravou a lista. */
+    quando,
     gravacoes: [] as string[],
+    apagamentos: 0,
     falharGravacao: false,
+    falharApagar: false,
     ler: () => guarda.texto,
     gravar(texto: string) {
       if (guarda.falharGravacao) throw new Error('Cache cheio');
       guarda.gravacoes.push(texto);
       guarda.texto = texto;
+    },
+    atualizadoEm: () => guarda.quando,
+    marcarAtualizado(ms: number) {
+      if (guarda.falharGravacao) throw new Error('Cache cheio');
+      guarda.quando = ms;
+    },
+    apagar() {
+      guarda.apagamentos += 1;
+      if (guarda.falharApagar) throw new Error('Cache fora do ar');
+      guarda.texto = null;
+      guarda.quando = null;
     },
   };
   return guarda;

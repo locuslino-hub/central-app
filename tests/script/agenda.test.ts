@@ -877,3 +877,40 @@ describe('rodada 1: eventos diz quando a lista está incompleta', () => {
     expect(listarEventos({ de: '2026-10-23', ate: '2026-10-23' }, servico(cal)).incompleto).toBe(true);
   });
 });
+
+describe('rodada 1 da T13: motivo do erro só de uma lista fechada', () => {
+  function falhaDoGet(texto: string): Error {
+    const cal = agendasDoDono();
+    cal.servico.Events.get = () => {
+      throw new Error(`API call to calendar.events.get failed with error: ${texto}`);
+    };
+    try {
+      removerEvento({ id: 'abc123' }, servico(cal));
+    } catch (erro) {
+      return erro as Error;
+    }
+    throw new Error('não falhou');
+  }
+
+  it('motivo fora da lista vira "falhou": nem o começo de um endereço passa', () => {
+    const erro = falhaDoGet('Not Allowed marina@exemplo.invalid "Reunião secreta"');
+    expect(erro.message).toBe('Google Agenda (events.get): falhou');
+  });
+
+  it('motivo conhecido fica inteiro, mesmo com mais de 40 caracteres', () => {
+    const erro = falhaDoGet('Request had insufficient authentication scopes. marina@exemplo.invalid');
+    expect(erro.message).toBe('Google Agenda (events.get): Request had insufficient authentication scopes');
+  });
+
+  it('o que vem depois de um motivo conhecido não passa', () => {
+    expect(falhaDoGet('Forbidden: marina segredo').message).toBe('Google Agenda (events.get): Forbidden');
+  });
+
+  it('texto sem o formato da API vira "falhou"', () => {
+    const cal = agendasDoDono();
+    cal.servico.Events.get = () => {
+      throw new Error('Marina Aurora');
+    };
+    expect(() => removerEvento({ id: 'abc123' }, servico(cal))).toThrow(/^Google Agenda \(events\.get\): falhou$/);
+  });
+});
