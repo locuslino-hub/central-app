@@ -12,7 +12,7 @@ import { corDaSala } from './Menu';
 import { useSalaDoEvento, type SalaDoEvento } from './useAdivinharSala';
 import { NavegacaoDoCalendario } from './NavegacaoDoCalendario';
 import { NOMES_DOS_MESES, abreviacaoDoDia, diaPorExtenso } from './quando';
-import { useEventos } from './useEventos';
+import { useComFeito, useEventos } from './useEventos';
 import './calendario.css';
 
 const PONTOS_NO_MAXIMO = 3;
@@ -72,7 +72,7 @@ export function Mes({ data }: { data?: string }) {
   const agora = useAgora();
   const tarefas = useTarefas();
   const tela = useTela();
-  const adivinhar = useSalaDoEvento();
+  const salaDoEvento = useSalaDoEvento();
   const grade = useRef<HTMLTableElement>(null);
   const cabem = useTitulosQueCabem(grade, tela === 'computador');
 
@@ -82,10 +82,12 @@ export function Mes({ data }: { data?: string }) {
   const semanas = diasDoMes(ano, mes);
   const { de, ate } = periodoDoMes(base);
   const { leitura, atualizar } = useEventos(de, ate);
+  // O feito que vale (marcado na Central ou no Google), como na Agenda de hoje.
+  const eventos = useComFeito(leitura.eventos);
 
   const calendario = useMemo(
-    () => montarCalendario({ eventos: leitura.eventos, tarefas: tarefas ?? [], de, ate, agora }),
-    [leitura.eventos, tarefas, de, ate, agora],
+    () => montarCalendario({ eventos, tarefas: tarefas ?? [], de, ate, agora }),
+    [eventos, tarefas, de, ate, agora],
   );
   const recusados = leitura.eventos.filter((e) => e.recusado).length;
   const nomeDoMes = `${NOMES_DOS_MESES[mes - 1]} de ${ano}`;
@@ -119,7 +121,7 @@ export function Mes({ data }: { data?: string }) {
               <tr key={semana[0]}>
                 {semana.map((dia) => (
                   <td key={dia}>
-                    <CelulaDoDia dia={calendario.dia(dia)} hoje={hoje} doMes={Number(dia.slice(5, 7)) === mes} cabem={cabem} adivinhar={adivinhar} />
+                    <CelulaDoDia dia={calendario.dia(dia)} hoje={hoje} doMes={Number(dia.slice(5, 7)) === mes} cabem={cabem} salaDoEvento={salaDoEvento} />
                   </td>
                 ))}
               </tr>
@@ -133,8 +135,8 @@ export function Mes({ data }: { data?: string }) {
 }
 
 /** A cor da sala do item (a mesma da Agenda e da Semana); sem sala, neutra. */
-export function corDaSalaDoItem(item: Item, adivinhar: SalaDoEvento): string {
-  const salaId = salaDoItem(item, adivinhar);
+export function corDaSalaDoItem(item: Item, salaDoEvento: SalaDoEvento): string {
+  const salaId = salaDoItem(item, salaDoEvento);
   return salaId === null ? 'sala-outra' : corDaSala(salaId);
 }
 
@@ -153,9 +155,9 @@ export function titulosDoDia(eventos: Item[], tarefas: Item[], cabem: number | n
   return { itens: todos.slice(0, mostrados), fora: todos.length - mostrados };
 }
 
-type CelulaProps = { dia: DiaDoCalendario; hoje: string; doMes: boolean; cabem: number | null; adivinhar: SalaDoEvento };
+type CelulaProps = { dia: DiaDoCalendario; hoje: string; doMes: boolean; cabem: number | null; salaDoEvento: SalaDoEvento };
 
-function CelulaDoDia({ dia, hoje, doMes, cabem, adivinhar }: CelulaProps) {
+function CelulaDoDia({ dia, hoje, doMes, cabem, salaDoEvento }: CelulaProps) {
   const itens = [...dia.diaInteiro, ...dia.horarios];
   const eventos = itens.filter((i) => i.tipo === 'evento');
   const itensDeTarefa = itens.filter((i) => i.tipo !== 'evento');
@@ -194,7 +196,7 @@ function CelulaDoDia({ dia, hoje, doMes, cabem, adivinhar }: CelulaProps) {
         {titulos.itens.map((item) => (
           <span
             key={item.chave}
-            class={`mes-titulo ${corDaSalaDoItem(item, adivinhar)}`}
+            class={`mes-titulo ${corDaSalaDoItem(item, salaDoEvento)}`}
             data-tipo={item.tipo === 'evento' ? 'evento' : 'tarefa'}
             data-feito={String(item.tipo === 'evento' ? item.evento.feito === true : item.tarefa.feito)}
           >

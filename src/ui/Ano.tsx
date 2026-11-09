@@ -18,7 +18,7 @@ export function Ano({ data }: { data?: string }) {
   const hoje = useDia();
   const agora = useAgora();
   const tarefas = useTarefas();
-  const adivinhar = useSalaDoEvento();
+  const salaDoEvento = useSalaDoEvento();
 
   const base = data ?? hoje;
   const ano = Number(base.slice(0, 4));
@@ -75,7 +75,7 @@ export function Ano({ data }: { data?: string }) {
                   return (
                     <span
                       key={dia}
-                      class={`ano-dia${primeiro ? ` ${corDaSalaDoItem(primeiro, adivinhar)}` : ''}`}
+                      class={`ano-dia${primeiro ? ` ${corDaSalaDoItem(primeiro, salaDoEvento)}` : ''}`}
                       data-hoje={String(dia === hoje)}
                       data-tem={String(doDia.total > 0)}
                       data-passado={String(dia < hoje)}

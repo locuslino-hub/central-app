@@ -8,6 +8,7 @@
 //   4. a sala ligada à cor da agenda (`agenda:`), que é a de quase todos os
 //      eventos dela e por isso vale só depois do título;
 //   5. nenhuma (neutro).
+import { CORES_DOS_EVENTOS } from '../../script/agenda';
 import type { Evento } from './agenda';
 import { resumo } from './eventos-feitos';
 import { salvar } from './loja';
@@ -58,6 +59,27 @@ export function coresVistas(eventos: readonly Evento[]): CorVista[] {
     porChave.set(vista.chave, vista);
   }
   return [...porChave.values()].sort((a, b) => b.quantos - a.quantos || a.chave.localeCompare(b.chave));
+}
+
+/** O hex de uma chave sem evento à vista: da paleta, da própria chave ou um cinza (etiqueta). */
+function hexDaChave(chave: string): string {
+  if (chave.startsWith('cor:')) return CORES_DOS_EVENTOS[chave.slice(4)] ?? '#9e9e9e';
+  if (chave.startsWith('agenda:')) return `#${chave.slice(7)}`;
+  return '#9e9e9e';
+}
+
+/**
+ * As cores para a tela Cores do Google: as vistas nos eventos e, no fim, as
+ * que têm sala ligada mas nenhum evento no período (para dar para desligar).
+ */
+export function coresParaLigar(eventos: readonly Evento[], registros: readonly CorDaSala[] | undefined): CorVista[] {
+  const vistas = coresVistas(eventos);
+  const jaVistas = new Set(vistas.map((v) => v.chave));
+  const semEventos = [...mapaDeCores(registros).keys()]
+    .filter((chave) => !jaVistas.has(chave))
+    .sort()
+    .map((chave) => ({ chave, hex: hexDaChave(chave), quantos: 0, exemplos: [] }));
+  return [...vistas, ...semEventos];
 }
 
 /** Os nomes que o Google Agenda dá às cores de evento ('1' a '11'). */

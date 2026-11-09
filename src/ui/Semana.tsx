@@ -22,7 +22,7 @@ import { ItemDeAgenda } from './ItemDeAgenda';
 import { useSalaDoEvento, type SalaDoEvento } from './useAdivinharSala';
 import { NavegacaoDoCalendario } from './NavegacaoDoCalendario';
 import { abreviacaoDoDia, diaPorExtenso, periodoPorExtenso } from './quando';
-import { useEventos } from './useEventos';
+import { useComFeito, useEventos } from './useEventos';
 import './calendario.css';
 
 const contagem = (total: number) => (total === 0 ? 'nada marcado' : total === 1 ? '1 item' : `${total} itens`);
@@ -236,11 +236,13 @@ export function Semana({ data }: { data?: string }) {
   const segunda = dias[0];
   const { de, ate } = periodoDaSemana(base);
   const { leitura, atualizar } = useEventos(de, ate);
+  // O feito que vale (marcado na Central ou no Google), como na Agenda de hoje.
+  const eventos = useComFeito(leitura.eventos);
   const { abrir, detalhe } = useDetalheDoEvento(salas, hoje);
 
   const calendario = useMemo(
-    () => montarCalendario({ eventos: leitura.eventos, tarefas: tarefas ?? [], de, ate, agora }),
-    [leitura.eventos, tarefas, de, ate, agora],
+    () => montarCalendario({ eventos, tarefas: tarefas ?? [], de, ate, agora }),
+    [eventos, tarefas, de, ate, agora],
   );
   const daSemana = useMemo(() => tarefasDaSemana(tarefas ?? [], base), [tarefas, base]);
   const recusados = leitura.eventos.filter((e) => e.recusado).length;

@@ -6,6 +6,7 @@ import { configure, fireEvent, render, screen, waitFor, within } from '@testing-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Evento } from '../../src/dados/agenda';
 import { ligarCor } from '../../src/dados/cores';
+import { marcarCompromissoFeito } from '../../src/dados/eventos-feitos';
 import { tempoLivre } from '../../src/dados/fila';
 import { listar, listarPendentes, semear } from '../../src/dados/loja';
 import { resolverRota } from '../../src/rotas';
@@ -13,8 +14,10 @@ import { AgendaHoje } from '../../src/ui/AgendaHoje';
 import { CoresDoGoogle } from '../../src/ui/CoresDoGoogle';
 import { GRUPOS_DO_MAIS } from '../../src/ui/Mais';
 import { Quadro } from '../../src/ui/Quadro';
+import { Mes } from '../../src/ui/Mes';
 import { Sala } from '../../src/ui/Sala';
 import { Salas } from '../../src/ui/Salas';
+import { Semana } from '../../src/ui/Semana';
 import { agendaDeTeste, evento } from '../apoio/agenda-ui';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
@@ -120,7 +123,7 @@ describe('a sala resolvida em todas as telas', () => {
 });
 
 describe('bloco do Google Tarefas na tela', () => {
-  const bloco = () => hoje('Revisar capítulo', '14:00', '15:00', { id: 'bloco1', tarefaGoogleId: 'web1', somenteLeitura: true, livre: true });
+  const bloco = () => hoje('Revisar capítulo', '14:00', '15:00', { id: 'bloco1', tarefaGoogleId: 'web1', livre: true });
 
   it('não aparece como "livre" e o ✓ vai para a fila como marcarTarefaGoogle', async () => {
     const agenda = await agendaDeTeste();
@@ -142,5 +145,36 @@ describe('bloco do Google Tarefas na tela', () => {
     await screen.findByText('Revisar capítulo');
     const livre = await tempoLivre(new Date(Date.parse('2026-11-05T14:20:00Z')));
     expect(livre).toMatchObject({ minutos: 0, proximo: { id: 'bloco1' } });
+  });
+});
+
+describe('revisão: cores ligadas sem eventos e feitos no Mês e na Semana', () => {
+  it('cor ligada a uma sala sem eventos no período aparece, para dar para desligar', async () => {
+    await ligarCor('cor:5', 'sala-casa');
+    const agenda = await agendaDeTeste();
+    agenda.responder([]);
+    render(<CoresDoGoogle />);
+    const banana = await screen.findByRole('group', { name: /Banana/ });
+    expect(within(banana).getByText('Nenhum evento nestes meses')).toBeTruthy();
+    fireEvent.click(within(banana).getByRole('button', { name: 'Sem sala' }));
+    await waitFor(async () => expect(await listar('coresDasSalas')).toMatchObject([{ chave: 'cor:5', salaId: null }]));
+  });
+
+  it('o Mês e a Semana mostram o feito marcado na Central', async () => {
+    const reuniao = hoje('Reunião da Renata', '16:00', '17:00', { id: 'r1' });
+    await marcarCompromissoFeito(reuniao, true, '2026-11-05');
+    const agenda = await agendaDeTeste();
+    agenda.responder([reuniao]);
+    const { unmount } = render(<Mes data="2026-11-05" />);
+    await waitFor(() => {
+      const titulo = [...document.querySelectorAll('.mes-titulo')].find((e) => e.textContent === 'Reunião da Renata');
+      expect(titulo?.getAttribute('data-feito')).toBe('true');
+    });
+    unmount();
+    render(<Semana data="2026-11-05" />);
+    await waitFor(() => {
+      const item = screen.getAllByText('Reunião da Renata')[0].closest('li');
+      expect(item?.getAttribute('data-feito')).toBe('true');
+    });
   });
 });

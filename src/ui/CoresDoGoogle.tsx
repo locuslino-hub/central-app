@@ -6,7 +6,7 @@
 // adivinhação pelo título vem depois). "Sem sala" desfaz a ligação.
 import { useMemo, useState } from 'preact/hooks';
 import { somarDias } from '../chat/datas';
-import { coresVistas, ligarCor, mapaDeCores, nomeDaCor, type CorVista } from '../dados/cores';
+import { coresParaLigar, ligarCor, mapaDeCores, nomeDaCor, type CorVista } from '../dados/cores';
 import type { Sala } from '../dados/tipos';
 import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { useCoresDasSalas, useDia, useSalas } from './hooks';
@@ -32,8 +32,8 @@ function LinhaDaCor({ cor, salaId, salas, aoLigar }: LinhaProps) {
             {nome}
             <span class="so-leitor">{`, ${cor.hex}`}</span>
           </span>
-          <span class="cor-conta">{nEventos(cor.quantos)}</span>
-          <span class="cor-exemplos">{`Ex.: ${cor.exemplos.join(' · ')}`}</span>
+          <span class="cor-conta">{cor.quantos === 0 ? 'Nenhum evento nestes meses' : nEventos(cor.quantos)}</span>
+          {cor.exemplos.length > 0 && <span class="cor-exemplos">{`Ex.: ${cor.exemplos.join(' · ')}`}</span>}
         </div>
         <div class="cor-escolha">
           <label class="cor-rotulo" for={`${base}-sala`}>
@@ -65,7 +65,7 @@ export function CoresDoGoogle() {
   const { leitura, atualizar } = useEventos(de, ate);
   const [falhou, setFalhou] = useState(false);
 
-  const vistas = useMemo(() => coresVistas(leitura.eventos), [leitura.eventos]);
+  const vistas = useMemo(() => coresParaLigar(leitura.eventos, registros), [leitura.eventos, registros]);
   const ligadas = useMemo(() => mapaDeCores(registros), [registros]);
   const lido = leitura.lidoEm !== null;
 
