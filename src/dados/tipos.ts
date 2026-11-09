@@ -86,6 +86,14 @@ export type Config = Base & { fimDoDia: string; diaFechado?: string };
  */
 export type EventoFeito = Base & { eventoId: string; agendaId: string; data: string; feito: boolean };
 
+/**
+ * Uma cor do Google ligada a uma sala (spec dos blocos e cores): `chave` como
+ * o script a calcula (`label:<id>`, `cor:<colorId>` ou `agenda:<hex>`). O id
+ * é fixo por chave (`idDaCor`): os dois aparelhos gravam o mesmo registro.
+ * `salaId` null: a cor não tem sala (o compromisso volta à adivinhação pelo título).
+ */
+export type CorDaSala = Base & { chave: string; salaId: string | null };
+
 export type Colecoes = {
   salas: Sala;
   pessoas: Pessoa;
@@ -97,6 +105,7 @@ export type Colecoes = {
   rascunhos: Rascunho;
   config: Config;
   eventosFeitos: EventoFeito;
+  coresDasSalas: CorDaSala;
 };
 
 export type Colecao = keyof Colecoes;

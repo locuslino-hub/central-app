@@ -11,8 +11,13 @@ export const FOLGA_DO_FUTURO_MS = 10 * 60 * 1000;
 const URL_VALIDA = /^https?:\/\/\S+$/i;
 /** `HH:MM`, de 00:00 a 23:59. */
 const HORA_VALIDA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+/**
+ * Chave de uma cor do Google (script/agenda.ts): etiqueta, cor do evento
+ * (paleta '1' a '11') ou cor da agenda (hex sem `#`).
+ */
+export const CHAVE_DE_COR = /^(?:label:[A-Za-z0-9_-]{1,64}|cor:(?:[1-9]|1[01])|agenda:[0-9a-f]{6})$/;
 
-type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?' | 'booleano';
+type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?' | 'booleano' | 'chaveDeCor';
 
 /** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
 export const ESQUEMAS = {
@@ -37,6 +42,8 @@ export const ESQUEMAS = {
   rascunhos: { texto: 'texto', salaId: 'textoOuNulo?' },
   config: { fimDoDia: 'texto' },
   eventosFeitos: { eventoId: 'texto', agendaId: 'texto', data: 'texto', feito: 'booleano' },
+  /** Cor do Google -> sala (null: sem sala ligada; vale a adivinhação pelo título). */
+  coresDasSalas: { chave: 'chaveDeCor', salaId: 'textoOuNulo' },
 } as const satisfies Record<string, Record<string, Tipo>>;
 
 export type NomeDaColecao = keyof typeof ESQUEMAS;
@@ -68,6 +75,8 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
     case 'booleano':
       return typeof valor === 'boolean';
+    case 'chaveDeCor':
+      return typeof valor === 'string' && CHAVE_DE_COR.test(valor);
   }
 }
 

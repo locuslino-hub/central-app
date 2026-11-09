@@ -25,8 +25,8 @@ import type {
 // leva o código do aparelho. O id do aparelho mora em `local`, fora das coleções.
 const BANCO = 'central-dados';
 // 1: coleções, pendentes, local. 2: avisos (Tarefa 5). 3: eventosFeitos e
-// espelhos (feito espelhado).
-const VERSAO = 3;
+// espelhos (feito espelhado). 4: coresDasSalas.
+const VERSAO = 4;
 const PENDENTES = 'pendentes';
 const AVISOS = 'avisos';
 const LOCAL = 'local';
