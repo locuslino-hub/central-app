@@ -1,0 +1,158 @@
+/* Quadro (Tarefa 20): uma coluna por sala. Moderno 3, paleta Sálvia: cartões
+   brancos em relevo macio e a cor da sala (--c texto, --f fundo) só no topo da
+   coluna. Toque mínimo: 44 px. Computador e tablet: colunas lado a lado numa
+   área que rola para o lado. Celular: colunas empilhadas, que abrem e fecham. */
+
+.quadro {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.quadro-filtros {
+  margin: 0;
+}
+
+/* ---- Colunas lado a lado ---- */
+
+.quadro-colunas {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  padding: 2px 2px 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 2px;
+}
+.quadro-colunas:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.quadro-colunas > .quadro-coluna {
+  flex: 0 0 min(19rem, 85%);
+  scroll-snap-align: start;
+}
+
+.quadro-coluna {
+  min-width: 0;
+  border-radius: var(--r-m);
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+  overflow: hidden;
+}
+
+/* O topo leva a cor da sala. */
+.quadro-topo {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 10px 16px 12px;
+  background: var(--f);
+  color: var(--c);
+  font-family: var(--ui);
+}
+.quadro-nome {
+  display: flex;
+  align-items: center;
+  min-height: var(--toque);
+  color: inherit;
+  font-family: var(--titulo);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.1;
+  text-decoration: none;
+}
+a.quadro-nome:hover {
+  text-decoration: underline;
+}
+a.quadro-nome:focus-visible {
+  outline: 3px solid var(--c);
+  outline-offset: 2px;
+  border-radius: var(--r-p);
+}
+.quadro-conta {
+  color: var(--c);
+  font: 600 0.9rem/1.3 var(--ui);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.quadro-corpo {
+  display: grid;
+  gap: 14px;
+  padding: 12px 16px 16px;
+}
+.quadro-secao {
+  margin: 0 0 4px;
+  color: var(--tinta2);
+  font: 700 0.8rem/1.3 var(--ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.quadro-vazio {
+  margin: 0;
+  color: var(--tinta2);
+}
+.quadro-corpo .sala-dia {
+  margin-top: 6px;
+}
+
+/* ---- Empilhado (celular) ---- */
+
+.quadro-pilha {
+  display: grid;
+  gap: 10px;
+}
+.quadro-pilha .quadro-topo {
+  padding: 0;
+}
+.quadro-alternar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  min-height: var(--toque);
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.quadro-alternar::after {
+  content: '';
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: auto;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.quadro-alternar[aria-expanded='true']::after {
+  transform: rotate(-135deg);
+}
+.quadro-alternar:focus-visible {
+  outline: 3px solid var(--c);
+  outline-offset: -3px;
+}
+.quadro-pilha .quadro-nome {
+  min-height: 0;
+}
+.quadro-pilha .quadro-conta {
+  order: 3;
+  flex-basis: 100%;
+}
+.quadro-ir {
+  margin: 8px 0 0 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quadro-alternar::after {
+    transition: none;
+  }
+}

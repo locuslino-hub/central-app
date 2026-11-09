@@ -1,6 +1,4 @@
-// A página de cada rota. Painel do dia, Agora, Semana, Mês, Ano, Caixa, Sem prazo, Atividades, Salas
-// (com o cadastro de pessoas), cada sala, cada pessoa, Conectar, IA local e Chat existem; as demais mostram o título
-// e dizem que ainda não estão prontas, até a tarefa delas chegar.
+// A página de cada rota. Toda rota do app tem a sua tela.
 import type { RotaAtual } from '../rotas';
 import { AgoraPagina } from './Agora';
 import { Ano } from './Ano';
@@ -14,6 +12,7 @@ import { Mes } from './Mes';
 import { Painel } from './Painel';
 import { Pagina } from './Pagina';
 import { Pessoa } from './Pessoa';
+import { Quadro } from './Quadro';
 import { Sala } from './Sala';
 import { Salas } from './Salas';
 import { SemPrazo } from './SemPrazo';
@@ -89,6 +88,12 @@ export function Vista({ rota }: { rota: RotaAtual }) {
           <div class="semprazo-pagina">
             <Caixa />
           </div>
+        </Pagina>
+      );
+    case 'quadro':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <Quadro />
         </Pagina>
       );
     case 'atividades':

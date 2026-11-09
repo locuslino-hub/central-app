@@ -1,8 +1,7 @@
 // "Mais": o que não cabe na barra (celular) nem no trilho (tablet).
 import { useEffect, useRef } from 'preact/hooks';
-import { hrefDe, ROTAS_EM_BREVE, type IdDaRota } from '../rotas';
+import { hrefDe, type IdDaRota } from '../rotas';
 import { Icone, type NomeDoIcone } from './icones';
-import { EmBreve } from './EmBreve';
 
 type Destino = { id: Exclude<IdDaRota, 'nao-encontrada'>; icone: NomeDoIcone };
 
@@ -112,7 +111,7 @@ export function FolhaMais({ rotulo, rotaAtual, aoFechar }: FolhaProps) {
             <h2 id={`mais-${grupo.titulo}`}>{grupo.titulo}</h2>
             <ul>
               {grupo.destinos.map((destino) => (
-                <li key={destino.id} class={ROTAS_EM_BREVE.has(destino.id) ? 'com-marca' : undefined}>
+                <li key={destino.id}>
                   <a
                     class="item"
                     href={hrefDe(destino.id)}
@@ -123,7 +122,6 @@ export function FolhaMais({ rotulo, rotaAtual, aoFechar }: FolhaProps) {
                     <Icone nome={destino.icone} />
                     <span>{rotulo(destino.id)}</span>
                   </a>
-                  {ROTAS_EM_BREVE.has(destino.id) && <EmBreve />}
                 </li>
               ))}
             </ul>

@@ -1,8 +1,7 @@
 // Navegação: menu completo (computador) e atalhos (barra no celular, trilho no tablet).
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { hrefDe, nomeDoMes, ROTAS_EM_BREVE, type IdDaRota, type RotaAtual } from '../rotas';
-import { EmBreve } from './EmBreve';
+import { hrefDe, nomeDoMes, type IdDaRota, type RotaAtual } from '../rotas';
 import { Icone, type NomeDoIcone } from './icones';
 import { useSalas } from './hooks';
 import { BotaoMais, FolhaMais, ROTAS_DO_MAIS } from './Mais';
@@ -79,9 +78,8 @@ function Grupo({ titulo, children }: { titulo: string; children: ComponentChildr
 export function MenuLateral({ rota, hoje }: Props) {
   const salas = useSalas();
   const item = (id: IdComHref, icone: NomeDoIcone) => (
-    <li key={id} class={ROTAS_EM_BREVE.has(id) ? 'com-marca' : undefined}>
+    <li key={id}>
       <Item rota={rota} id={id} icone={icone} rotulo={rotuloDe(id, hoje)} />
-      {ROTAS_EM_BREVE.has(id) && <EmBreve />}
     </li>
   );
   return (

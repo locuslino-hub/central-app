@@ -552,48 +552,6 @@
   color: var(--tinta2);
 }
 
-/* ---- "Em breve": telas que ainda não existem ---- */
-
-.em-breve {
-  display: inline-block;
-  margin: 0;
-  padding: 1px 8px;
-  border-radius: 99px;
-  background: var(--poco);
-  color: var(--tinta2);
-  font: 600 0.7rem/1.5 var(--ui);
-  white-space: nowrap;
-}
-/* A marca fica à direita do link, sem entrar no nome dele nem tirar a área de toque. */
-.com-marca {
-  position: relative;
-}
-.com-marca .item {
-  gap: 8px;
-  padding-right: 66px;
-  line-height: 1.2;
-}
-.com-marca .icone {
-  flex: none;
-}
-.com-marca .em-breve {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-.em-breve-cartao {
-  max-width: 30rem;
-}
-.em-breve-texto {
-  margin: 8px 0 14px;
-  font-size: 1.05rem;
-}
-.cartao-agora .em-breve {
-  margin-bottom: 6px;
-}
-
 /* Seis itens na barra de 390 px (ou 360): cada nome cabe numa linha, sem quebrar "Sem prazo". */
 .atalhos[data-variante='barra'] a,
 .atalhos[data-variante='barra'] button.mais {

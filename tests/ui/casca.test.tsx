@@ -324,24 +324,8 @@ describe('páginas', () => {
     }
   });
 
-  it('a rota que ainda não foi feita diz isso em palavras simples, num cartão "Em breve"', async () => {
-    await mostrar('#/quadro', 1280);
-    const principal = within(document.querySelector('main') as HTMLElement);
-    expect(principal.getByText('Esta tela chega numa próxima versão.')).toBeTruthy();
-    expect(principal.getByText('Em breve')).toBeTruthy();
-    expect(principal.getByRole('link', { name: 'Voltar ao Painel do dia' }).getAttribute('href')).toBe('#/');
-  });
-
-  it.each([
-    '#/quadro',
-  ])('%s é uma tela que ainda não existe e diz isso com o mesmo cartão', async (hash) => {
-    await mostrar(hash, 1280);
-    const principal = within(document.querySelector('main') as HTMLElement);
-    expect(await principal.findByText('Esta tela chega numa próxima versão.')).toBeTruthy();
-  });
-
   it('as telas que existem não dizem "Em breve"', async () => {
-    for (const hash of ['#/', '#/agora', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat', '#/caixa']) {
+    for (const hash of ['#/', '#/agora', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat', '#/caixa', '#/quadro']) {
       const { unmount } = render(<App />);
       navegar(hash);
       expect(within(document.querySelector('main') as HTMLElement).queryByText('Esta tela chega numa próxima versão.')).toBeNull();
@@ -634,11 +618,10 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
   const emBreve = (li: Element | null) => li?.querySelector('.em-breve')?.textContent ?? null;
   const itemDe = (nome: string, dentro: HTMLElement) => within(dentro).getByRole('link', { name: nome }).closest('li');
 
-  it('no menu do computador: só o Quadro tem a marca; o que existe (inclusive o calendário e a Caixa), não', async () => {
+  it('no menu do computador: nenhuma tela tem a marca, o Quadro já existe (Tarefa 20)', async () => {
     await mostrar('#/', 1280);
     const menu = principal();
-    expect(emBreve(itemDe('Quadro', menu))).toBe('Em breve');
-    for (const nome of ['Esta semana', 'Novembro', '2026', 'Salas', 'Caixa', 'Atividades', 'Sem prazo']) {
+    for (const nome of ['Quadro', 'Esta semana', 'Novembro', '2026', 'Salas', 'Caixa', 'Atividades', 'Sem prazo']) {
       expect(emBreve(itemDe(nome, menu))).toBeNull();
     }
   });
@@ -661,12 +644,11 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
     expect(agora.getByRole('link', { name: 'Abrir o Agora' }).getAttribute('href')).toBe('#/agora');
   });
 
-  it('na folha Mais do celular: só o Quadro tem a marca; o calendário, Atividades e Sem prazo, não', async () => {
+  it('na folha Mais do celular: nenhuma tela tem a marca, o Quadro já existe (Tarefa 20)', async () => {
     await mostrar('#/', 390);
     fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
     const folha = screen.getByRole('dialog', { name: 'Mais' });
-    expect(emBreve(itemDe('Quadro', folha))).toBe('Em breve');
-    for (const nome of ['Esta semana', 'Novembro', '2026', 'Atividades', 'Sem prazo', 'Conectar aparelho']) {
+    for (const nome of ['Quadro', 'Esta semana', 'Novembro', '2026', 'Atividades', 'Sem prazo', 'Conectar aparelho']) {
       expect(emBreve(itemDe(nome, folha))).toBeNull();
     }
   });

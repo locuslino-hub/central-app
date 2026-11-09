@@ -133,7 +133,7 @@ test.describe('celular, 390 px', () => {
     expect(erros).toEqual([]);
   });
 
-  test('escrever tarefa à mão, editar, apagar com Desfazer e conferir "Em breve"', async ({ page }) => {
+  test('escrever tarefa à mão, editar, apagar com Desfazer e conferir que nenhuma tela diz "Em breve"', async ({ page }) => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/#/');
     const principal = page.getByRole('main');
@@ -171,15 +171,16 @@ test.describe('celular, 390 px', () => {
     await checklist.getByRole('button', { name: 'Desfazer' }).click();
     await expect(checklist.getByRole('checkbox', { name: 'Ligar para a Renata hoje' })).toBeVisible();
 
-    // "Em breve": a barra só leva ao que existe, e as telas que faltam dizem isso.
+    // A barra leva ao que existe; o Quadro já não é "Em breve".
     const barra = page.getByRole('navigation', { name: 'Principal' });
     await expect(barra.getByRole('link')).toHaveText(['Painel', 'Atividades', 'Sem prazo', 'Salas', 'Chat']);
     await barra.getByRole('button', { name: 'Mais' }).click();
     const folha = page.getByRole('dialog', { name: 'Mais' });
-    await expect(folha.getByText('Em breve')).toHaveCount(1);
+    await expect(folha.getByText('Em breve')).toHaveCount(0);
     expect(await pequenos(page)).toEqual([]);
     await folha.getByRole('link', { name: 'Quadro' }).click();
-    await expect(principal.getByText('Esta tela chega numa próxima versão.')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Quadro' })).toBeVisible();
+    await expect(principal.getByText('Esta tela chega numa próxima versão.')).toHaveCount(0);
     expect(await semRolagemDeLado(page)).toBe(true);
     expect(erros).toEqual([]);
   });

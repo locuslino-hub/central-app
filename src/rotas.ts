@@ -23,12 +23,6 @@ export type IdDaRota =
   | 'ia'
   | 'nao-encontrada';
 
-/**
- * Telas que ainda não existem (chegam em tarefas seguintes). O menu e a barra
- * dizem "Em breve" nelas, e a página mostra um cartão que diz o mesmo.
- */
-export const ROTAS_EM_BREVE: ReadonlySet<IdDaRota> = new Set<IdDaRota>(['quadro']);
-
 /** O que o painel direito do computador aceita. */
 export type Painel = 'agora' | 'chat';
 export const PAINEIS_DIREITOS: readonly Painel[] = ['agora', 'chat'];
