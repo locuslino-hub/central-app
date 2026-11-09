@@ -46,13 +46,19 @@ export interface AgendaGuardada {
 
 export type Chamada = { metodo: string; args: unknown[] };
 
-/** Erro como o do serviço avançado: mensagem com o código HTTP, sem dados do dono. */
+/**
+ * Erro como o do serviço avançado (GoogleJsonResponseException): mensagem com
+ * o motivo e `details.code` com o status HTTP, sem dados do dono.
+ */
 function erroDaApi(metodo: string, texto: string, status: number): Error {
   const erro = new Error(`API call to calendar.${metodo} failed with error: ${texto}`);
   erro.name = 'GoogleJsonResponseException';
-  (erro as Error & { status: number }).status = status;
+  (erro as Error & { details: unknown }).details = { code: status, message: texto };
   return erro;
 }
+
+/** Id escolhido pelo cliente: base32hex (a-v, 0-9), 5 a 1024 caracteres (referência de events.insert). */
+const ID_DO_CLIENTE = /^[a-v0-9]{5,1024}$/;
 
 const RFC3339_COM_FUSO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const LOCAL_SEM_FUSO = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/;
@@ -129,9 +135,10 @@ export interface OpcoesDoFalso {
   /** O servidor devolve no máximo isto por página, mesmo pedindo mais (a API pode). */
   paginaMaxima?: number;
   /**
-   * Como o patch trata objetos aninhados: 'mescla' (cada chave especificada
-   * substitui; o resto fica) ou 'substitui' (o objeto de primeiro nível
-   * enviado troca o guardado inteiro). O script tem de funcionar com os dois.
+   * Como o patch trata os mapas de extendedProperties: 'mescla' (cada chave
+   * enviada substitui; as outras ficam) ou 'substitui' (o mapa enviado,
+   * private ou shared, troca o guardado inteiro; o mapa não enviado fica).
+   * O script tem de funcionar com os dois.
    */
   patch?: 'mescla' | 'substitui';
 }
@@ -251,8 +258,16 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       if (msDe(fim, a.entrada.timeZone) < msDe(inicio, a.entrada.timeZone)) {
         throw erroDaApi('events.insert', 'The specified time range is empty.', 400);
       }
-      proximo += 1;
-      const id = `ev${String(proximo).padStart(6, '0')}criado`;
+      let id: string;
+      if (corpo.id !== undefined) {
+        if (typeof corpo.id !== 'string' || !ID_DO_CLIENTE.test(corpo.id)) throw erroDaApi('events.insert', 'Invalid resource id value.', 400);
+        // Id já usado, mesmo por evento apagado: 409.
+        if (a.eventos.has(corpo.id)) throw erroDaApi('events.insert', 'The requested identifier already exists.', 409);
+        id = corpo.id;
+      } else {
+        proximo += 1;
+        id = `ev${String(proximo).padStart(6, '0')}criado`;
+      }
       const evento: EventoGuardado = {
         id,
         summary: corpo.summary,
@@ -280,7 +295,8 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       for (const [campo, valor] of Object.entries(clonar(corpo))) {
         if (campo === 'extendedProperties') {
           if (opcoes.patch === 'substitui') {
-            e.extendedProperties = valor;
+            // Cada mapa enviado (private/shared) troca o guardado inteiro; o não enviado fica.
+            e.extendedProperties = { ...(e.extendedProperties ?? {}), ...(valor ?? {}) };
           } else {
             const atual = e.extendedProperties ?? {};
             for (const [tipo, mapa] of Object.entries(valor ?? {})) {

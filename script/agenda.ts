@@ -11,7 +11,9 @@
 // - desfazer só apaga evento da principal com a marca privada do app
 //   (centralCriado '1'), nunca outro evento do dono;
 // - o pedido é conferido antes de qualquer chamada ao Google;
-// - erros e registros nunca levam título, id, e-mail ou nome de agenda.
+// - erros e registros nunca levam título, id, e-mail ou nome de agenda;
+// - o id de uma agenda que não é a principal nunca sai do script: o app
+//   recebe um apelido opaco e estável (`agenda-…`).
 
 /** O dono vive em Lisboa: horas do app são de Lisboa. */
 export const FUSO = 'Europe/Lisbon';
@@ -45,11 +47,16 @@ const CAMPOS_DOS_EVENTOS =
   'items(id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),extendedProperties(private)),nextPageToken';
 const CAMPOS_DA_LISTA = 'items(id,primary,selected,hidden,deleted),nextPageToken';
 const CAMPOS_DA_MARCA = 'id,status,extendedProperties';
+/** Um evento inteiro, com os mesmos campos da lista (para o criarEvento repetido). */
+const CAMPOS_DO_EVENTO =
+  'id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),extendedProperties(private)';
 
 const DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
 const HORA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 /** Ids do Google: base32hex, mais `_` e carimbo nas repetições. Nada de `/`, `.`, `@`. */
 const ID_DE_EVENTO = /^[A-Za-z0-9_-]{1,1024}$/;
+/** Id escolhido pelo app ao criar: base32hex (a-v, 0-9), 5 a 1024 caracteres, como a API exige. */
+const ID_DO_APP = /^[a-v0-9]{5,1024}$/;
 const CONTROLE = /[\u0000-\u001f\u007f]/;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const LINK_DO_GOOGLE = /^https:\/\/(?:www\.google\.com\/calendar|calendar\.google\.com)\/\S*$/;
@@ -58,7 +65,10 @@ const ANO_MAXIMO = 2200;
 
 export type Evento = {
   id: string;
-  /** Id da agenda na lista do dono; a principal é sempre 'primary'. */
+  /**
+   * 'primary' para a agenda principal. As outras vêm com um apelido opaco e
+   * estável (`agenda-` + 11 caracteres), nunca o id do Google (que é um e-mail).
+   */
   agendaId: string;
   titulo: string;
   /** ISO com o fuso de Lisboa (`2026-10-23T11:00:00+01:00`), ou `AAAA-MM-DD` no dia inteiro. */
@@ -82,7 +92,15 @@ export type NovoEvento = {
   inicio: string;
   fim: string;
   salaId: string | null;
+  /**
+   * Id gerado pelo app (base32hex, 5 a 1024). Repetir o pedido com o mesmo id
+   * não cria outro evento: devolve o já criado.
+   */
+  id?: string;
 };
+
+/** Resposta de `eventos`. `incompleto`: alguma agenda falhou ou um teto foi atingido. */
+export type RespostaEventos = { eventos: Evento[]; incompleto: boolean };
 
 type Args = Record<string, unknown>;
 type DataDaApi = { date?: string; dateTime?: string; timeZone?: string };
@@ -128,11 +146,14 @@ export class PedidoInvalido extends Error {
   }
 }
 
-/** Falha numa chamada ao Google. Leva só o método e o motivo curto (ex.: Not Found). */
+/** Falha numa chamada ao Google. Leva só o método, o motivo curto (ex.: Not Found) e o status HTTP. */
 class FalhaDoGoogle extends Error {
-  constructor(metodo: string, motivo: string) {
+  readonly status: number | null;
+
+  constructor(metodo: string, motivo: string, status: number | null) {
     super(`Google Agenda (${metodo}): ${motivo}`);
     this.name = 'FalhaDoGoogle';
+    this.status = status;
   }
 }
 
@@ -177,6 +198,25 @@ export function paraLisboa(texto: string): string {
 /** 00:00 de Lisboa no dia, com o fuso. A troca de hora é à 01:00 UTC, nunca à meia-noite. */
 function meiaNoiteEmLisboa(data: string): string {
   return `${data}T00:00:00${comFuso(minutosDeLisboa(utcDoDia(data) - 60 * 60_000))}`;
+}
+
+/** Dia de hoje em Lisboa (AAAA-MM-DD) no instante. */
+export function hojeEmLisboa(agora: number): string {
+  return new Date(agora + minutosDeLisboa(agora) * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Hora de parede de Lisboa (`HH:MM` no dia) com o fuso, ou null se ela não
+ * existe (último domingo de março, 01:00 a 01:59: o relógio salta para 02:00).
+ * No último domingo de outubro, 01:00 a 01:59 existe duas vezes: vale a
+ * primeira, ainda no horário de verão (+01:00).
+ */
+export function horaEmLisboa(data: string, hora: string): string | null {
+  const [h, m] = hora.split(':').map(Number);
+  const comoUtc = utcDoDia(data) + h * 60 * 60_000 + m * 60_000;
+  if (minutosDeLisboa(comoUtc - 60 * 60_000) === 60) return `${data}T${hora}:00+01:00`;
+  if (minutosDeLisboa(comoUtc) === 0) return `${data}T${hora}:00+00:00`;
+  return null;
 }
 
 function diaSeguinte(data: string): string {
@@ -224,9 +264,9 @@ export function lerPeriodo(dados: unknown): { de: string; ate: string } {
   return { de, ate };
 }
 
-export function lerNovoEvento(dados: unknown): NovoEvento {
+function conferirNovo(dados: unknown): { novo: NovoEvento; inicioIso: string; fimIso: string } {
   exigir(objeto(dados));
-  const { titulo, data, inicio, fim, salaId } = dados;
+  const { titulo, data, inicio, fim, salaId, id } = dados;
   exigir(typeof titulo === 'string');
   const aparado = titulo.trim();
   exigir(aparado.length > 0 && aparado.length <= TITULO_NO_MAXIMO && !CONTROLE.test(aparado));
@@ -234,7 +274,18 @@ export function lerNovoEvento(dados: unknown): NovoEvento {
   exigir(typeof inicio === 'string' && HORA.test(inicio) && typeof fim === 'string' && HORA.test(fim));
   exigir(fim > inicio);
   exigir(salaValida(salaId));
-  return { titulo: aparado, data, inicio, fim, salaId };
+  exigir(id === undefined || (typeof id === 'string' && ID_DO_APP.test(id)));
+  // Hora que não existe em Lisboa (troca de março) é pedido inválido.
+  const inicioIso = horaEmLisboa(data, inicio);
+  const fimIso = horaEmLisboa(data, fim);
+  exigir(inicioIso !== null && fimIso !== null);
+  const novo: NovoEvento = { titulo: aparado, data, inicio, fim, salaId };
+  if (id !== undefined) novo.id = id;
+  return { novo, inicioIso, fimIso };
+}
+
+export function lerNovoEvento(dados: unknown): NovoEvento {
+  return conferirNovo(dados).novo;
 }
 
 export function lerId(dados: unknown): string {
@@ -261,13 +312,34 @@ function motivoDe(erro: unknown): string {
   return motivo || 'falhou';
 }
 
+/**
+ * Status HTTP da falha: `details.code` do GoogleJsonResponseException, ou,
+ * sem ele, pelo motivo da mensagem (só os três que o script trata).
+ */
+function statusDe(erro: unknown): number | null {
+  const detalhes = typeof erro === 'object' && erro !== null ? (erro as { details?: unknown }).details : undefined;
+  const codigo = typeof detalhes === 'object' && detalhes !== null ? (detalhes as { code?: unknown }).code : undefined;
+  if (typeof codigo === 'number' && Number.isInteger(codigo)) return codigo;
+  const motivo = motivoDe(erro);
+  if (/^Not Found$/i.test(motivo)) return 404;
+  if (/^(Resource has been deleted|Gone)$/i.test(motivo)) return 410;
+  if (/already exists|^Duplicate$/i.test(motivo)) return 409;
+  return null;
+}
+
+function paraFalha(metodo: string, erro: unknown): FalhaDoGoogle {
+  return new FalhaDoGoogle(metodo, motivoDe(erro), statusDe(erro));
+}
+
 function google<T>(metodo: string, fazer: () => T): T {
   try {
     return fazer();
   } catch (erro) {
-    throw new FalhaDoGoogle(metodo, motivoDe(erro));
+    throw paraFalha(metodo, erro);
   }
 }
+
+const sumiu = (erro: unknown) => erro instanceof FalhaDoGoogle && (erro.status === 404 || erro.status === 410);
 
 function registrar(texto: string) {
   if (typeof console !== 'undefined') console.error(`Central: ${texto}`);
@@ -327,10 +399,35 @@ function exigirEvento(api: unknown): Evento {
   return traduzido.evento;
 }
 
+// ---------- apelido das agendas ----------
+
+/**
+ * Apelido opaco e estável de uma agenda (hash cyrb53 de 53 bits, em base 36).
+ * O id do Google (e-mail) nunca sai do script. Mesmo id, mesmo apelido.
+ */
+function apelido(id: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < id.length; i++) {
+    const c = id.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const valor = 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  return `agenda-${valor.toString(36).padStart(11, '0')}`;
+}
+
+type AgendaALer = { id: string; apelido: string };
+
 // ---------- ações ----------
 
-/** Agendas a ler: a principal (sempre, como 'primary') e as marcadas na lista do dono. */
-function agendasMarcadas(servico: ServicoDeAgenda): string[] {
+/**
+ * Agendas a ler: a principal (sempre, como 'primary') e as marcadas na lista
+ * do dono. `cortada`: havia mais do que o teto de agendas ou de páginas.
+ */
+function agendasMarcadas(servico: ServicoDeAgenda): { agendas: AgendaALer[]; cortada: boolean } {
   const ids: string[] = [];
   let pagina: string | undefined;
   for (let vez = 0; vez < PAGINAS_NO_MAXIMO; vez++) {
@@ -349,10 +446,14 @@ function agendasMarcadas(servico: ServicoDeAgenda): string[] {
   }
   // Mesmo se a lista não marcar a principal, ela é lida: é onde o app grava.
   if (ids.indexOf(PRINCIPAL) < 0) ids.unshift(PRINCIPAL);
-  return ids.slice(0, AGENDAS_NO_MAXIMO);
+  return {
+    agendas: ids.slice(0, AGENDAS_NO_MAXIMO).map((id) => ({ id, apelido: id === PRINCIPAL ? PRINCIPAL : apelido(id) })),
+    cortada: pagina !== undefined || ids.length > AGENDAS_NO_MAXIMO,
+  };
 }
 
-function lerAgenda(servico: ServicoDeAgenda, agendaId: string, timeMin: string, timeMax: string) {
+/** Eventos de uma agenda no período. `cortada`: sobrou página por ler (teto de eventos ou de páginas). */
+function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string, timeMax: string) {
   const achados: NonNullable<ReturnType<typeof traduzir>>[] = [];
   let pagina: string | undefined;
   for (let vez = 0; vez < PAGINAS_NO_MAXIMO && achados.length < EVENTOS_NO_MAXIMO; vez++) {
@@ -366,49 +467,79 @@ function lerAgenda(servico: ServicoDeAgenda, agendaId: string, timeMin: string, 
       fields: CAMPOS_DOS_EVENTOS,
     };
     if (pagina) args.pageToken = pagina;
-    const resposta = google('events.list', () => servico.Events.list(agendaId, args));
+    const resposta = google('events.list', () => servico.Events.list(agenda.id, args));
     for (const item of Array.isArray(resposta?.items) ? resposta.items : []) {
       if (proprio(item, 'status') === 'cancelled' || proprio(item, 'eventType') === 'workingLocation') continue;
-      const traduzido = traduzir(item, agendaId);
+      const traduzido = traduzir(item, agenda.apelido);
       if (traduzido) achados.push(traduzido);
     }
     pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
     if (!pagina) break;
   }
-  return achados;
+  return { achados, cortada: pagina !== undefined };
 }
 
-/** `eventos {de, ate}`: dias AAAA-MM-DD de Lisboa, `ate` incluído. */
-export function listarEventos(dados: unknown, servico: ServicoDeAgenda): Evento[] {
+/**
+ * `eventos {de, ate}`: dias AAAA-MM-DD de Lisboa, `ate` incluído.
+ * `incompleto` é true se uma agenda assinada falhou (e foi pulada) ou se um
+ * teto (agendas, páginas, 2500 eventos) foi atingido.
+ */
+export function listarEventos(dados: unknown, servico: ServicoDeAgenda): RespostaEventos {
   const { de, ate } = lerPeriodo(dados);
   const timeMin = meiaNoiteEmLisboa(de);
   const timeMax = meiaNoiteEmLisboa(diaSeguinte(ate));
+  const { agendas, cortada } = agendasMarcadas(servico);
+  let incompleto = cortada;
   const todos: NonNullable<ReturnType<typeof traduzir>>[] = [];
-  for (const agendaId of agendasMarcadas(servico)) {
+  for (const agenda of agendas) {
     try {
-      todos.push(...lerAgenda(servico, agendaId, timeMin, timeMax));
+      const lida = lerAgenda(servico, agenda, timeMin, timeMax);
+      todos.push(...lida.achados);
+      if (lida.cortada) incompleto = true;
     } catch (erro) {
       // A principal falhando daria uma agenda vazia que engana: o pedido falha.
-      if (agendaId === PRINCIPAL) throw erro;
+      if (agenda.id === PRINCIPAL) throw erro;
+      incompleto = true;
       registrar(`agenda assinada ignorada: ${erro instanceof FalhaDoGoogle ? erro.message : 'falhou'}`);
     }
   }
+  if (todos.length > EVENTOS_NO_MAXIMO) incompleto = true;
   todos.sort((a, b) => a.ordem - b.ordem || a.fimMs - b.fimMs);
-  return todos.slice(0, EVENTOS_NO_MAXIMO).map((t) => t.evento);
+  return { eventos: todos.slice(0, EVENTOS_NO_MAXIMO).map((t) => t.evento), incompleto };
 }
 
-/** `criarEvento`: na principal, horas de Lisboa, sem convidados e sem notificar. */
+/**
+ * `criarEvento`: na principal, horas de Lisboa, sem convidados e sem notificar.
+ * A hora vai com o fuso explícito (`+01:00`/`+00:00`, ver horaEmLisboa) e com
+ * timeZone Europe/Lisbon. Com `id` do app, repetir o pedido (fila offline,
+ * resposta perdida) dá 409 no Google: o script lê o evento e, se ele tem a
+ * marca do app e não foi desfeito, devolve esse mesmo evento.
+ */
 export function criarEvento(dados: unknown, servico: ServicoDeAgenda): Evento {
-  const novo = lerNovoEvento(dados);
+  const { novo, inicioIso, fimIso } = conferirNovo(dados);
   const privadas: Record<string, string> = { [MARCA_DO_APP]: '1' };
   if (novo.salaId !== null) privadas[CHAVE_DA_SALA] = novo.salaId;
   const corpo = {
+    ...(novo.id !== undefined ? { id: novo.id } : {}),
     summary: novo.titulo,
-    start: { dateTime: `${novo.data}T${novo.inicio}:00`, timeZone: FUSO },
-    end: { dateTime: `${novo.data}T${novo.fim}:00`, timeZone: FUSO },
+    start: { dateTime: inicioIso, timeZone: FUSO },
+    end: { dateTime: fimIso, timeZone: FUSO },
     extendedProperties: { private: privadas },
   };
-  return exigirEvento(google('events.insert', () => servico.Events.insert(corpo, PRINCIPAL, { sendUpdates: 'none' })));
+  let criado: EventoDaApi;
+  try {
+    criado = servico.Events.insert(corpo, PRINCIPAL, { sendUpdates: 'none' });
+  } catch (erro) {
+    const falha = paraFalha('events.insert', erro);
+    const id = novo.id;
+    if (falha.status !== 409 || id === undefined) throw falha;
+    criado = google('events.get', () => servico.Events.get(PRINCIPAL, id, { fields: CAMPOS_DO_EVENTO }));
+    if (proprio(criado, 'status') === 'cancelled') throw new Error('Evento do app já desfeito');
+    if (proprio(proprio(proprio(criado, 'extendedProperties'), 'private'), MARCA_DO_APP) !== '1') {
+      throw new Error('Id já usado por evento que não é do app');
+    }
+  }
+  return exigirEvento(criado);
 }
 
 function marcaDoEvento(servico: ServicoDeAgenda, id: string) {
@@ -421,32 +552,41 @@ function marcaDoEvento(servico: ServicoDeAgenda, id: string) {
  */
 export function removerEvento(dados: unknown, servico: ServicoDeAgenda): { removido: boolean } {
   const id = lerId(dados);
-  const atual = marcaDoEvento(servico, id);
+  let atual: EventoDaApi;
+  try {
+    atual = marcaDoEvento(servico, id);
+  } catch (erro) {
+    // Já não existe (404) ou foi apagado (410): nada a desfazer.
+    if (sumiu(erro)) return { removido: false };
+    throw erro;
+  }
   if (proprio(atual, 'status') === 'cancelled') return { removido: false };
   const privadas = proprio(proprio(atual, 'extendedProperties'), 'private');
   if (proprio(privadas, MARCA_DO_APP) !== '1') throw new Error('Evento não foi criado pelo app');
-  google('events.delete', () => servico.Events.remove(PRINCIPAL, id, { sendUpdates: 'none' }));
+  try {
+    google('events.delete', () => servico.Events.remove(PRINCIPAL, id, { sendUpdates: 'none' }));
+  } catch (erro) {
+    // Apagado entre o get e o delete (outro aparelho, outra tentativa).
+    if (sumiu(erro)) return { removido: false };
+    throw erro;
+  }
   return { removido: true };
 }
 
 /**
- * `trocarSalaEvento {id, salaId}` na principal. Lê as propriedades e manda o
- * conjunto inteiro (privadas e compartilhadas): o resultado é o mesmo se o
- * patch mesclar ou substituir, e a marca do app nunca se perde. Sala null
- * fica como texto vazio, que se lê como "sem sala".
+ * `trocarSalaEvento {id, salaId}` na principal. Lê as propriedades privadas e
+ * manda o mapa privado inteiro, com a sala nova: o resultado é o mesmo se o
+ * patch mesclar ou substituir o mapa, e a marca do app nunca se perde. As
+ * compartilhadas (de outros apps) nunca são enviadas. Sala null fica como
+ * texto vazio, que se lê como "sem sala".
  */
 export function trocarSalaEvento(dados: unknown, servico: ServicoDeAgenda): Evento {
   const { id, salaId } = lerTrocaDeSala(dados);
   const atual = marcaDoEvento(servico, id);
   if (proprio(atual, 'status') === 'cancelled') throw new Error('Evento apagado');
-  const propriedades = proprio(atual, 'extendedProperties');
-  const privadas = proprio(propriedades, 'private');
-  const compartilhadas = proprio(propriedades, 'shared');
+  const privadas = proprio(proprio(atual, 'extendedProperties'), 'private');
   const corpo = {
-    extendedProperties: {
-      private: { ...(objeto(privadas) ? privadas : {}), [CHAVE_DA_SALA]: salaId ?? '' },
-      ...(objeto(compartilhadas) ? { shared: compartilhadas } : {}),
-    },
+    extendedProperties: { private: { ...(objeto(privadas) ? privadas : {}), [CHAVE_DA_SALA]: salaId ?? '' } },
   };
   return exigirEvento(google('events.patch', () => servico.Events.patch(corpo, PRINCIPAL, id, { sendUpdates: 'none' })));
 }
@@ -457,8 +597,8 @@ export function trocarSalaEvento(dados: unknown, servico: ServicoDeAgenda): Even
  * passo do dono provar o pedido real. Devolve só a contagem; não grava nada.
  */
 export function provarAgenda(servico: ServicoDeAgenda, agora: number): { agendas: number } {
-  const agendas = agendasMarcadas(servico).length;
-  const hoje = new Date(agora).toISOString().slice(0, 10);
-  lerAgenda(servico, PRINCIPAL, meiaNoiteEmLisboa(hoje), meiaNoiteEmLisboa(diaSeguinte(hoje)));
+  const agendas = agendasMarcadas(servico).agendas.length;
+  const hoje = hojeEmLisboa(agora);
+  lerAgenda(servico, { id: PRINCIPAL, apelido: PRINCIPAL }, meiaNoiteEmLisboa(hoje), meiaNoiteEmLisboa(diaSeguinte(hoje)));
   return { agendas };
 }

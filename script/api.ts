@@ -73,6 +73,8 @@ export function resumoDoErro(erro: unknown): string {
   if (corte >= 0) mensagem = `${mensagem.slice(0, corte + MARCA_DO_CONTEUDO.length)} …`;
   // E-mails (ids de agenda do Google são e-mails) saem antes de tudo.
   mensagem = mensagem.replace(/[^\s@]+@[^\s@]+/g, '…');
+  // Também codificados em URL (`%40`), como num caminho de API.
+  mensagem = mensagem.replace(/[^\s/?&=]+%40[^\s/?&=]+/gi, '…');
   mensagem = mensagem.replace(/"[^"]*"|'[^']*'/g, '…');
   // Aspa que sobrou sem par: o resto pode ser texto do dono, então sai tudo.
   const aspa = mensagem.search(/["']/);

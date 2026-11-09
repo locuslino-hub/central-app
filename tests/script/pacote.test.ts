@@ -846,18 +846,26 @@ describe('Tarefa 10: Google Agenda pelo pacote', () => {
     const { pedir } = conectado();
     const criado = pedir('criarEvento', reuniao(data));
     expect(criado).toMatchObject({ ok: true, dados: { inicio: `${data}T11:00:00${fuso}`, salaId: 'sala-aulas', agendaId: 'primary' } });
-    expect(pedir('eventos', { de: data, ate: data }).dados).toEqual([criado.dados]);
+    expect(pedir('eventos', { de: data, ate: data }).dados).toEqual({ eventos: [criado.dados], incompleto: false });
   });
 
   it('desfazer remove pelo doPost, sem notificar ninguém', () => {
     const { pedir, calendario } = conectado();
     const { dados } = pedir('criarEvento', reuniao('2026-10-23'));
     expect(pedir('removerEvento', { id: dados.id })).toEqual({ ok: true, dados: { removido: true } });
-    expect(pedir('eventos', { de: '2026-10-23', ate: '2026-10-23' }).dados).toEqual([]);
+    expect(pedir('eventos', { de: '2026-10-23', ate: '2026-10-23' }).dados).toEqual({ eventos: [], incompleto: false });
     expect(calendario.notificacoes).toEqual([]);
     const gravacoes = calendario.chamadas.filter((c) => /insert|patch|remove/.test(c.metodo));
     expect(gravacoes.length).toBe(2);
     for (const { args } of gravacoes) expect(args.at(-1)).toEqual({ sendUpdates: 'none' });
+  });
+
+  it('criarEvento repetido com o mesmo id pelo doPost devolve o mesmo evento, sem duplicar', () => {
+    const { pedir } = conectado();
+    const comId = { ...reuniao('2026-10-23'), id: '0123456789abcdef0123456789abcdef' };
+    const primeiro = pedir('criarEvento', comId);
+    expect(pedir('criarEvento', comId)).toEqual(primeiro);
+    expect(pedir('eventos', { de: '2026-10-23', ate: '2026-10-23' }).dados.eventos).toHaveLength(1);
   });
 
   it('trocar a sala pelo doPost', () => {

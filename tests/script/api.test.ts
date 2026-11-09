@@ -306,3 +306,12 @@ describe('Tarefa 10: e-mails (ids de agenda) não vão ao registro', () => {
     expect(resumoDoErro(new Error('falhou @ 10:00'))).toBe('Error: falhou @ 10:00');
   });
 });
+
+describe('rodada 1 da T10: e-mails codificados em URL (%40) não vão ao registro', () => {
+  it.each([
+    ['no caminho', 'GET calendars/marina.ficticia%40example.com/events falhou', 'Error: GET calendars/…/events falhou'],
+    ['minúsculo', 'id renata%40example.org sumiu', 'Error: id … sumiu'],
+  ])('%s', (_caso, mensagem, esperado) => {
+    expect(resumoDoErro(new Error(mensagem))).toBe(esperado);
+  });
+});

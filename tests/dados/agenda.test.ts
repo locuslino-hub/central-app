@@ -8,6 +8,7 @@ import {
   criarEvento,
   eventoValido,
   listarEventos,
+  novoIdDeEvento,
   removerEvento,
   trocarSalaEvento,
   type Evento,
@@ -59,7 +60,7 @@ describe('agenda no app: o caminho todo até o script', () => {
     const { chamar } = scriptDeTeste();
     const criado = await criarEvento({ ...reuniao, data }, { chamar });
     expect(horaLocal(criado.inicio)).toBe('11:00');
-    const [lido] = await listarEventos({ de: data, ate: data }, { chamar });
+    const [lido] = (await listarEventos({ de: data, ate: data }, { chamar })).eventos;
     expect(lido).toEqual(criado);
     expect(horaLocal(lido.inicio)).toBe('11:00');
     expect(horaLocal(lido.fim)).toBe('12:00');
@@ -72,7 +73,7 @@ describe('agenda no app: o caminho todo até o script', () => {
     await trocarSalaEvento(criado.id, 'sala-casa', { chamar });
     await removerEvento(criado.id, { chamar });
     expect(pedidos).toEqual([
-      { acao: 'criarEvento', dados: reuniao },
+      { acao: 'criarEvento', dados: { ...reuniao, id: criado.id } },
       { acao: 'eventos', dados: { de: '2026-10-26', ate: '2026-10-26' } },
       { acao: 'trocarSalaEvento', dados: { id: criado.id, salaId: 'sala-casa' } },
       { acao: 'removerEvento', dados: { id: criado.id } },
@@ -83,7 +84,7 @@ describe('agenda no app: o caminho todo até o script', () => {
     const { chamar } = scriptDeTeste();
     const criado = await criarEvento(reuniao, { chamar });
     expect(await removerEvento(criado.id, { chamar })).toEqual({ removido: true });
-    expect(await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar })).toEqual([]);
+    expect(await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar })).toEqual({ eventos: [], incompleto: false });
     expect(await removerEvento(criado.id, { chamar })).toEqual({ removido: false });
   });
 
@@ -106,7 +107,7 @@ describe('agenda no app: o caminho todo até o script', () => {
       attendees: [{ self: true, responseStatus: 'declined' }],
     });
     const { chamar } = scriptDeTeste(cal);
-    const eventos = await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar });
+    const { eventos } = await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar });
     expect(eventos.map((e) => [e.id, e.diaInteiro, e.livre, e.recusado])).toEqual([
       ['d1', true, false, false],
       ['l1', false, true, false],
@@ -169,15 +170,24 @@ describe('erros da agenda no app', () => {
 
   it('resposta em forma errada vira falhou', async () => {
     expect(await falhaDe(listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar: responde({}) }))).toBe('falhou');
+    expect(await falhaDe(listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar: responde([]) }))).toBe('falhou');
+    expect(
+      await falhaDe(listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar: responde({ eventos: [], incompleto: 'não' }) })),
+    ).toBe('falhou');
     expect(await falhaDe(criarEvento(reuniao, { chamar: responde({ ...valido, inicio: 'amanhã' }) }))).toBe('falhou');
     expect(await falhaDe(trocarSalaEvento('abc123', 'sala-casa', { chamar: responde(null) }))).toBe('falhou');
     expect(await falhaDe(removerEvento('abc123', { chamar: responde({ removido: 'sim' }) }))).toBe('falhou');
   });
 
-  it('na lista, só os itens em forma errada ficam de fora', async () => {
+  it('na lista, só os itens em forma errada ficam de fora, e a lista fica marcada incompleta', async () => {
     const lista = [valido, { ...valido, id: 'x', link: 'javascript:alert(1)' }, { ...valido, id: 'y', salaId: 'sala-x' }, 'lixo'];
-    const eventos = await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar: responde(lista) });
-    expect(eventos).toEqual([valido]);
+    const resposta = await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar: responde({ eventos: lista, incompleto: false }) });
+    expect(resposta).toEqual({ eventos: [valido], incompleto: true });
+  });
+
+  it('incompleto do script chega ao app', async () => {
+    const resposta = await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar: responde({ eventos: [valido], incompleto: true }) });
+    expect(resposta).toEqual({ eventos: [valido], incompleto: true });
   });
 
   it('ErroAgenda tem nome e mensagem sem dados do pedido', async () => {
@@ -189,9 +199,11 @@ describe('erros da agenda no app', () => {
 
   it('sem opções, usa o chamar da conexão salva', async () => {
     await salvarConexao({ url: 'https://script.google.com/macros/s/ID-FICTICIO/exec', codigo: CODIGO });
-    const falso = vi.fn(async (_url: string, _opcoes: RequestInit) => new Response(JSON.stringify({ ok: true, dados: [] })));
+    const falso = vi.fn(
+      async (_url: string, _opcoes: RequestInit) => new Response(JSON.stringify({ ok: true, dados: { eventos: [], incompleto: false } })),
+    );
     vi.stubGlobal('fetch', falso);
-    expect(await listarEventos({ de: '2026-10-26', ate: '2026-10-26' })).toEqual([]);
+    expect(await listarEventos({ de: '2026-10-26', ate: '2026-10-26' })).toEqual({ eventos: [], incompleto: false });
     expect(JSON.parse(falso.mock.calls[0][1].body as string)).toMatchObject({ acao: 'eventos', dados: { de: '2026-10-26', ate: '2026-10-26' } });
   });
 });
@@ -234,5 +246,47 @@ describe('salas fixas do script', () => {
     await semear();
     const salas = await listar('salas');
     expect([...SALAS_FIXAS].sort()).toEqual(salas.map((s) => s.id).sort());
+  });
+});
+
+describe('rodada 1: id do evento gerado no aparelho', () => {
+  it('novoIdDeEvento é base32hex de 32 caracteres e muda a cada chamada', () => {
+    const a = novoIdDeEvento();
+    const b = novoIdDeEvento();
+    expect(a).toMatch(/^[a-v0-9]{32}$/);
+    expect(b).toMatch(/^[a-v0-9]{32}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it('criarEvento sem id gera um; com id, usa o dado', async () => {
+    const { chamar, pedidos } = scriptDeTeste();
+    const primeiro = await criarEvento(reuniao, { chamar });
+    const segundo = await criarEvento(reuniao, { chamar });
+    expect(primeiro.id).toMatch(/^[a-v0-9]{32}$/);
+    expect(segundo.id).not.toBe(primeiro.id);
+    await criarEvento({ ...reuniao, id: 'abcdef0123' }, { chamar });
+    expect((pedidos.at(-1)!.dados as { id: string }).id).toBe('abcdef0123');
+  });
+
+  it('repetir com o mesmo id (fila offline) devolve o mesmo evento e não duplica', async () => {
+    const { chamar } = scriptDeTeste();
+    const id = novoIdDeEvento();
+    const primeiro = await criarEvento({ ...reuniao, id }, { chamar });
+    expect(await criarEvento({ ...reuniao, id }, { chamar })).toEqual(primeiro);
+    expect((await listarEventos({ de: '2026-10-26', ate: '2026-10-26' }, { chamar })).eventos).toHaveLength(1);
+  });
+
+  it('id inválido é recusado no aparelho', async () => {
+    const chamar = vi.fn();
+    expect(await falhaDe(criarEvento({ ...reuniao, id: 'ID_RUIM' }, { chamar: chamar as never }))).toBe('invalido');
+    expect(chamar).not.toHaveBeenCalled();
+  });
+
+  it('hora que não existe em Lisboa (troca de março) é recusada no aparelho', async () => {
+    const chamar = vi.fn();
+    expect(
+      await falhaDe(criarEvento({ ...reuniao, data: '2026-03-29', inicio: '01:30', fim: '03:00' }, { chamar: chamar as never })),
+    ).toBe('invalido');
+    expect(chamar).not.toHaveBeenCalled();
   });
 });

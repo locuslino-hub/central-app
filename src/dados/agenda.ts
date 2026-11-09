@@ -14,10 +14,20 @@ import {
   salaValida,
   type Evento,
   type NovoEvento,
+  type RespostaEventos,
 } from '../../script/agenda';
 import { ErroConexao, ErroScript, chamar as chamarOScript } from '../conexao/cliente';
 
-export type { Evento, NovoEvento };
+export type { Evento, NovoEvento, RespostaEventos };
+
+/**
+ * Id novo para `criarEvento`: 32 caracteres hexadecimais (cabem no base32hex
+ * que o Google aceita). Quem põe o pedido numa fila (T12) guarda o id junto:
+ * repetir com o mesmo id devolve o evento já criado, sem duplicar.
+ */
+export function novoIdDeEvento(): string {
+  return crypto.randomUUID().replace(/-/g, '');
+}
 
 /**
  * - `sem-internet`: não chegou ao script; dá para tentar de novo.
@@ -93,20 +103,34 @@ async function pedir<T>(
   }
 }
 
-const lista = (valor: unknown): valor is unknown[] => Array.isArray(valor);
+const respostaDeEventos = (valor: unknown): valor is { eventos: unknown[]; incompleto: boolean } =>
+  typeof valor === 'object' &&
+  valor !== null &&
+  Array.isArray((valor as { eventos?: unknown }).eventos) &&
+  typeof (valor as { incompleto?: unknown }).incompleto === 'boolean';
 const remocao = (valor: unknown): valor is { removido: boolean } =>
   typeof valor === 'object' && valor !== null && typeof (valor as { removido?: unknown }).removido === 'boolean';
 
-/** Eventos de todas as agendas marcadas, de `de` a `ate` (dias de Lisboa, `ate` incluído), por início. */
-export async function listarEventos(periodo: { de: string; ate: string }, opcoes: OpcoesDaAgenda = {}): Promise<Evento[]> {
-  const itens = await pedir('eventos', () => lerPeriodo(periodo), lista, opcoes);
-  // Item em forma errada fica de fora; o resto aparece.
-  return itens.filter(eventoValido);
+/**
+ * Eventos de todas as agendas marcadas, de `de` a `ate` (dias de Lisboa, `ate`
+ * incluído), por início. `incompleto`: o script pulou uma agenda ou bateu num
+ * teto, ou algum item chegou em forma errada (fica de fora); a tela avisa.
+ */
+export async function listarEventos(
+  periodo: { de: string; ate: string },
+  opcoes: OpcoesDaAgenda = {},
+): Promise<RespostaEventos> {
+  const resposta = await pedir('eventos', () => lerPeriodo(periodo), respostaDeEventos, opcoes);
+  const eventos = resposta.eventos.filter(eventoValido);
+  return { eventos, incompleto: resposta.incompleto || eventos.length !== resposta.eventos.length };
 }
 
-/** Cria na agenda principal, com horas HH:MM de Lisboa. Sem convidados e sem avisar ninguém. */
+/**
+ * Cria na agenda principal, com horas HH:MM de Lisboa. Sem convidados e sem
+ * avisar ninguém. Sem `id`, gera um (novoIdDeEvento).
+ */
 export function criarEvento(novo: NovoEvento, opcoes: OpcoesDaAgenda = {}): Promise<Evento> {
-  return pedir('criarEvento', () => lerNovoEvento(novo), eventoValido, opcoes);
+  return pedir('criarEvento', () => lerNovoEvento({ ...novo, id: novo.id ?? novoIdDeEvento() }), eventoValido, opcoes);
 }
 
 /** Desfaz a criação: só apaga evento criado pelo app. `removido: false` se já não existia. */
