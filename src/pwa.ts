@@ -66,11 +66,14 @@ export function registrarServiceWorker({
   const contêiner = janela.navigator.serviceWorker;
   if (!contêiner) return () => {};
 
-  // Se já havia um controlador, a troca de controlador é uma atualização; na
-  // primeira instalação ela é só o app passando a ficar guardado.
+  // Se já havia um controlador (ou um service worker ativo, caso da recarga
+  // forçada, em que a página abre sem controlador), a troca de controlador é uma
+  // atualização; na primeira instalação ela é só o app passando a ficar guardado.
   let controlador = contêiner.controller;
+  let haviaAtivo = false;
+  let parado = false;
   const aoTrocarControlador = () => {
-    if (controlador) marcarPronta();
+    if (controlador || haviaAtivo) marcarPronta();
     controlador = contêiner.controller;
   };
   contêiner.addEventListener('controllerchange', aoTrocarControlador);
@@ -88,7 +91,9 @@ export function registrarServiceWorker({
     contêiner
       .register(endereco, { scope: escopo })
       .then((r) => {
+        if (parado) return;
         registro = r;
+        haviaAtivo = r.active !== null;
         temporizador = setInterval(conferir, CONFERIR_ATUALIZACAO_MS);
         janela.document.addEventListener('visibilitychange', aoVoltar);
       })
@@ -98,6 +103,7 @@ export function registrarServiceWorker({
   else janela.addEventListener('load', registrar, { once: true });
 
   return () => {
+    parado = true;
     contêiner.removeEventListener('controllerchange', aoTrocarControlador);
     janela.removeEventListener('load', registrar);
     janela.document.removeEventListener('visibilitychange', aoVoltar);

@@ -4,12 +4,12 @@ import { CONFERIR_ATUALIZACAO_MS, esquecerNovaVersao, novaVersaoPronta, registra
 import { NovaVersao } from '../src/ui/NovaVersao';
 
 /** Um navegador de mentira: só o que o registro usa. */
-function navegadorFalso({ controlador = false, falha = false } = {}) {
+function navegadorFalso({ controlador = false, falha = false, ativo = false } = {}) {
   const ouvintes = new Map<string, Set<() => void>>();
   const atualizar = vi.fn(async () => {});
   const registrar = vi.fn(async (_endereco: string, _opcoes: { scope: string }) => {
     if (falha) throw new Error('bloqueado');
-    return { update: atualizar };
+    return { update: atualizar, active: ativo ? {} : null };
   });
   const sw = {
     controller: controlador ? {} : null,
@@ -75,6 +75,28 @@ describe('registrarServiceWorker', () => {
     n.trocarControlador();
     expect(novaVersaoPronta()).toBe(true);
     parar();
+  });
+
+  it('depois de recarga forçada (página sem controlador, mas com service worker ativo), avisa a versão nova', async () => {
+    const n = navegadorFalso({ controlador: false, ativo: true });
+    const parar = registrarServiceWorker({ janela: n.janela });
+    await Promise.resolve();
+    await Promise.resolve();
+    n.trocarControlador();
+    expect(novaVersaoPronta()).toBe(true);
+    parar();
+  });
+
+  it('desfeito antes do registro terminar, não deixa conferência nem ouvinte para trás', async () => {
+    vi.useFakeTimers();
+    const n = navegadorFalso({ controlador: true });
+    const parar = registrarServiceWorker({ janela: n.janela });
+    parar();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(n.registrar).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(CONFERIR_ATUALIZACAO_MS * 2);
+    n.janela.document.dispatchEvent(new Event('visibilitychange'));
+    expect(n.atualizar).not.toHaveBeenCalled();
   });
 
   it('procura versão nova a cada hora e ao voltar ao app', async () => {
