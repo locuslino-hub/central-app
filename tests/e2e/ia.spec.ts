@@ -1,12 +1,18 @@
 // IA local (Tarefa 21) no app construído: o wasm sai do próprio app, a página
 // de IA local abre e nada é baixado sem o dono pedir.
+import { readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
 
-test('os arquivos wasm da IA saem do próprio app', async ({ request }) => {
+const VERSAO = (createRequire(import.meta.url)('@litert-lm/core/package.json') as { version: string }).version;
+
+test('os arquivos wasm da IA saem do próprio app, numa pasta com a versão do pacote', async ({ request }) => {
   for (const nome of ['litertlm_wasm_internal.js', 'litertlm_wasm_internal.wasm', 'litertlm_wasm_compat_asyncify_internal.wasm']) {
-    const resposta = await request.get(`/central-app/litertlm/${nome}`);
+    const resposta = await request.get(`/central-app/litertlm/${VERSAO}/${nome}`);
     expect(resposta.status(), nome).toBe(200);
   }
+  // Nada solto em `litertlm/`: só a pasta da versão.
+  expect(readdirSync('dist/litertlm')).toEqual([VERSAO]);
 });
 
 test('a política deixa compilar wasm, mas não eval de JavaScript', async ({ page }) => {

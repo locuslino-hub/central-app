@@ -1,4 +1,4 @@
-import { copyFileSync, createReadStream, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, createReadStream, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
@@ -6,14 +6,19 @@ import type { Plugin } from 'vite';
 import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const PACOTE_DA_IA = createRequire(import.meta.url).resolve('@litert-lm/core/package.json');
+/** Versão do `@litert-lm/core`: nome da pasta dos arquivos da IA e do armazenamento deles no aparelho. */
+const VERSAO_LITERTLM: string = JSON.parse(readFileSync(PACOTE_DA_IA, 'utf8')).version;
+
 /**
  * IA local (Tarefa 21, R18): os arquivos wasm do `@litert-lm/core` saem do
- * próprio app, em `litertlm/`, e não de CDN. No build são copiados para
- * `dist/litertlm/`; no `npm run dev`, servidos direto do pacote. O trabalhador
- * da IA escolhe qual dos quatro usar conforme o navegador.
+ * próprio app, em `litertlm/<versão>/`, e não de CDN. No build são copiados para
+ * `dist/litertlm/<versão>/`; no `npm run dev`, servidos direto do pacote. O
+ * trabalhador da IA escolhe qual dos quatro usar conforme o navegador. A versão
+ * no caminho faz cada atualização do pacote vir de um endereço novo.
  */
 function wasmDaIA(): Plugin {
-  const origem = join(dirname(createRequire(import.meta.url).resolve('@litert-lm/core/package.json')), 'wasm');
+  const origem = join(dirname(PACOTE_DA_IA), 'wasm');
   const arquivos = () => readdirSync(origem).filter((nome) => /^litertlm_wasm_\w+\.(?:js|wasm)$/.test(nome));
   let saida = 'dist';
   let base = '/';
@@ -24,7 +29,7 @@ function wasmDaIA(): Plugin {
       base = config.base;
     },
     configureServer(servidor) {
-      servidor.middlewares.use(`${base}litertlm/`, (pedido, resposta, seguir) => {
+      servidor.middlewares.use(`${base}litertlm/${VERSAO_LITERTLM}/`, (pedido, resposta, seguir) => {
         const nome = (pedido.url ?? '').replace(/^\//, '').split('?')[0];
         if (!arquivos().includes(nome)) return seguir();
         resposta.setHeader('Content-Type', nome.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
@@ -32,7 +37,7 @@ function wasmDaIA(): Plugin {
       });
     },
     closeBundle() {
-      const destino = join(saida, 'litertlm');
+      const destino = join(saida, 'litertlm', VERSAO_LITERTLM);
       mkdirSync(destino, { recursive: true });
       for (const nome of arquivos()) copyFileSync(join(origem, nome), join(destino, nome));
     },
@@ -66,6 +71,7 @@ export default defineConfig({
       },
     }),
   ],
+  define: { __VERSAO_LITERTLM__: JSON.stringify(VERSAO_LITERTLM) },
   // Trabalhador clássico: o carregador do wasm da IA usa `importScripts`.
   worker: { format: 'iife' },
   test: {

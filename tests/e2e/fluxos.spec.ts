@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
 import { conectar, scriptFalso } from '../apoio/script-e2e';
 import { MARCA_DA_VERSAO, servidorDeVersoes } from '../apoio/servidor-de-versoes';
@@ -6,6 +7,7 @@ import { MARCA_DA_VERSAO, servidorDeVersoes } from '../apoio/servidor-de-versoes
 // (o código de verdade do script, com Drive, Agenda e Gmail na memória).
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa (inverno: UTC+0). Nomes fictícios.
 const AGORA = '2026-11-05T12:20:00+00:00';
+const VERSAO_LITERTLM = (createRequire(import.meta.url)('@litert-lm/core/package.json') as { version: string }).version;
 
 const TELAS = [
   ['celular, 390 px', { width: 390, height: 844 }],
@@ -362,13 +364,13 @@ test.describe('offline: o app guardado no aparelho', () => {
 
     // O wasm da IA continua indo à rede (sem internet ele não vem do cache do app).
     await context.setOffline(true);
-    const resposta = await page.evaluate(async () => {
+    const resposta = await page.evaluate(async (versao) => {
       try {
-        return (await fetch('/central-app/litertlm/litertlm_wasm_internal.js')).status;
+        return (await fetch(`/central-app/litertlm/${versao}/litertlm_wasm_internal.js`)).status;
       } catch {
         return 'rede';
       }
-    });
+    }, VERSAO_LITERTLM);
     expect(resposta).toBe('rede');
   });
 

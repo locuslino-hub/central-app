@@ -73,7 +73,7 @@ export type Ambiente = {
   persistir(): Promise<boolean | null>;
   /** Uma versão nova do app já assumiu (src/pwa.ts): é preciso recarregar antes de abrir a IA. */
   desatualizado(): boolean;
-  /** Endereço completo da pasta `litertlm/` do app, com `/` no fim. */
+  /** Endereço completo da pasta `litertlm/<versão>/` do app, com `/` no fim. */
   caminhoWasm: string;
 };
 
@@ -274,7 +274,7 @@ export function ambienteDoNavegador(): Ambiente {
     },
     desatualizado: novaVersaoPronta,
     get caminhoWasm() {
-      return new URL(`${import.meta.env.BASE_URL}litertlm/`, location.href).href;
+      return new URL(`${import.meta.env.BASE_URL}litertlm/${__VERSAO_LITERTLM__}/`, location.href).href;
     },
   };
 }
