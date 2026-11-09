@@ -192,7 +192,8 @@ test.describe('computador, 1280 px', () => {
     await expect(ori.getByText('Revisar parágrafo do relatório')).toHaveCount(0);
     expect(await pequenos(page)).toEqual([]);
     expect(await semRolagemDeLado(page)).toBe(true);
-    expect(acoes.filter((a) => !['emails', 'atualizarEmails', 'eventos', 'puxar', 'enviar', 'ping'].includes(a))).toEqual([]);
+    // O espelho das tarefas no Google Tarefas é da sincronia (feito espelhado), não do Quadro.
+    expect(acoes.filter((a) => !['emails', 'atualizarEmails', 'eventos', 'puxar', 'enviar', 'ping', 'espelharTarefas'].includes(a))).toEqual([]);
     expect(erros).toEqual([]);
   });
 });
