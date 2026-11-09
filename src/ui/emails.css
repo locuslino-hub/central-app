@@ -89,6 +89,7 @@
   list-style: none;
 }
 .email {
+  container: email / inline-size;
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -176,13 +177,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   margin-top: 8px;
   white-space: nowrap;
 }
 .email-acoes .botao {
   margin-right: 2px;
-  padding: 0 14px;
+  padding: 0 12px;
   font-size: 0.88rem;
 }
 .email-acoes .botao-pilula {
@@ -192,6 +193,21 @@
 .email-acoes .botao-texto {
   padding: 0 8px;
   font-size: 0.88rem;
+}
+/* Coluna estreita (celular, Painel a 1280 px): Responder sozinho na primeira linha,
+   as outras três na segunda, sempre juntas. */
+@container email (max-width: 335px) {
+  .email-acoes {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: start;
+    gap: 2px 6px;
+  }
+  .email-acoes .botao {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin: 0 0 2px;
+  }
 }
 
 /* ---- Pergunta "de quem é?" ---- */
