@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { assinar, listar } from '../dados/loja';
-import type { Colecoes, Pessoa, Sala } from '../dados/tipos';
+import { hojeEmLisboa, vigiarODia } from '../dados/dia';
+import type { Colecoes, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -50,6 +51,19 @@ export function useHoje(): Date {
   return hoje;
 }
 
+/**
+ * O dia de hoje em Lisboa, `AAAA-MM-DD`. Muda sozinho na meia-noite (sem
+ * recarregar) e ao voltar ao app em outro dia: as listas do dia se refazem.
+ */
+export function useDia(): string {
+  const [dia, setDia] = useState(() => hojeEmLisboa());
+  useEffect(() => {
+    setDia(hojeEmLisboa());
+    return vigiarODia(setDia);
+  }, []);
+  return dia;
+}
+
 export function useRota(hoje: Date): RotaAtual {
   const [hash, setHash] = useState(() => location.hash);
   useEffect(() => {
@@ -71,7 +85,7 @@ export function useTituloDaAba(titulo: string) {
 // ---- Dados que o menu e as páginas leem ----
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
-function useLista<C extends 'salas' | 'pessoas'>(colecao: C): Colecoes[C][] | undefined {
+function useLista<C extends 'salas' | 'pessoas' | 'tarefas'>(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
     let ativo = true;
@@ -101,6 +115,15 @@ export function useSalas(): Sala[] {
 export function useSala(id: string | undefined): Sala | null | undefined {
   const lista = useLista('salas');
   return lista && (lista.find((sala) => sala.id === id) ?? null);
+}
+
+/** As tarefas vivas (nenhuma apagada). `undefined` enquanto lê. */
+export function useTarefas(): Tarefa[] | undefined {
+  return useLista('tarefas');
+}
+
+export function usePessoas(): Pessoa[] | undefined {
+  return useLista('pessoas');
 }
 
 export function usePessoa(id: string | undefined): Pessoa | null | undefined {

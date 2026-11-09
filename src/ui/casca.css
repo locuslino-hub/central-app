@@ -93,7 +93,7 @@
   color: var(--tinta2);
 }
 
-/* Cartão branco. A largura de cada página é de quem usa (.conectar, .prova). */
+/* Cartão branco. A largura de cada página é de quem usa (.conectar, .chat-pagina...). */
 .painel {
   position: relative;
   padding: 22px 24px 24px;
@@ -110,8 +110,7 @@
   font-size: 1.8rem;
   line-height: 1.15;
 }
-.conectar,
-.prova {
+.conectar {
   max-width: 44rem;
 }
 
@@ -170,13 +169,6 @@
   opacity: 0.6;
   cursor: default;
 }
-.prova ul {
-  padding-left: 1.2rem;
-}
-.prova li {
-  min-height: 1.6rem;
-}
-
 /* ---- Estado da sincronia ---- */
 
 .sync {

@@ -500,6 +500,35 @@ describe('gravarDoServidor (mesclagem)', () => {
     ]);
   });
 
+  it('mesma mudança nos dois aparelhos (só hora e aparelho diferem): sem aviso, local pendente mais nova', async () => {
+    no(notebook);
+    horario(5);
+    await salvar('tarefas', { ...base, titulo: 'Igual' });
+    await gravarDoServidor([remota({ titulo: 'Igual' })]);
+    expect(await listarAvisos()).toEqual([]);
+    expect(await listarPendentes()).toHaveLength(1);
+  });
+
+  it('mesma mudança nos dois aparelhos: sem aviso, remota mais nova', async () => {
+    no(notebook);
+    await salvar('tarefas', { ...base, titulo: 'Igual' });
+    await gravarDoServidor([remota({ titulo: 'Igual', atualizadoEm: AGORA + MINUTO })]);
+    expect(await listarAvisos()).toEqual([]);
+    expect((await listar('tarefas'))[0].aparelho).toBe('outro');
+    expect(await listarPendentes()).toEqual([]);
+  });
+
+  it('campo opcional ausente e undefined contam como iguais; campo a mais ou valor diferente, não', async () => {
+    no(notebook);
+    horario(5);
+    await salvar('tarefas', { ...base, titulo: 'T', pessoaId: undefined });
+    await gravarDoServidor([remota({ titulo: 'T' })]);
+    expect(await listarAvisos()).toEqual([]);
+    await salvar('tarefas', { ...base, titulo: 'T', data: '2026-11-05' });
+    await gravarDoServidor([remota({ titulo: 'T', data: '2026-11-06', atualizadoEm: AGORA + 2 * MINUTO })]);
+    expect(await listarAvisos()).toHaveLength(1);
+  });
+
   it('versão antiga do próprio aparelho voltando do servidor não é conflito', async () => {
     no(notebook);
     const local = await salvar('tarefas', { ...base, titulo: 'Primeira' });
@@ -792,6 +821,32 @@ describe('fix 1: corrida entre puxar e enviar (substituidas)', () => {
       perdedora: { titulo: 'Orientação com Renata (notebook)' },
       vencedora: { titulo: 'Orientação com Renata (celular)' },
     });
+  });
+
+  it('versão sobrescrita no envio que diz o mesmo que a local não vira aviso', async () => {
+    const criada = await tarefaNosDois('Orientação com Renata');
+    horario(2);
+    no(celular);
+    await salvar('tarefas', { ...criada, titulo: 'Orientação com Renata (igual)' });
+    servidor.aoResponder((acao) => {
+      if (acao !== 'puxar') return;
+      servidor.aoResponder(undefined);
+      enviar(
+        {
+          mudancas: [
+            {
+              colecao: 'tarefas',
+              registro: { ...criada, titulo: 'Orientação com Renata (igual)', atualizadoEm: AGORA + MINUTO, aparelho: 'outro-aparelho' },
+            },
+          ],
+        },
+        servidor.armazem,
+      );
+    });
+    horario(3);
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect(await listarAvisos()).toEqual([]);
+    expect(await listarPendentes()).toEqual([]);
   });
 
   it('substituidas malformadas são ignoradas', async () => {

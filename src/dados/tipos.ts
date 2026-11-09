@@ -29,6 +29,13 @@ export type Tarefa = Base & {
   semana?: string;
   prazoHora?: string;
   inicio?: string;
+  /**
+   * Aviso da virada do dia (Tarefa 9): a segunda-feira da semana que acabou sem
+   * a tarefa ser concluída. A tarefa volta para Sem prazo e mostra o aviso até
+   * o dono dar ciência ou escolher um dia. Fica na própria tarefa para
+   * sincronizar com ela: os dois aparelhos mostram o mesmo aviso.
+   */
+  semanaVencida?: string;
   duracaoMin: number;
   duracaoConfirmada: boolean;
   feito: boolean;

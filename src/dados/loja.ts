@@ -345,7 +345,28 @@ function validadorRemoto(relogioDoServidor: number) {
  * só uma versão antiga da mesma sequência de edições.
  */
 function houveConflito(perdedora: Registro, vencedora: Registro): boolean {
-  return perdedora.atualizadoEm > 0 && perdedora.aparelho !== vencedora.aparelho;
+  return perdedora.atualizadoEm > 0 && perdedora.aparelho !== vencedora.aparelho && !mesmoConteudo(perdedora, vencedora);
+}
+
+/** Valor com as chaves em ordem, para comparar objetos pelo conteúdo. */
+function canonico(valor: unknown): string {
+  if (Array.isArray(valor)) return `[${valor.map(canonico).join(',')}]`;
+  if (objeto(valor)) {
+    const chaves = Object.keys(valor).filter((chave) => valor[chave] !== undefined).sort();
+    return `{${chaves.map((chave) => `${JSON.stringify(chave)}:${canonico(valor[chave])}`).join(',')}}`;
+  }
+  return JSON.stringify(valor) ?? 'null';
+}
+
+/**
+ * Os dois registros dizem a mesma coisa, só a hora e o aparelho da escrita
+ * diferem? Acontece quando os dois aparelhos fazem a mesma mudança por conta
+ * própria, como a virada do dia: nada se perdeu, então não há o que avisar.
+ */
+function mesmoConteudo(a: Registro, b: Registro): boolean {
+  const { atualizadoEm: _horaA, aparelho: _aparelhoA, ...restoA } = a;
+  const { atualizadoEm: _horaB, aparelho: _aparelhoB, ...restoB } = b;
+  return canonico(restoA) === canonico(restoB);
 }
 
 /**
@@ -394,7 +415,7 @@ export async function gravarDoServidor(itens: readonly unknown[], relogioDoServi
         if (local && temPendente) {
           for (const seq of seqs) await fila.delete(seq);
           // Alteração por enviar perdeu: sempre avisa, mesmo do mesmo aparelho.
-          if (local.atualizadoEm > 0) await guardarAviso(colecao, local, remoto);
+          if (local.atualizadoEm > 0 && !mesmoConteudo(local, remoto)) await guardarAviso(colecao, local, remoto);
         }
       } else if (temPendente) {
         // A local vence e segue na fila para o servidor.
@@ -443,7 +464,7 @@ export async function concluirEnvio(
       for (const seq of seqsAceitos) await tx.objectStore(PENDENTES).delete(seq);
       for (const { colecao, registro: perdedora } of remotos) {
         const vencedora: Registro | undefined = await tx.objectStore(colecao).get(perdedora.id);
-        if (!vencedora) continue;
+        if (!vencedora || mesmoConteudo(perdedora, vencedora)) continue;
         const aviso: Omit<Aviso, 'id'> = {
           colecao,
           registroId: perdedora.id,

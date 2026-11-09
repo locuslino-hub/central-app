@@ -1,11 +1,17 @@
-// A página de cada rota. Painel do dia, Conectar e Chat existem; as demais mostram
-// o título e dizem que ainda não estão prontas, até a tarefa delas chegar.
+// A página de cada rota. Painel do dia (checklist e Sem prazo), Sem prazo, Atividades,
+// Salas (com o cadastro de pessoas), Conectar e Chat existem; as demais mostram o
+// título e dizem que ainda não estão prontas, até a tarefa delas chegar.
 import type { ComponentChildren } from 'preact';
-import type { RotaAtual } from '../rotas';
+import { hrefDe, type RotaAtual } from '../rotas';
+import { Atividades } from './Atividades';
 import { Chat } from './Chat';
+import { Checklist } from './Checklist';
 import { Conectar } from './Conectar';
-import { usePessoa, useSala, useTituloDaAba } from './hooks';
-import { ProvaSincronia } from './ProvaSincronia';
+import { usePessoa, useSala, useSalas, useTituloDaAba } from './hooks';
+import { corDaSala } from './Menu';
+import { Pessoas } from './Pessoas';
+import { SemPrazo } from './SemPrazo';
+import './tarefas.css';
 
 function Pagina({ titulo, children }: { titulo: string; children?: ComponentChildren }) {
   useTituloDaAba(titulo);
@@ -18,6 +24,30 @@ function Pagina({ titulo, children }: { titulo: string; children?: ComponentChil
 }
 
 const AindaNaoPronta = () => <p class="aviso">Esta tela ainda não está pronta.</p>;
+
+/** Temporária: a Tarefa 17 traz a página de cada sala. Por ora, os atalhos e o cadastro de pessoas. */
+function Salas({ titulo }: { titulo: string }) {
+  const salas = useSalas();
+  return (
+    <Pagina titulo={titulo}>
+      <div class="salas-pagina">
+        <section class="painel" aria-labelledby="titulo-salas">
+          <h2 id="titulo-salas">Minhas salas</h2>
+          <ul class="salas-links">
+            {salas.map((sala) => (
+              <li key={sala.id}>
+                <a class={`sala-bloco ${corDaSala(sala.id)}`} href={hrefDe('sala', sala.id)}>
+                  {sala.nome}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <Pessoas />
+      </div>
+    </Pagina>
+  );
+}
 
 function Sala({ id }: { id: string }) {
   const sala = useSala(id);
@@ -69,12 +99,31 @@ function ConectarNaCasca({ titulo }: { titulo: string }) {
 export function Vista({ rota }: { rota: RotaAtual }) {
   switch (rota.id) {
     case 'hoje':
-      // Temporário: a Tarefa 9 troca a prova pela checklist e pelas caixas do dia.
+      // A Tarefa 17 monta o resto do Painel (mensagem do dia, linha do dia, caixas das salas...).
       return (
         <Pagina titulo={rota.titulo}>
-          <ProvaSincronia />
+          <div class="hoje-grade">
+            <Checklist />
+            <SemPrazo />
+          </div>
         </Pagina>
       );
+    case 'sem-prazo':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <div class="semprazo-pagina">
+            <SemPrazo semCabecalho />
+          </div>
+        </Pagina>
+      );
+    case 'atividades':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <Atividades />
+        </Pagina>
+      );
+    case 'salas':
+      return <Salas titulo={rota.titulo} />;
     case 'conectar':
       return <ConectarNaCasca titulo={rota.titulo} />;
     case 'chat':

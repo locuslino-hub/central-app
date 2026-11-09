@@ -365,9 +365,11 @@ describe('páginas', () => {
     expect(document.activeElement).toBe(document.querySelector('main'));
   });
 
-  it('o painel do dia ainda mostra a prova da sincronia, até a Tarefa 9', async () => {
+  it('o painel do dia mostra a checklist e Sem prazo, e já não mostra a prova da sincronia', async () => {
     await mostrar('#/', 1280);
-    expect(screen.getByRole('heading', { name: 'Prova da sincronia' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Checklist do dia' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Sem prazo' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Prova da sincronia' })).toBeNull();
   });
 });
 

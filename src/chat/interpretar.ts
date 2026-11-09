@@ -3,6 +3,7 @@
 // `completarComIA`, sem mudar quem chama `interpretar`.
 
 import { desfazer } from '../dados/desfazer';
+import { hojeEmLisboa } from '../dados/dia';
 import { apagar, salvar } from '../dados/loja';
 import type { ParaSalvar, Tarefa } from '../dados/tipos';
 import { carregarMemoria, pessoaDesconhecida, type MemoriaDoChat } from './memoria';
@@ -23,17 +24,8 @@ export type ItemDoChat = Item & {
   pessoaNome?: string;
 };
 
-/** `AAAA-MM-DD` do dia em Lisboa, no instante dado. */
-export function hojeEmLisboa(agora: Date = new Date()): string {
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Lisbon',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(agora);
-  const parte = (tipo: string) => partes.find((p) => p.type === tipo)!.value;
-  return `${parte('year')}-${parte('month')}-${parte('day')}`;
-}
+// O dia de Lisboa mora em dados/dia.ts (a virada do dia também o usa); o chat segue importando daqui.
+export { hojeEmLisboa };
 
 /**
  * Lugar da IA local (Tarefa 21): título, sala quando regras e memória não

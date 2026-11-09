@@ -13,26 +13,12 @@ import {
   type Acao,
   type EstadoCartao,
 } from '../chat/conversa';
-import { diaDaSemana, segundaDaSemana, somarDias } from '../chat/datas';
 import type { ItemDoChat } from '../chat/interpretar';
 import type { Sala } from '../dados/tipos';
 import { corDaSala } from './Menu';
+import { minuscula, nomeDaSemana, nomeDoDia } from './quando';
 
-const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-
-const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** `6/11`, com o ano só quando não é o de hoje. */
-function diaMes(data: string, hoje: string): string {
-  const [ano, mes, dia] = data.split('-').map(Number);
-  return ano === Number(hoje.slice(0, 4)) ? `${dia}/${mes}` : `${dia}/${mes}/${ano}`;
-}
-
-/** "Hoje"; senão o dia da semana e a data, que confirmam qual sexta era. */
-function nomeDoDia(data: string, hoje: string): string {
-  return data === hoje ? 'Hoje' : `${DIAS[diaDaSemana(data)]}, ${diaMes(data, hoje)}`;
-}
 
 /** Quando, em palavras: "Sexta, 6/11, 11:00 às 12:00", "Até hoje, às 18:00", "Sem prazo". */
 export function descreverQuando(item: ItemDoChat, hoje: string): string {
@@ -42,12 +28,7 @@ export function descreverQuando(item: ItemDoChat, hoje: string): string {
     if (item.prazoHora) return `Até ${minuscula(dia)}, às ${item.prazoHora}`;
     return dia;
   }
-  if (item.semana) {
-    const esta = segundaDaSemana(hoje);
-    if (item.semana === esta) return 'Esta semana';
-    if (item.semana === somarDias(esta, 7)) return 'Próxima semana';
-    return `Semana de ${diaMes(item.semana, hoje)}`;
-  }
+  if (item.semana) return nomeDaSemana(item.semana, hoje);
   return 'Sem prazo';
 }
 

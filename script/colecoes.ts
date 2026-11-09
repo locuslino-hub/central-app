@@ -26,6 +26,7 @@ export const ESQUEMAS = {
     semana: 'texto?',
     prazoHora: 'texto?',
     inicio: 'hora?',
+    semanaVencida: 'texto?',
     emailId: 'texto?',
     adiadaAte: 'texto?',
   },
