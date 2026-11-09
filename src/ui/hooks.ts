@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
-import type { Colecoes, Config, Documento, EstadoEmail, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { Colecoes, Config, Documento, EstadoEmail, Pagina, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -101,7 +101,7 @@ export function useTituloDaAba(titulo: string) {
 // ---- Dados que o menu e as páginas leem ----
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
-function useLista<C extends 'salas' | 'pessoas' | 'tarefas' | 'estadosEmail' | 'documentos'>(colecao: C): Colecoes[C][] | undefined {
+function useLista<C extends 'salas' | 'pessoas' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas'>(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
     let ativo = true;
@@ -146,6 +146,11 @@ export function useEstadosDeEmail(): EstadoEmail[] | undefined {
 /** Os documentos vivos (arquivados também; quem mostra filtra). undefined enquanto lê. */
 export function useDocumentos(): Documento[] | undefined {
   return useLista('documentos');
+}
+
+/** As páginas do caderno (de todas as salas). undefined enquanto lê. */
+export function usePaginas(): Pagina[] | undefined {
+  return useLista('paginas');
 }
 
 export function usePessoas(): Pessoa[] | undefined {

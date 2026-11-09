@@ -374,3 +374,213 @@ a.documento-link:focus-visible {
   align-items: center;
   gap: 8px;
 }
+
+/* ---- Caderno ---- */
+
+.caderno {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+.caderno-paginas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.caderno-aba,
+.caderno-nova,
+.caderno-adicionar {
+  min-height: var(--toque);
+  min-width: var(--toque);
+}
+.caderno-aba {
+  padding: 0 16px;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.caderno-aba[aria-current='page'] {
+  background: var(--acao);
+  border-color: var(--acao);
+  color: #fff;
+}
+.caderno-nova {
+  justify-self: start;
+}
+.caderno-pagina {
+  display: grid;
+  gap: 8px;
+}
+.caderno-titulo-pagina {
+  width: 100%;
+  min-height: var(--toque);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.caderno-blocos {
+  display: grid;
+  gap: 4px;
+}
+.caderno-bloco {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--toque);
+  align-items: start;
+}
+.caderno-conteudo {
+  min-width: 0;
+}
+.caderno-linha {
+  position: relative;
+}
+.caderno-campo {
+  width: 100%;
+  min-height: var(--toque);
+  font-size: 16px; /* 16 px ou mais: o celular não aproxima a tela ao tocar */
+  line-height: 1.5;
+}
+.caderno-titulo .caderno-campo {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.caderno-lista .caderno-campo {
+  padding-left: 28px;
+}
+.caderno-lista::before {
+  content: '•';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  line-height: var(--toque);
+  pointer-events: none;
+}
+.caderno-campo:focus-visible,
+.caderno-titulo-pagina:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.caderno-remover {
+  width: var(--toque);
+  height: var(--toque);
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--tinta3);
+  cursor: pointer;
+  border-radius: var(--r-m);
+}
+.caderno-remover:hover {
+  color: inherit;
+}
+.caderno-remover:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: -3px;
+}
+.caderno-aviso,
+.caderno-vinculo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 6px;
+  font-size: 0.85rem;
+  color: var(--tinta3);
+}
+.caderno-aviso .botao-texto {
+  min-height: var(--toque);
+  min-width: var(--toque);
+}
+.caderno-painel {
+  margin: 4px 0 8px;
+}
+.caderno-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.caderno-adicionar-menu {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.bloco-menu {
+  /* Na linha, não flutuando: no celular uma lista solta ficaria atrás da barra de baixo. */
+  position: static;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--linha);
+  border-radius: var(--r-m);
+  background: var(--folha);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+.bloco-menu-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  box-shadow: none;
+}
+.bloco-menu-opcao,
+.bloco-menu-botao {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: var(--toque);
+  padding: 0 12px;
+  border-radius: var(--r-m);
+  cursor: pointer;
+}
+.bloco-menu-opcao {
+  align-items: center;
+}
+.bloco-menu-botao {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  align-items: center;
+}
+.bloco-menu-opcao.ativa,
+.bloco-menu-opcao:hover,
+.bloco-menu-botao:hover {
+  background: rgb(var(--som-rgb, 0 0 0) / 0.08);
+}
+.bloco-menu-botao:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: -3px;
+}
+.bloco-menu-rotulo {
+  font-weight: 600;
+}
+.bloco-menu-dica,
+.bloco-menu-vazio {
+  color: var(--tinta3);
+  font-size: 0.85rem;
+}
+.bloco-menu-vazio {
+  padding: 12px;
+}
+.caderno-campo {
+  border-color: transparent;
+  border-radius: var(--r-p);
+  background: transparent;
+  box-shadow: none;
+}
+.caderno-campo:hover,
+.caderno-campo:focus {
+  border-color: var(--linha);
+  background: var(--poco);
+}
+.caderno-titulo-pagina {
+  width: 100%;
+  border-radius: var(--r-p);
+}
+@media (prefers-reduced-motion: reduce) {
+  .caderno-campo {
+    transition: none;
+  }
+}

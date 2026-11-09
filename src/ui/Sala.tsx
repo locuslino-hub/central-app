@@ -9,6 +9,7 @@ import { hrefDe } from '../rotas';
 import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { pendenteHoje } from './CaixasSalas';
 import { useDetalheDoEvento } from './DetalheEvento';
+import { Caderno } from './Caderno';
 import { Documentos } from './Documentos';
 import { useAgora, useDia, usePessoas, useSala, useSalas, useTarefas } from './hooks';
 import { ItemDeAgenda } from './ItemDeAgenda';
@@ -204,6 +205,7 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
         <Documentos de="desta sala" salaId={sala.id} />
         </div>
       </div>
+      <Caderno salaId={sala.id} nomeDaSala={sala.nome} />
     </div>
   );
 }
