@@ -316,7 +316,7 @@ function motivoDe(erro: unknown): string {
  * Status HTTP da falha: `details.code` do GoogleJsonResponseException, ou,
  * sem ele, pelo motivo da mensagem (só os três que o script trata).
  */
-function statusDe(erro: unknown): number | null {
+export function statusDe(erro: unknown): number | null {
   const detalhes = typeof erro === 'object' && erro !== null ? (erro as { details?: unknown }).details : undefined;
   const codigo = typeof detalhes === 'object' && detalhes !== null ? (detalhes as { code?: unknown }).code : undefined;
   if (typeof codigo === 'number' && Number.isInteger(codigo)) return codigo;

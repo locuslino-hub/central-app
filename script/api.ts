@@ -2,6 +2,7 @@
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
 import { criarEvento, listarEventos, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
+import { atualizarEmails, listarEmails, type GuardaDeEmails, type ServicoDeGmail } from './email';
 
 export type ErroDoScript = 'codigo-invalido' | 'ocupado' | 'interno';
 
@@ -12,6 +13,10 @@ export interface Ambiente {
   armazem: Armazem;
   /** Serviço avançado do Google Agenda (v3). Sem ele, as ações de agenda dão `interno`. */
   calendario?(): ServicoDeAgenda;
+  /** Serviço avançado do Gmail (v1), só leitura. Sem ele, as ações de e-mail dão `interno`. */
+  gmail?(): ServicoDeGmail;
+  /** Onde fica a lista de e-mails entre o gatilho e o app (cache do script). */
+  emailsGuardados?: GuardaDeEmails;
 }
 
 type Acao = (dados: unknown, ambiente: Ambiente) => unknown;
@@ -21,6 +26,16 @@ const TAMANHO_MINIMO_DO_CODIGO = 32;
 function calendario(ambiente: Ambiente): ServicoDeAgenda {
   if (!ambiente.calendario) throw new Error('Google Agenda indisponível');
   return ambiente.calendario();
+}
+
+function gmail(ambiente: Ambiente): ServicoDeGmail {
+  if (!ambiente.gmail) throw new Error('Gmail indisponível');
+  return ambiente.gmail();
+}
+
+function emailsGuardados(ambiente: Ambiente): GuardaDeEmails {
+  if (!ambiente.emailsGuardados) throw new Error('Guarda de e-mails indisponível');
+  return ambiente.emailsGuardados;
 }
 
 // Map, e não objeto: `acoes.get('constructor')` não acha nada herdado.
@@ -33,6 +48,9 @@ const acoes = new Map<unknown, Acao>([
   ['criarEvento', (dados, ambiente) => criarEvento(dados, calendario(ambiente))],
   ['removerEvento', (dados, ambiente) => removerEvento(dados, calendario(ambiente))],
   ['trocarSalaEvento', (dados, ambiente) => trocarSalaEvento(dados, calendario(ambiente))],
+  // E-mail só se lê: não há ação que mude o Gmail. Nenhuma das duas usa `dados`.
+  ['emails', (_dados, ambiente) => listarEmails(() => gmail(ambiente), emailsGuardados(ambiente))],
+  ['atualizarEmails', (_dados, ambiente) => atualizarEmails(gmail(ambiente), emailsGuardados(ambiente))],
 ]);
 
 function recusa(erro: ErroDoScript): Resposta {

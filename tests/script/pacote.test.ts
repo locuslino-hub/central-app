@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { agendasDoDono } from '../apoio/calendario';
+import { gmailFalso, naoLida, respostaDoDono } from '../apoio/gmail';
 
 let pacote: string;
 
@@ -145,15 +146,52 @@ function redeFalsa(drive: ReturnType<typeof driveFalso>) {
   return rede;
 }
 
+/** Gatilhos do projeto (ScriptApp): só o que o script usa para o gatilho de 30 min. */
+function gatilhosFalsos() {
+  type Gatilho = { getHandlerFunction(): string; getUniqueId(): string; minutos: number };
+  const gatilhos = {
+    lista: [] as Gatilho[],
+    apagados: [] as string[],
+    servico: {
+      getProjectTriggers: () => [...gatilhos.lista],
+      newTrigger(funcao: string) {
+        return {
+          timeBased: () => ({
+            everyMinutes: (minutos: number) => ({
+              create() {
+                const id = `gatilho-${gatilhos.lista.length + gatilhos.apagados.length + 1}`;
+                const novo = { getHandlerFunction: () => funcao, getUniqueId: () => id, minutos };
+                gatilhos.lista.push(novo);
+                return novo;
+              },
+            }),
+          }),
+        };
+      },
+      deleteTrigger(gatilho: Gatilho) {
+        gatilhos.apagados.push(gatilho.getUniqueId());
+        gatilhos.lista = gatilhos.lista.filter((g) => g.getUniqueId() !== gatilho.getUniqueId());
+      },
+    },
+  };
+  return gatilhos;
+}
+
 /** Roda o pacote como o Apps Script roda: sem módulos, serviços como globais. */
-function carregar({ semAgenda = false }: { semAgenda?: boolean } = {}) {
+function carregar({ semAgenda = false, semGmail = false }: { semAgenda?: boolean; semGmail?: boolean } = {}) {
   const propriedades = new Map<string, string>();
   const leituras = new Map<string, number>();
   const registros: string[] = [];
   const erros: string[] = [];
   const drive = driveFalso();
   const rede = redeFalsa(drive);
-  const cache = { valores: new Map<string, string>(), quebrado: false, putQuebrado: false, prazos: [] as number[] };
+  const cache = {
+    valores: new Map<string, string>(),
+    quebrado: false,
+    putQuebrado: false,
+    prazos: [] as number[],
+    prazoPorChave: new Map<string, number>(),
+  };
   const cacheDoScript = () => {
     if (cache.quebrado) throw new Error('CacheService fora do ar');
     return {
@@ -161,6 +199,7 @@ function carregar({ semAgenda = false }: { semAgenda?: boolean } = {}) {
       put: (chave: string, valor: string, segundos?: number) => {
         if (cache.putQuebrado) throw new Error('Cache cheio');
         cache.prazos.push(segundos ?? -1);
+        cache.prazoPorChave.set(chave, segundos ?? -1);
         cache.valores.set(chave, valor);
       },
       remove: (chave: string) => void cache.valores.delete(chave),
@@ -169,12 +208,15 @@ function carregar({ semAgenda = false }: { semAgenda?: boolean } = {}) {
   const trava = { livre: true, presa: false, esperas: [] as number[] };
   let uuids = 0;
   const calendario = agendasDoDono();
+  const gmail = gmailFalso();
+  const gatilhos = gatilhosFalsos();
   const contexto = vm.createContext({
     Drive: drive.servico,
     // Serviço avançado desligado: o global nem existe.
     ...(semAgenda ? {} : { Calendar: calendario.servico }),
+    ...(semGmail ? {} : { Gmail: gmail.servico }),
     UrlFetchApp: rede.UrlFetchApp,
-    ScriptApp: rede.ScriptApp,
+    ScriptApp: { ...rede.ScriptApp, ...gatilhos.servico },
     CacheService: { getScriptCache: () => cacheDoScript() },
     LockService: {
       getScriptLock: () => ({
@@ -241,7 +283,7 @@ function carregar({ semAgenda = false }: { semAgenda?: boolean } = {}) {
     const saida = globais.doPost({ postData: { contents: corpo } });
     return { tipo: saida.tipo, resposta: JSON.parse(saida.texto) as unknown };
   };
-  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache, calendario };
+  return { globais, propriedades, leituras, registros, erros, postar, drive, rede, trava, cache, calendario, gmail, gatilhos };
 }
 
 // O vm tem o próprio Date, real: o dia da cópia é o de hoje (ver hojeEmLisboa).
@@ -476,7 +518,7 @@ describe('manifesto publicado', () => {
     });
   });
 
-  it('declara os escopos explicitamente: Drive do próprio script, chamada externa (R24) e Google Agenda mínimo (T10)', () => {
+  it('declara os escopos explicitamente: Drive do próprio script, chamada externa (R24), Google Agenda mínimo (T10) e Gmail só leitura (T13)', () => {
     expect(manifesto().oauthScopes).toEqual([
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/script.external_request',
@@ -486,7 +528,17 @@ describe('manifesto publicado', () => {
       'https://www.googleapis.com/auth/calendar.events.owned',
       // Ler eventos de todas as agendas, inclusive assinadas (events.list/get).
       'https://www.googleapis.com/auth/calendar.events.readonly',
+      // Gmail: só ler (R11). Nunca modify, send, compose nem o escopo total.
+      'https://www.googleapis.com/auth/gmail.readonly',
+      // Instalar o gatilho de 30 min dos e-mails (ScriptApp.newTrigger) e evitar duplicados.
+      'https://www.googleapis.com/auth/script.scriptapp',
     ]);
+  });
+
+  it('nenhum escopo do Gmail além da leitura', () => {
+    const escopos = manifesto().oauthScopes as string[];
+    expect(escopos).not.toContain('https://mail.google.com/');
+    expect(escopos.filter((e) => /gmail|mail\.google/.test(e))).toEqual(['https://www.googleapis.com/auth/gmail.readonly']);
   });
 
   it('nenhum escopo largo do Google Agenda nem do Drive', () => {
@@ -496,11 +548,12 @@ describe('manifesto publicado', () => {
     }
   });
 
-  it('liga os serviços avançados do Drive e do Google Agenda na v3', () => {
+  it('liga os serviços avançados do Drive e do Google Agenda na v3, e do Gmail na v1', () => {
     expect(manifesto().dependencies).toEqual({
       enabledAdvancedServices: [
         { userSymbol: 'Drive', serviceId: 'drive', version: 'v3' },
         { userSymbol: 'Calendar', serviceId: 'calendar', version: 'v3' },
+        { userSymbol: 'Gmail', serviceId: 'gmail', version: 'v1' },
       ],
     });
   });
@@ -599,9 +652,9 @@ describe('fix 2: cache do código', () => {
 const ENDPOINT = 'https://www.googleapis.com/drive/v3/files/';
 
 describe('R24: leitura pela API do Drive', () => {
-  it('a única URL no pacote é o endpoint de arquivos do Drive', () => {
+  it('as únicas URLs no pacote são o endpoint de arquivos do Drive e o link do Gmail na web (que nunca é chamado)', () => {
     const urls = new Set(pacote.match(/https?:\/\/[^\s'"`)]+/g) ?? []);
-    expect([...urls]).toEqual([ENDPOINT]);
+    expect([...urls].sort()).toEqual(['https://mail.google.com/mail/u/0/#all/', ENDPOINT]);
   });
 
   it('puxar lê o conteúdo por GET no endpoint, com o token, alt=media e muteHttpExceptions', () => {
@@ -934,5 +987,182 @@ describe('Tarefa 10: autorizarDrive também prova o Google Agenda', () => {
     const { globais, registros } = carregar({ semAgenda: true });
     (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
     expect(registros.at(-1)).toMatch(/Google Agenda falhou/);
+  });
+});
+
+describe('Tarefa 13: Gmail pelo pacote', () => {
+  type ComGmail = { autorizarGmail(): void; atualizarEmails(evento?: unknown): void };
+  const funcoes = (globais: unknown) => globais as ComGmail;
+  const CHAVE = 'EMAILS_POR_RESPONDER';
+
+  it('atualizarEmails e autorizarGmail são funções globais no topo do arquivo', () => {
+    expect(pacote).toMatch(/^function atualizarEmails\(/m);
+    expect(pacote).toMatch(/^function autorizarGmail\(/m);
+    const { globais } = carregar();
+    expect(typeof funcoes(globais).atualizarEmails).toBe('function');
+    expect(typeof funcoes(globais).autorizarGmail).toBe('function');
+  });
+
+  it('a ação emails devolve os não lidos pelo doPost, sem mexer no Gmail', () => {
+    const { pedir, gmail } = conectado();
+    const m = naoLida({ de: 'Prof. Souza <souza@exemplo.invalid>' });
+    gmail.mensagens.push(m);
+    const resposta = pedir('emails', {});
+    expect(resposta).toMatchObject({ ok: true, dados: [{ id: m.id, remetente: 'Prof. Souza' }] });
+    expect(Object.keys(resposta.dados[0]).sort()).toEqual([
+      'assunto',
+      'data',
+      'enderecoRemetente',
+      'id',
+      'link',
+      'remetente',
+      'trecho',
+    ]);
+    expect(gmail.proibidas).toEqual([]);
+  });
+
+  it('o gatilho grava a lista no cache do script por 6 h, e a ação emails lê de lá sem chamar o Gmail', () => {
+    const { globais, pedir, gmail, cache } = conectado();
+    const m = naoLida();
+    gmail.mensagens.push(m);
+    // O Apps Script passa um evento ao gatilho: é ignorado.
+    funcoes(globais).atualizarEmails({ triggerUid: 'x' });
+    expect(JSON.parse(cache.valores.get(CHAVE)!)).toHaveLength(1);
+    expect(cache.prazoPorChave.get(CHAVE)).toBe(21_600);
+
+    gmail.chamadas.length = 0;
+    expect(pedir('emails', {}).dados.map((e: { id: string }) => e.id)).toEqual([m.id]);
+    expect(gmail.chamadas).toEqual([]);
+  });
+
+  it('o gatilho registra o tempo gasto e a contagem, sem nada do e-mail', () => {
+    const { globais, gmail, registros, erros } = conectado();
+    gmail.mensagens.push(
+      naoLida({ de: 'Renata <renata@exemplo.invalid>', assunto: 'Assunto da Renata', snippet: 'Texto da Renata' }),
+    );
+    funcoes(globais).atualizarEmails();
+    const linha = registros.at(-1)!;
+    expect(linha).toMatch(/^Central: e-mails atualizados em \d+ ms: 1 e-mail por responder\.$/);
+    expect([...registros, ...erros].join('\n')).not.toMatch(/Renata|renata|exemplo\.invalid/);
+  });
+
+  it('item respondido pelo dono some na rodada seguinte do gatilho', () => {
+    const { globais, pedir, gmail } = conectado();
+    const m = naoLida();
+    gmail.mensagens.push(m);
+    funcoes(globais).atualizarEmails();
+    expect(pedir('emails', {}).dados).toHaveLength(1);
+    gmail.mensagens.push(respostaDoDono(m.threadId, Number(m.internalDate) + 60_000));
+    funcoes(globais).atualizarEmails();
+    expect(pedir('emails', {}).dados).toEqual([]);
+  });
+
+  it('atualizarEmails pelo doPost lê o Gmail de novo (botão Atualizar agora)', () => {
+    const { pedir, gmail } = conectado();
+    expect(pedir('emails', {}).dados).toEqual([]);
+    gmail.mensagens.push(naoLida());
+    expect(pedir('atualizarEmails', {}).dados).toHaveLength(1);
+  });
+
+  it('gatilho com o Gmail fora do ar: falha com mensagem limpa e a lista anterior fica', () => {
+    const { globais, gmail, cache, erros } = conectado();
+    gmail.mensagens.push(naoLida());
+    funcoes(globais).atualizarEmails();
+    const antes = cache.valores.get(CHAVE);
+    gmail.estado.falharLista =
+      'API call to gmail.users.messages.list failed with error: Backend Error marina@exemplo.invalid';
+    expect(() => funcoes(globais).atualizarEmails()).toThrow(/^Gmail \(messages\.list\): Backend Error$/);
+    expect(cache.valores.get(CHAVE)).toBe(antes);
+    expect(erros.join('\n')).not.toContain('marina');
+  });
+
+  it('sem o serviço avançado do Gmail, as ações de e-mail dão interno e o resto segue', () => {
+    const carregado = carregar({ semGmail: true });
+    carregado.globais.gerarCodigo();
+    const codigo = carregado.propriedades.get('CODIGO_DO_APARELHO')!;
+    const pedir = (acao: string) =>
+      carregado.postar(JSON.stringify({ codigo, acao, dados: {} })).resposta as RespostaDoPacote;
+    expect(pedir('emails')).toEqual({ ok: false, erro: 'interno' });
+    expect(pedir('ping')).toEqual({ ok: true, dados: {} });
+  });
+
+  it('cache fora do ar: a ação emails lê o Gmail na hora', () => {
+    const { pedir, gmail, cache } = conectado();
+    pedir('ping', {});
+    cache.quebrado = true;
+    gmail.mensagens.push(naoLida());
+    expect(pedir('emails', {}).dados).toHaveLength(1);
+  });
+});
+
+describe('Tarefa 13: autorizarGmail (passo do dono)', () => {
+  type ComGmail = { autorizarGmail(): void };
+  const autorizar = (globais: unknown) => (globais as ComGmail).autorizarGmail();
+
+  it('lê o Gmail, registra só a contagem e instala um gatilho de 30 min em atualizarEmails', () => {
+    const { globais, gmail, gatilhos, registros } = carregar();
+    gmail.mensagens.push(
+      naoLida({ de: 'Marina <marina@exemplo.invalid>', assunto: 'Assunto da Marina' }),
+      naoLida({ de: 'Aurora <aurora@exemplo.invalid>', snippet: 'Trecho da Aurora' }),
+    );
+    autorizar(globais);
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Permissão do Gmail aprovada: 2 e-mails por responder\./);
+    expect(mensagem).toMatch(/Leitura levou \d+ ms/);
+    expect(mensagem).toMatch(/Atualização automática a cada 30 minutos: ligada\./);
+    for (const proibido of ['Marina', 'marina', 'Aurora', 'exemplo.invalid', 'Assunto', 'Trecho']) {
+      expect(mensagem).not.toContain(proibido);
+    }
+    expect(gatilhos.lista.map((g) => [g.getHandlerFunction(), g.minutos])).toEqual([['atualizarEmails', 30]]);
+    expect(gmail.proibidas).toEqual([]);
+  });
+
+  it('singular certo com 1 e-mail', () => {
+    const { globais, gmail, registros } = carregar();
+    gmail.mensagens.push(naoLida());
+    autorizar(globais);
+    expect(registros.at(-1)).toMatch(/Permissão do Gmail aprovada: 1 e-mail por responder\./);
+  });
+
+  it('rodar de novo não duplica o gatilho e limpa duplicados antigos', () => {
+    const { globais, gatilhos, registros } = carregar();
+    autorizar(globais);
+    expect(registros.at(-1)).toMatch(/: ligada\./);
+    autorizar(globais);
+    expect(registros.at(-1)).toMatch(/já estava ligada\./);
+    expect(gatilhos.lista).toHaveLength(1);
+    // Duplicado criado à mão no editor: sai, fica um só.
+    gatilhos.servico.newTrigger('atualizarEmails').timeBased().everyMinutes(30).create();
+    autorizar(globais);
+    expect(gatilhos.lista).toHaveLength(1);
+    expect(gatilhos.apagados).toHaveLength(1);
+  });
+
+  it('não mexe em gatilhos de outras funções', () => {
+    const { globais, gatilhos } = carregar();
+    gatilhos.servico.newTrigger('outraCoisa').timeBased().everyMinutes(5).create();
+    autorizar(globais);
+    expect(gatilhos.lista.map((g) => g.getHandlerFunction()).sort()).toEqual(['atualizarEmails', 'outraCoisa']);
+    expect(gatilhos.apagados).toEqual([]);
+  });
+
+  it('Gmail recusado: registro limpo, pede para rodar de novo e não instala o gatilho', () => {
+    const { globais, gmail, gatilhos, registros } = carregar();
+    gmail.estado.falharLista =
+      'API call to gmail.users.messages.list failed with error: Request had insufficient authentication scopes. marina@exemplo.invalid';
+    autorizar(globais);
+    const mensagem = registros.at(-1)!;
+    expect(mensagem).toMatch(/Gmail falhou \(.*insufficient authentication scopes.*\)\. Rode autorizarGmail de novo/);
+    expect(mensagem).not.toContain('marina');
+    expect(gatilhos.lista).toEqual([]);
+  });
+
+  it('não grava nada no Drive nem troca o código do aparelho', () => {
+    const { globais, drive, propriedades } = carregar();
+    globais.gerarCodigo();
+    const antes = new Map(propriedades);
+    autorizar(globais);
+    expect(drive.arquivos.size).toBe(0);
+    expect(propriedades).toEqual(antes);
   });
 });

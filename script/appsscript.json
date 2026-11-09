@@ -4,7 +4,8 @@
   "dependencies": {
     "enabledAdvancedServices": [
       { "userSymbol": "Drive", "serviceId": "drive", "version": "v3" },
-      { "userSymbol": "Calendar", "serviceId": "calendar", "version": "v3" }
+      { "userSymbol": "Calendar", "serviceId": "calendar", "version": "v3" },
+      { "userSymbol": "Gmail", "serviceId": "gmail", "version": "v1" }
     ]
   },
   "webapp": {
@@ -16,6 +17,8 @@
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     "https://www.googleapis.com/auth/calendar.events.owned",
-    "https://www.googleapis.com/auth/calendar.events.readonly"
+    "https://www.googleapis.com/auth/calendar.events.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/script.scriptapp"
   ]
 }

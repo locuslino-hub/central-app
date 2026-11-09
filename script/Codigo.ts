@@ -3,6 +3,7 @@
 import { provarAgenda, type ServicoDeAgenda } from './agenda';
 import { novoCodigo, resumoDoErro, tratarCorpo, type Ambiente } from './api';
 import { NOME_DO_ARQUIVO, Ocupado, type Armazem } from './dados';
+import { atualizarEmails as atualizarListaDeEmails, type GuardaDeEmails, type ServicoDeGmail } from './email';
 
 const CHAVE_DO_CODIGO = 'CODIGO_DO_APARELHO';
 const CHAVE_DO_ARQUIVO = 'ID_DO_ARQUIVO_DE_DADOS';
@@ -169,10 +170,46 @@ function calendario(): ServicoDeAgenda {
   return Calendar as unknown as ServicoDeAgenda;
 }
 
+/**
+ * Serviço avançado do Gmail (API v1, R11), com o escopo gmail.readonly: o
+ * Google recusa qualquer pedido que mude, envie ou apague. email.ts usa só a
+ * busca e a leitura de conversas em metadados.
+ */
+function gmail(): ServicoDeGmail {
+  if (typeof Gmail === 'undefined' || !Gmail) throw new Error('Serviço avançado do Gmail desligado');
+  return Gmail as unknown as ServicoDeGmail;
+}
+
+const CHAVE_DOS_EMAILS = 'EMAILS_POR_RESPONDER';
+/** 6 h, o máximo do cache. O gatilho de 30 min renova muito antes. */
+const SEGUNDOS_DOS_EMAILS = 6 * 60 * 60;
+/** Nome da função global que o gatilho chama (a exportada abaixo). */
+const FUNCAO_DO_GATILHO = 'atualizarEmails';
+const MINUTOS_DO_GATILHO = 30;
+
+/**
+ * A lista de e-mails fica no cache do script, e não num arquivo do Drive:
+ * nenhuma cópia dura dos remetentes, assuntos e trechos fica guardada (some
+ * sozinha em 6 h se o gatilho parar), não há arquivo novo no Drive do dono
+ * nem leitura de rede a cada pedido, e o valor cabe no limite de 100 KB
+ * (email.ts corta em 90 KB). Se o cache perder a lista, a ação `emails` lê
+ * o Gmail na hora.
+ */
+const emailsGuardados: GuardaDeEmails = {
+  ler: () => cacheDoScript()?.get(CHAVE_DOS_EMAILS) ?? null,
+  gravar(texto) {
+    const cache = cacheDoScript();
+    if (!cache) throw new Error('sem cache');
+    cache.put(CHAVE_DOS_EMAILS, texto, SEGUNDOS_DOS_EMAILS);
+  },
+};
+
 const ambiente: Ambiente = {
   lerCodigo,
   armazem,
   calendario,
+  gmail,
+  emailsGuardados,
 };
 
 export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
@@ -217,6 +254,76 @@ function provaDaAgenda(): string {
 export function autorizarDrive() {
   ScriptApp.getOAuthToken();
   Logger.log([provaDoDrive(), provaDaAgenda()].join('\n'));
+}
+
+function porResponder(quantos: number): string {
+  return `${quantos} ${quantos === 1 ? 'e-mail' : 'e-mails'} por responder`;
+}
+
+/** Lê o Gmail, troca a lista do cache e mede o tempo. Lança se o Gmail falhar. */
+function atualizarMedindo(): { quantos: number; ms: number } {
+  const inicio = Date.now();
+  const lista = atualizarListaDeEmails(gmail(), emailsGuardados);
+  return { quantos: lista.length, ms: Date.now() - inicio };
+}
+
+/**
+ * Chamada pelo gatilho de 30 min (ver autorizarGmail); o dono também pode
+ * rodar pelo editor. Registra o tempo gasto e a contagem, para somar as
+ * execuções do dia contra o limite de 90 min dos gatilhos. Nunca registra
+ * nome, endereço, assunto ou trecho. Se o Gmail falhar, a lista anterior fica
+ * e a execução falha com a mensagem já limpa (aparece em Execuções).
+ */
+export function atualizarEmails() {
+  let medida: { quantos: number; ms: number };
+  try {
+    medida = atualizarMedindo();
+  } catch (erro) {
+    const resumo = resumoDoErro(erro);
+    console.error(`Central: falha em atualizarEmails: ${resumo}`);
+    throw new Error(partesDoResumo(resumo));
+  }
+  console.log(`Central: e-mails atualizados em ${medida.ms} ms: ${porResponder(medida.quantos)}.`);
+}
+
+/** "FalhaDoGmail: Gmail (…): motivo" -> "Gmail (…): motivo". */
+function partesDoResumo(resumo: string): string {
+  const corte = resumo.indexOf(': ');
+  return corte >= 0 ? resumo.slice(corte + 2) : resumo;
+}
+
+/** Um só gatilho de tempo para atualizarEmails: cria se faltar, apaga os repetidos. */
+function ligarGatilho(): string {
+  const nossos = ScriptApp.getProjectTriggers().filter((g) => g.getHandlerFunction() === FUNCAO_DO_GATILHO);
+  if (nossos.length === 0) {
+    ScriptApp.newTrigger(FUNCAO_DO_GATILHO).timeBased().everyMinutes(MINUTOS_DO_GATILHO).create();
+    return `Atualização automática a cada ${MINUTOS_DO_GATILHO} minutos: ligada.`;
+  }
+  for (const repetido of nossos.slice(1)) ScriptApp.deleteTrigger(repetido);
+  return `Atualização automática a cada ${MINUTOS_DO_GATILHO} minutos: já estava ligada.`;
+}
+
+/**
+ * O dono roda pelo editor depois de publicar a versão com o Gmail: o Google
+ * pede as permissões novas (ler o Gmail e criar o gatilho do script). Lê o
+ * Gmail uma vez, guarda a lista e liga o gatilho de 30 min. Rodar de novo
+ * não duplica o gatilho. Registra só contagem e tempo; não grava no Drive,
+ * não troca o código do aparelho e nunca muda nada no Gmail.
+ */
+export function autorizarGmail() {
+  ScriptApp.getOAuthToken();
+  let medida: { quantos: number; ms: number };
+  try {
+    medida = atualizarMedindo();
+  } catch (erro) {
+    Logger.log(`Gmail falhou (${resumoDoErro(erro)}). Rode autorizarGmail de novo e aprove a leitura do Gmail.`);
+    return;
+  }
+  Logger.log(
+    [`Permissão do Gmail aprovada: ${porResponder(medida.quantos)}.`, `Leitura levou ${medida.ms} ms.`, ligarGatilho()].join(
+      '\n',
+    ),
+  );
 }
 
 function jsonAbre(texto: string): string {
