@@ -44,11 +44,6 @@ export type Tarefa = Base & {
   marcar: boolean;
   emailId?: string;
   adiadaAte?: string;
-  /**
-   * Id da tarefa espelho no Google Tarefas (lista "Central"), quando o script
-   * já respondeu. Sem ele, o script acha a espelho pelas notas: nada duplica.
-   */
-  googleTarefaId?: string;
 };
 
 export type Palavra = Base & { termo: string; salaId: string };

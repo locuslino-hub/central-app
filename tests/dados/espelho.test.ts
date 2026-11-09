@@ -9,9 +9,13 @@ import type { Evento } from '../../src/dados/agenda';
 import { aplicarFeitos, idDoFeito, marcarCompromissoFeito } from '../../src/dados/eventos-feitos';
 import {
   TENTATIVAS_NO_MAXIMO,
+  concluirMigracao,
   enfileirarEspelhosQueFaltam,
+  gravarDoServidor,
   guardarIdDoEspelho,
+  lerIdsDoEspelho,
   listar,
+  listarAvisos,
   listarPendentes,
   salvar,
 } from '../../src/dados/loja';
@@ -79,15 +83,23 @@ describe('a fila do espelho de tarefas', () => {
     expect(await daTarefa(antigo.id)).toEqual([]);
   });
 
-  it('guardar o id da espelho sincroniza a tarefa, mas não volta para o espelho', async () => {
+  it('o id da espelho fica só neste aparelho: não muda a tarefa nem entra na fila', async () => {
     const tarefa = (await criarTarefa('Comprar lâmpada'))!;
     const antes = await listarPendentes();
-    expect(await guardarIdDoEspelho(tarefa.id, 'tarefaGoogle1')).toBe(true);
-    expect(await guardarIdDoEspelho(tarefa.id, 'tarefaGoogle1')).toBe(false);
-    const depois = await listarPendentes();
-    expect(depois.length).toBe(antes.length + 1);
-    expect(depois.at(-1)).toMatchObject({ tipo: 'registro', colecao: 'tarefas', id: tarefa.id });
-    expect((await lerTarefa(tarefa.id)).googleTarefaId).toBe('tarefaGoogle1');
+    const versao = await lerTarefa(tarefa.id);
+    await guardarIdDoEspelho(tarefa.id, 'tarefaGoogle1');
+    expect(await listarPendentes()).toEqual(antes);
+    expect(await lerTarefa(tarefa.id)).toEqual(versao);
+    expect(await lerIdsDoEspelho([tarefa.id, 'outra'])).toEqual(['tarefaGoogle1', undefined]);
+  });
+
+  it('migração que tira a hora de uma tarefa mudada (ela fica como tarefa): entra no espelho', async () => {
+    const antiga = await criar('Reunião antiga', { data: '2026-11-09', inicio: '10:00' });
+    await salvar('tarefas', { ...antiga, titulo: 'Reunião antiga, mudada' });
+    expect(await daTarefa(antiga.id)).toEqual([]);
+    await concluirMigracao(-1, antiga.id, { id: 'evento00001', titulo: 'Reunião antiga', data: '2026-11-09', inicio: '10:00', fim: '11:00', salaId: null });
+    expect((await lerTarefa(antiga.id)).inicio).toBeUndefined();
+    expect(await daTarefa(antiga.id)).toHaveLength(1);
   });
 
   it('a virada do dia e o Fechar o dia mudam o dia: entram no espelho', async () => {
@@ -102,7 +114,8 @@ describe('a fila do espelho de tarefas', () => {
   it('tarefas antigas sem espelho entram uma vez; feitas, já espelhadas, compromissos e as que já estão na fila, não', async () => {
     const semEspelho = await criar('Antiga');
     const feita = await criar('Feita', { feito: true });
-    const espelhada = await criar('Espelhada', { googleTarefaId: 'tarefaGoogle9' });
+    const espelhada = await criar('Espelhada');
+    await guardarIdDoEspelho(espelhada.id, 'tarefaGoogle9');
     const compromisso = await criar('Compromisso', { data: '2026-11-09', inicio: '10:00' });
     // Simula o aparelho antes do espelho: a fila sem os espelhos.
     const { removerPendentes } = await import('../../src/dados/loja');
@@ -117,17 +130,18 @@ describe('a fila do espelho de tarefas', () => {
 });
 
 describe('sincronia com o Google Tarefas', () => {
-  it('cria a espelho, guarda o id na tarefa e a fila esvazia; o estado é atualizado', async () => {
+  it('cria a espelho, guarda o id neste aparelho e a fila esvazia; o estado é atualizado', async () => {
     const { servidor, sincronizar } = comGoogle();
     const tarefa = (await criarTarefa('Ligar para a Renata', { data: '2026-11-09' }))!;
     expect(await sincronizar()).toBe('atualizado');
 
     const [espelho] = servidor.tarefasGoogle.vivas();
     expect(espelho).toMatchObject({ title: 'Ligar para a Renata', due: '2026-11-09T00:00:00.000Z', status: 'needsAction' });
-    expect((await lerTarefa(tarefa.id)).googleTarefaId).toBe(espelho.id);
+    expect(await lerIdsDoEspelho([tarefa.id])).toEqual([espelho.id]);
     expect(await listarPendentes()).toEqual([]);
-    // O id da espelho chegou ao Drive: o outro aparelho também o terá.
-    expect(servidor.armazem.conteudo).toContain(espelho.id);
+    // O id da espelho não vai ao Drive: o outro aparelho acha a espelho pelas notas.
+    expect(servidor.armazem.conteudo).not.toContain(espelho.id);
+    expect(servidor.de('enviar')).toHaveLength(1);
   });
 
   it('concluir, reabrir, mudar o dia, ir para Sem prazo e apagar seguem para a espelho', async () => {
@@ -217,12 +231,56 @@ describe('sincronia com o Google Tarefas', () => {
     expect(servidor.tarefasGoogle.vivas()).toMatchObject([{ due: '2026-11-09T00:00:00.000Z' }]);
   });
 
+  it('tarefa que deixou de ser espelhável antes do envio (virou compromisso com hora): o pedido sai sem chamar o Google', async () => {
+    const { servidor, sincronizar } = comGoogle();
+    const tarefa = (await criarTarefa('Reunião', { data: '2026-11-09' }))!;
+    const atual = await lerTarefa(tarefa.id);
+    await gravarDoServidor([{ colecao: 'tarefas', registro: { ...atual, inicio: '10:00', atualizadoEm: AGORA + 1000, aparelho: 'outro' } }], AGORA + 1000);
+    await sincronizar();
+    expect(servidor.de('espelharTarefas')).toEqual([]);
+    expect(await daTarefa(tarefa.id)).toEqual([]);
+  });
+
   it('mais de 20 tarefas vão em lotes de até 20', async () => {
     const { servidor, sincronizar } = comGoogle();
     for (let i = 0; i < 25; i++) await criarTarefa(`Tarefa ${i}`);
     await sincronizar();
     expect(servidor.de('espelharTarefas').map((p) => p.dados.tarefas.length)).toEqual([20, 5]);
     expect(servidor.tarefasGoogle.vivas()).toHaveLength(25);
+  });
+
+  it('edição offline no aparelho A sobrevive ao id da espelho guardado no aparelho B', async () => {
+    const notebook = new IDBFactory();
+    const celular = new IDBFactory();
+    const { servidor, sincronizar } = comGoogle();
+    globalThis.indexedDB = notebook;
+    const tarefa = (await criarTarefa('Revisar capítulo', { data: '2026-11-10' }))!;
+    servidor.falharAntes((acao) => (acao === 'espelharTarefas' ? new ErroConexao() : undefined));
+    await sincronizar();
+    globalThis.indexedDB = celular;
+    await sincronizar();
+
+    // A, sem internet, muda o título; depois B espelha e guarda o id.
+    globalThis.indexedDB = notebook;
+    vi.setSystemTime(AGORA + 60_000);
+    await editarTarefa(tarefa.id, { titulo: 'Revisar capítulo 3' });
+    globalThis.indexedDB = celular;
+    vi.setSystemTime(AGORA + 120_000);
+    servidor.falharAntes(undefined);
+    // B abre o app: a tarefa recebida do A, sem espelho aqui, entra na fila.
+    expect(await enfileirarEspelhosQueFaltam()).toBe(1);
+    await sincronizar();
+    expect(servidor.tarefasGoogle.vivas()).toHaveLength(1);
+
+    globalThis.indexedDB = notebook;
+    await sincronizar();
+    expect((await lerTarefa(tarefa.id)).titulo).toBe('Revisar capítulo 3');
+    expect(await listarAvisos()).toEqual([]);
+    globalThis.indexedDB = celular;
+    await sincronizar();
+    expect((await lerTarefa(tarefa.id)).titulo).toBe('Revisar capítulo 3');
+    expect(await listarAvisos()).toEqual([]);
+    expect(servidor.tarefasGoogle.vivas().map((t) => t.title)).toEqual(['Revisar capítulo 3']);
   });
 
   it('dois aparelhos: o outro muda a tarefa antes de receber o id da espelho, e nada duplica', async () => {

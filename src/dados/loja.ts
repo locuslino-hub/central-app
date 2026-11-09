@@ -24,11 +24,18 @@ import type {
 // Banco próprio, separado de `central-conexao`: a exportação dos dados nunca
 // leva o código do aparelho. O id do aparelho mora em `local`, fora das coleções.
 const BANCO = 'central-dados';
-// 1: coleções, pendentes, local. 2: avisos (Tarefa 5). 3: eventosFeitos (feito espelhado).
+// 1: coleções, pendentes, local. 2: avisos (Tarefa 5). 3: eventosFeitos e
+// espelhos (feito espelhado).
 const VERSAO = 3;
 const PENDENTES = 'pendentes';
 const AVISOS = 'avisos';
 const LOCAL = 'local';
+/**
+ * Id da tarefa na Central -> id da espelho no Google Tarefas. Só deste
+ * aparelho: não sincroniza (gravar na tarefa poderia vencer uma edição feita
+ * offline no outro aparelho). Sem ele, o script acha a espelho pelas notas.
+ */
+const ESPELHOS = 'espelhos';
 const CHAVE_APARELHO = 'aparelho';
 /** Carimbo do servidor até onde este aparelho já puxou (R5). */
 const CHAVE_DESDE = 'desde';
@@ -109,6 +116,7 @@ function abrir(): Promise<IDBPDatabase> {
         banco.createObjectStore(AVISOS, { keyPath: 'id', autoIncrement: true });
       }
       if (!banco.objectStoreNames.contains(LOCAL)) banco.createObjectStore(LOCAL);
+      if (!banco.objectStoreNames.contains(ESPELHOS)) banco.createObjectStore(ESPELHOS);
       // Versão nova pode trazer coleção nova, que antes era ignorada ao puxar:
       // a marca volta a 0 e o próximo puxar traz tudo de novo.
       if (versaoAntiga > 0) tx.objectStore(LOCAL).delete(CHAVE_DESDE).catch(() => {});
@@ -246,27 +254,25 @@ export async function enfileirarMarcaDeFeito(id: string, feito: boolean): Promis
   });
 }
 
-/**
- * O script respondeu o id da espelho: fica na tarefa (sincroniza), relida na
- * hora de gravar. Não grava se a tarefa sumiu, foi apagada ou já tem esse id.
- */
-export async function guardarIdDoEspelho(tarefaId: string, googleId: string): Promise<boolean> {
-  const gravou = await comBanco(async (banco) => {
-    const tx = escrever(banco, ['tarefas', PENDENTES, LOCAL]);
-    const loja = tx.objectStore('tarefas');
-    const atual: Tarefa | undefined = await loja.get(tarefaId);
-    if (!atual || atual.apagado || atual.googleTarefaId === googleId) {
-      await tx.done;
-      return false;
-    }
-    const aparelho = await aparelhoNa(tx);
-    await loja.put({ ...atual, googleTarefaId: googleId, atualizadoEm: carimbo(atual), aparelho });
-    await enfileirar(tx, 'tarefas', tarefaId);
-    await tx.done;
-    return true;
+/** O script respondeu o id da espelho: fica só neste aparelho (ver ESPELHOS). Não mexe na tarefa nem na fila. */
+export async function guardarIdDoEspelho(tarefaId: string, googleId: string): Promise<void> {
+  await comBanco((banco) => banco.put(ESPELHOS, googleId, tarefaId));
+}
+
+/** A espelho foi apagada: o id guardado sai. */
+export async function esquecerIdDoEspelho(tarefaId: string): Promise<void> {
+  await comBanco((banco) => banco.delete(ESPELHOS, tarefaId));
+}
+
+/** Os ids das espelhos guardados neste aparelho, na ordem pedida (`undefined` onde não há). */
+export async function lerIdsDoEspelho(tarefaIds: readonly string[]): Promise<(string | undefined)[]> {
+  if (tarefaIds.length === 0) return [];
+  return comBanco(async (banco) => {
+    const tx = banco.transaction(ESPELHOS, 'readonly');
+    tx.done.catch(() => {});
+    const ids: unknown[] = await Promise.all(tarefaIds.map((id) => tx.objectStore(ESPELHOS).get(id)));
+    return ids.map((id) => (typeof id === 'string' ? id : undefined));
   });
-  if (gravou) notificar({ colecao: 'tarefas', id: tarefaId });
-  return gravou;
 }
 
 /**
@@ -277,14 +283,16 @@ export async function guardarIdDoEspelho(tarefaId: string, googleId: string): Pr
  */
 export async function enfileirarEspelhosQueFaltam(): Promise<number> {
   return comBanco(async (banco) => {
-    const tx = escrever(banco, ['tarefas', PENDENTES]);
+    const tx = escrever(banco, ['tarefas', PENDENTES, ESPELHOS]);
     const tarefas: Tarefa[] = await tx.objectStore('tarefas').getAll();
+    const comEspelho = new Set((await tx.objectStore(ESPELHOS).getAllKeys()).map(String));
     const fila = tx.objectStore(PENDENTES);
     const todas: Pendente[] = await fila.getAll();
     const naFila = new Set(todas.flatMap((p) => (p.tipo === 'espelho' && p.acao === 'espelharTarefa' ? [p.tarefaId] : [])));
     let quantas = 0;
     for (const tarefa of tarefas) {
-      if (tarefa.apagado || tarefa.feito || tarefa.googleTarefaId || naFila.has(tarefa.id) || espelhoDaTarefa(tarefa) === null) continue;
+      if (tarefa.apagado || tarefa.feito || comEspelho.has(tarefa.id) || naFila.has(tarefa.id)) continue;
+      if (espelhoDaTarefa(tarefa) === null) continue;
       await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'espelharTarefa', tarefaId: tarefa.id }));
       quantas++;
     }
@@ -462,7 +470,10 @@ export async function concluirMigracao(seq: number, tarefaId: string, evento: Ev
       await loja.put({ ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho });
     } else {
       const { inicio: _inicio, ...semHora } = atual;
-      await loja.put({ ...semHora, atualizadoEm: carimbo(atual), aparelho });
+      const tarefa = { ...semHora, atualizadoEm: carimbo(atual), aparelho };
+      await loja.put(tarefa);
+      // Sem a hora, ela passa a ser tarefa comum: vai para o Google Tarefas.
+      await espelharSeMudou(tx, atual, tarefa);
     }
     await enfileirar(tx, 'tarefas', tarefaId);
     await tx.done;
@@ -659,10 +670,8 @@ function canonico(valor: unknown): string {
  * própria, como a virada do dia: nada se perdeu, então não há o que avisar.
  */
 function mesmoConteudo(a: Registro, b: Registro): boolean {
-  // O id da espelho no Google Tarefas não é coisa do dono: se só ele difere,
-  // nada se perdeu (a próxima mudança da tarefa acha a espelho pelas notas).
-  const { atualizadoEm: _horaA, aparelho: _aparelhoA, googleTarefaId: _espelhoA, ...restoA } = a as Registro & { googleTarefaId?: string };
-  const { atualizadoEm: _horaB, aparelho: _aparelhoB, googleTarefaId: _espelhoB, ...restoB } = b as Registro & { googleTarefaId?: string };
+  const { atualizadoEm: _horaA, aparelho: _aparelhoA, ...restoA } = a;
+  const { atualizadoEm: _horaB, aparelho: _aparelhoB, ...restoB } = b;
   return canonico(restoA) === canonico(restoB);
 }
 

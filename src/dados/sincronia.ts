@@ -11,8 +11,11 @@ import {
   assinar as assinarLoja,
   concluirEnvio,
   enfileirarAgenda,
+  espelhoDaTarefa,
+  esquecerIdDoEspelho,
   gravarDoServidor,
   guardarIdDoEspelho,
+  lerIdsDoEspelho,
   lerDesde,
   agendaEsgotada,
   concluirMigracao,
@@ -285,13 +288,11 @@ async function tratarFalhaDoEspelho(erro: unknown, seqs: readonly number[]) {
 }
 
 /** Uma tarefa como a espelho a recebe, com o id da espelho se já se sabe. */
-function itemDoEspelho(tarefa: Tarefa): ItemDoEspelho {
+function itemDoEspelho(tarefa: Tarefa, googleId: string | undefined): ItemDoEspelho {
   const item: ItemDoEspelho = { id: tarefa.id, titulo: String(tarefa.titulo ?? '').slice(0, 2000), feito: !!tarefa.feito, apagado: !!tarefa.apagado };
   // Dia que não existe nem sai: o script recusaria o lote inteiro.
   if (dataValida(tarefa.data)) item.data = tarefa.data;
-  if (typeof tarefa.googleTarefaId === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(tarefa.googleTarefaId)) {
-    item.googleId = tarefa.googleTarefaId;
-  }
+  if (googleId !== undefined && /^[A-Za-z0-9_-]{1,256}$/.test(googleId)) item.googleId = googleId;
   return item;
 }
 
@@ -301,11 +302,12 @@ function itemDoEspelho(tarefa: Tarefa): ItemDoEspelho {
  *   só tira da fila: o feito já está na Central;
  * - `espelharTarefa`, uma por tarefa, com a versão atual dela, em lotes. Só
  *   saem da fila as entradas lidas antes do envio: mudança feita durante o
- *   envio vai na próxima rodada. O id da espelho que voltar fica na tarefa.
+ *   envio vai na próxima rodada. O id da espelho que voltar fica só neste
+ *   aparelho (não muda a tarefa: não disputa com edições do outro aparelho).
+ *   Tarefa que sumiu ou deixou de ser espelhável sai da fila sem chamada.
  * Falhas como na agenda: sem internet para; o resto conta tentativa e fica.
- * Devolve `true` se gravou registros (o id da espelho): a rodada envia de novo.
  */
-async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
+async function enviarEspelhos(chamar: Chamar): Promise<void> {
   const agora = Date.now();
   const espelhos = (await listarPendentes()).filter(
     (p): p is PendenteEspelho => p.tipo === 'espelho' && !agendaEsgotada(p, agora),
@@ -329,39 +331,38 @@ async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
   }
   const ids = [...porTarefa.keys()];
   const registros = (await lerRegistros(ids.map((id) => ({ colecao: 'tarefas' as const, id })))) as (Tarefa | undefined)[];
-  const grupos: { tarefa: Tarefa; seqs: number[] }[] = [];
-  const semTarefa: number[] = [];
+  const idsDoGoogle = await lerIdsDoEspelho(ids);
+  const grupos: { tarefa: Tarefa; seqs: number[]; googleId: string | undefined }[] = [];
+  const descartar: number[] = [];
   ids.forEach((id, i) => {
     const tarefa = registros[i];
-    if (tarefa) grupos.push({ tarefa, seqs: porTarefa.get(id)! });
-    else semTarefa.push(...porTarefa.get(id)!);
+    // Sumiu, ou deixou de ser espelhável (virou compromisso com hora) sem ser apagada: nada a mandar.
+    if (!tarefa || (espelhoDaTarefa(tarefa) === null && !tarefa.apagado)) descartar.push(...porTarefa.get(id)!);
+    else grupos.push({ tarefa, seqs: porTarefa.get(id)!, googleId: idsDoGoogle[i] });
   });
-  await removerPendentes(semTarefa);
+  await removerPendentes(descartar);
 
-  let gravou = false;
   for (let i = 0; i < grupos.length; i += LOTE_NO_MAXIMO) {
     const lote = grupos.slice(i, i + LOTE_NO_MAXIMO);
     let resultados;
     try {
-      ({ resultados } = await espelharTarefas(lote.map(({ tarefa }) => itemDoEspelho(tarefa)), { chamar }));
+      ({ resultados } = await espelharTarefas(lote.map(({ tarefa, googleId }) => itemDoEspelho(tarefa, googleId)), { chamar }));
     } catch (erro) {
       await tratarFalhaDoEspelho(erro, lote.flatMap(({ seqs }) => seqs));
       continue;
     }
     const porId = new Map(resultados.map((r) => [r.id, r]));
-    for (const { tarefa, seqs } of lote) {
+    for (const { tarefa, seqs, googleId } of lote) {
       const resultado = porId.get(tarefa.id);
       if (!resultado?.ok) {
         for (const seq of seqs) await registrarTentativa(seq);
         continue;
       }
       await removerPendentes(seqs);
-      if (resultado.googleId && !tarefa.apagado && resultado.googleId !== tarefa.googleTarefaId) {
-        if (await guardarIdDoEspelho(tarefa.id, resultado.googleId)) gravou = true;
-      }
+      if (tarefa.apagado || !resultado.googleId) await esquecerIdDoEspelho(tarefa.id);
+      else if (resultado.googleId !== googleId) await guardarIdDoEspelho(tarefa.id, resultado.googleId);
     }
   }
-  return gravou;
 }
 
 /**
@@ -398,7 +399,7 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
     await enviar(chamar, esperar);
     // A migração apaga tarefas antigas: esses registros saem já nesta rodada.
     if (await enviarAgenda(chamar)) await enviar(chamar, esperar);
-    if (await enviarEspelhos(chamar)) await enviar(chamar, esperar);
+    await enviarEspelhos(chamar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';
   } catch (erro) {
     final = await estadoDoErro(erro);

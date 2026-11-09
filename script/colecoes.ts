@@ -29,7 +29,6 @@ export const ESQUEMAS = {
     semanaVencida: 'texto?',
     emailId: 'texto?',
     adiadaAte: 'texto?',
-    googleTarefaId: 'texto?',
   },
   palavras: { termo: 'texto', salaId: 'texto' },
   documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?' },
