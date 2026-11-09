@@ -59,7 +59,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
  * sai do script.
  */
 const CAMPOS_BASE_DO_EVENTO =
-  'id,status,eventType,summary,description,colorId,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)';
+  'id,status,eventType,recurringEventId,summary,description,colorId,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)';
 /**
  * Campos novos da API que o v3 do Apps Script pode não conhecer. Pedir um
  * campo desconhecido em `fields` dá 400, então só entram quando o
@@ -90,8 +90,13 @@ const ID_DO_APP = /^[a-v0-9]{5,1024}$/;
 const CONTROLE = /[\u0000-\u001f\u007f]/;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const LINK_DO_GOOGLE = /^https:\/\/(?:www\.google\.com\/calendar|calendar\.google\.com)\/\S*$/;
-/** O link que o Google Agenda põe na descrição de um bloco do Google Tarefas. */
+/** O link do Google Tarefas (no `webViewLink` de uma tarefa). */
 export const LINK_DA_TAREFA = /tasks\.google\.com\/task\/([\w-]+)/;
+/**
+ * O link que o Google Agenda põe no fim da descrição de um bloco do Google
+ * Tarefas. Ancorado no fim: um link colado no meio de um texto não faz bloco.
+ */
+const LINK_NO_FIM = /tasks\.google\.com\/task\/([\w-]+)[^\s]*\s*$/;
 /** Id de tarefa do Google (da web ou da API). */
 export const ID_DE_TAREFA = /^[A-Za-z0-9_-]{1,256}$/;
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -157,6 +162,12 @@ export type Evento = {
    */
   tarefaAtualizadaEm?: number;
   /**
+   * Bloco de uma tarefa repetida (o evento é ocorrência de uma série, ou o
+   * mesmo id de tarefa aparece em mais de um bloco). O estado do Google
+   * Tarefas é um só para todas: o feito destes fica só na Central.
+   */
+  tarefaRepetida?: boolean;
+  /**
    * A cor do evento no Google: `chave` estável (`label:<id>`, `cor:<colorId>`
    * ou `agenda:<hex>`) para o dono ligar a uma sala, e `hex` para a amostra.
    */
@@ -166,7 +177,12 @@ export type Evento = {
 export type CorDoEvento = { chave: string; hex: string };
 
 /** O que se sabe de uma tarefa do Google Tarefas na leitura dos eventos. */
-export type EstadoDaTarefa = { feito: boolean; atualizadaEm: number | null };
+export type EstadoDaTarefa = {
+  feito: boolean;
+  atualizadaEm: number | null;
+  /** A tarefa está na lista "Central": é a espelho de uma tarefa da Central, que já aparece no app. */
+  daCentral?: boolean;
+};
 /** Lê o estado das tarefas dos blocos, em lote. `de`/`ate` como no pedido `eventos`. */
 export type LerEstadosDasTarefas = (ids: readonly string[], periodo: { de: string; ate: string }) => Map<string, EstadoDaTarefa>;
 
@@ -175,6 +191,8 @@ export type OpcoesDaLeitura = {
   extras?: readonly CampoExtra[];
   /** Sem isto, ou se falhar, os blocos de tarefa vêm sem o estado do Google Tarefas. */
   estadosDasTarefas?: LerEstadosDasTarefas;
+  /** A API recusou os campos extras (400): quem guardou a lista deles deve esquecê-la. */
+  aoRecusarExtras?: () => void;
 };
 
 export type NovoEvento = {
@@ -484,15 +502,21 @@ function registrar(texto: string) {
 
 // ---------- tradução para Evento ----------
 
-/** O id da tarefa no link `tasks.google.com/task/<id>` de um texto; null se não houver. */
+/** O id da tarefa no link `tasks.google.com/task/<id>` no fim de um texto; null se não houver. */
 export function idDaTarefaNoTexto(texto: unknown): string | null {
   if (typeof texto !== 'string') return null;
-  const id = LINK_DA_TAREFA.exec(texto)?.[1];
+  const id = LINK_NO_FIM.exec(texto)?.[1];
   return id && ID_DE_TAREFA.test(id) ? id : null;
 }
 
-/** O id da tarefa de um bloco do Google Tarefas: o campo `taskId`, se vier, ou o link da descrição. */
-function idDaTarefa(api: unknown): string | null {
+/**
+ * O id da tarefa de um bloco do Google Tarefas: o campo `taskId`, se vier, ou
+ * o link no fim da descrição. Só na agenda principal, em evento do próprio
+ * dono e sem convidados (é assim que o Google cria os blocos): um evento
+ * comum com um link de tarefa colado na descrição não vira bloco.
+ */
+function idDaTarefa(api: unknown, agendaId: string): string | null {
+  if (agendaId !== PRINCIPAL || proprio(proprio(api, 'organizer'), 'self') !== true || temConvidados(api)) return null;
   const campo = proprio(api, 'taskId');
   if (typeof campo === 'string' && ID_DE_TAREFA.test(campo)) return campo;
   return idDaTarefaNoTexto(proprio(api, 'description'));
@@ -590,7 +614,8 @@ function traduzir(
   const recusado =
     Array.isArray(convidados) &&
     convidados.some((c) => proprio(c, 'self') === true && proprio(c, 'responseStatus') === 'declined');
-  const tarefaGoogleId = idDaTarefa(api);
+  const tarefaGoogleId = idDaTarefa(api, agendaId);
+  const serie = proprio(api, 'recurringEventId');
   const cor = corDoEvento(api, daAgenda);
   return {
     evento: {
@@ -606,8 +631,10 @@ function traduzir(
       salaId: typeof sala === 'string' && SALAS_FIXAS.indexOf(sala) >= 0 ? sala : null,
       link: linkValido(link) ? link : null,
       ...(feito ? { feito: true } : {}),
-      ...(doDono(api, agendaId) ? {} : { somenteLeitura: true }),
+      // Bloco de tarefa não é somente leitura: o app grava o feito na tarefa (nunca no evento).
+      ...(doDono(api, agendaId) || tarefaGoogleId !== null ? {} : { somenteLeitura: true }),
       ...(tarefaGoogleId !== null ? { tarefaGoogleId } : {}),
+      ...(tarefaGoogleId !== null && typeof serie === 'string' && serie !== '' ? { tarefaRepetida: true } : {}),
       ...(cor ? { cor } : {}),
     },
     // Dia inteiro conta da meia-noite de Lisboa, para ordenar com os de horário.
@@ -698,25 +725,28 @@ function paginaDeEventos(servico: ServicoDeAgenda, agendaId: string, timeMin: st
   return google('events.list', () => servico.Events.list(agendaId, args));
 }
 
+/** Os campos extras de uma leitura. Um 400 da API troca para os de base no resto dela. */
+type Extras = { campos: readonly CampoExtra[]; aoRecusar?: () => void };
+
 /**
  * Eventos de uma agenda no período. `cortada`: sobrou página por ler (teto de
- * eventos ou de páginas). Com campos extras, um 400 na primeira página (a API
- * não conhece o campo) faz ler de novo só com os campos de base.
+ * eventos ou de páginas). Com campos extras, um 400 (a API não conhece o
+ * campo) faz ler de novo só com os campos de base, e o resto da leitura (as
+ * outras agendas e páginas) já vai só com eles.
  */
-function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string, timeMax: string, extras: readonly CampoExtra[] = []) {
+function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string, timeMax: string, extras: Extras = { campos: [] }) {
   const achados: NonNullable<ReturnType<typeof traduzir>>[] = [];
-  const base = camposDosEventos([]);
-  let campos = camposDosEventos(extras);
   let pagina: string | undefined;
   for (let vez = 0; vez < PAGINAS_NO_MAXIMO && achados.length < EVENTOS_NO_MAXIMO; vez++) {
     let resposta: { items?: EventoDaApi[]; nextPageToken?: string };
     try {
-      resposta = paginaDeEventos(servico, agenda.id, timeMin, timeMax, campos, pagina);
+      resposta = paginaDeEventos(servico, agenda.id, timeMin, timeMax, camposDosEventos(extras.campos), pagina);
     } catch (erro) {
-      if (vez > 0 || campos === base || !(erro instanceof FalhaDoGoogle) || erro.status !== 400) throw erro;
+      if (extras.campos.length === 0 || !(erro instanceof FalhaDoGoogle) || erro.status !== 400) throw erro;
       registrar('campos novos da agenda recusados; lidos só os de base');
-      campos = base;
-      resposta = paginaDeEventos(servico, agenda.id, timeMin, timeMax, campos, pagina);
+      extras.campos = [];
+      extras.aoRecusar?.();
+      resposta = paginaDeEventos(servico, agenda.id, timeMin, timeMax, camposDosEventos([]), pagina);
     }
     for (const item of Array.isArray(resposta?.items) ? resposta.items : []) {
       if (proprio(item, 'status') === 'cancelled' || proprio(item, 'eventType') === 'workingLocation') continue;
@@ -736,7 +766,10 @@ function lerAgenda(servico: ServicoDeAgenda, agenda: AgendaALer, timeMin: string
  */
 export function listarEventos(dados: unknown, servico: ServicoDeAgenda, opcoes: OpcoesDaLeitura = {}): RespostaEventos {
   const { de, ate } = lerPeriodo(dados);
-  const extras = (opcoes.extras ?? []).filter((c) => CAMPOS_EXTRAS.indexOf(c) >= 0);
+  const extras: Extras = {
+    campos: (opcoes.extras ?? []).filter((c) => CAMPOS_EXTRAS.indexOf(c) >= 0),
+    ...(opcoes.aoRecusarExtras ? { aoRecusar: opcoes.aoRecusarExtras } : {}),
+  };
   const timeMin = meiaNoiteEmLisboa(de);
   const timeMax = meiaNoiteEmLisboa(diaSeguinte(ate));
   const { agendas, cortada } = agendasMarcadas(servico);
@@ -756,19 +789,28 @@ export function listarEventos(dados: unknown, servico: ServicoDeAgenda, opcoes: 
   }
   if (todos.length > EVENTOS_NO_MAXIMO) incompleto = true;
   todos.sort((a, b) => a.ordem - b.ordem || a.fimMs - b.fimMs);
-  const eventos = todos.slice(0, EVENTOS_NO_MAXIMO).map((t) => t.evento);
-  aplicarEstadosDasTarefas(eventos, { de, ate }, opcoes.estadosDasTarefas);
-  return { eventos, incompleto };
+  const lidos = todos.slice(0, EVENTOS_NO_MAXIMO).map((t) => t.evento);
+  marcarRepetidas(lidos);
+  return { eventos: aplicarEstadosDasTarefas(lidos, { de, ate }, opcoes.estadosDasTarefas), incompleto };
+}
+
+/** O mesmo id de tarefa em mais de um bloco: tarefa repetida (o estado no Google Tarefas é um só). */
+function marcarRepetidas(eventos: Evento[]) {
+  const vezes = new Map<string, number>();
+  for (const e of eventos) if (e.tarefaGoogleId !== undefined) vezes.set(e.tarefaGoogleId, (vezes.get(e.tarefaGoogleId) ?? 0) + 1);
+  for (const e of eventos) if (e.tarefaGoogleId !== undefined && (vezes.get(e.tarefaGoogleId) ?? 0) > 1) e.tarefaRepetida = true;
 }
 
 /**
  * O feito dos blocos de tarefa passa a ser o do Google Tarefas, lido em lote
- * (uma leitura por lista, nunca uma por evento). Falha nessa leitura não
- * derruba os eventos: os blocos só ficam sem o estado do Google Tarefas.
+ * (uma leitura por lista, nunca uma por evento). Blocos de tarefa repetida
+ * ficam sem o estado. Blocos de uma espelho da lista "Central" saem da
+ * leitura: a tarefa já aparece na Central. Falha (ou tempo esgotado) nessa
+ * leitura não derruba os eventos: os blocos só ficam sem o estado.
  */
-function aplicarEstadosDasTarefas(eventos: Evento[], periodo: { de: string; ate: string }, ler?: LerEstadosDasTarefas) {
+function aplicarEstadosDasTarefas(eventos: Evento[], periodo: { de: string; ate: string }, ler?: LerEstadosDasTarefas): Evento[] {
   const ids = eventos.map((e) => e.tarefaGoogleId).filter((id): id is string => id !== undefined);
-  if (!ler || ids.length === 0) return;
+  if (!ler || ids.length === 0) return eventos;
   let estados: Map<string, EstadoDaTarefa>;
   try {
     estados = ler(ids, periodo);
@@ -776,15 +818,18 @@ function aplicarEstadosDasTarefas(eventos: Evento[], periodo: { de: string; ate:
     // Só o método e o motivo curto (FalhaDasTarefas); nada do dono.
     const falha = erro instanceof Error && /^Google Tarefas \([a-z.]+\): [A-Za-z ]+$/.test(erro.message) ? erro.message : 'falhou';
     registrar(`estado das tarefas ignorado: ${falha}`);
-    return;
+    return eventos;
   }
-  for (const evento of eventos) {
+  return eventos.filter((evento) => {
     const estado = evento.tarefaGoogleId === undefined ? undefined : estados.get(evento.tarefaGoogleId);
-    if (!estado) continue;
+    if (!estado) return true;
+    if (estado.daCentral) return false;
+    if (evento.tarefaRepetida) return true;
     if (estado.feito) evento.feito = true;
     else delete evento.feito;
     if (estado.atualizadaEm !== null) evento.tarefaAtualizadaEm = estado.atualizadaEm;
-  }
+    return true;
+  });
 }
 
 /**
@@ -800,6 +845,12 @@ export function diagnosticarEventos(
 ): {
   eventos: number;
   comDescricaoDeTarefa: number;
+  /** Reconhecidos como bloco (principal, do dono, sem convidados, link no fim). */
+  blocos: number;
+  /** Ids de tarefa que aparecem em mais de um bloco. */
+  idsRepetidos: number;
+  /** Blocos que são ocorrência de uma série. */
+  emSerie: number;
   comTaskId: number;
   comColorId: number;
   comLabel: number;
@@ -815,7 +866,7 @@ export function diagnosticarEventos(
   const camposDaEtiqueta = new Set<string>();
   const tipos: Record<string, number> = {};
   const idsDasTarefas: string[] = [];
-  const conta = { comDescricaoDeTarefa: 0, comTaskId: 0, comColorId: 0, comLabel: 0, transparentes: 0 };
+  const conta = { comDescricaoDeTarefa: 0, blocos: 0, emSerie: 0, comTaskId: 0, comColorId: 0, comLabel: 0, transparentes: 0 };
   for (const item of itens) {
     if (objeto(item)) for (const campo of Object.keys(item)) if (/^[A-Za-z]{1,40}$/.test(campo)) campos.add(campo);
     const etiqueta = proprio(item, 'label');
@@ -830,10 +881,14 @@ export function diagnosticarEventos(
     const tipo = proprio(item, 'eventType');
     const nome = typeof tipo === 'string' && /^[A-Za-z]{1,40}$/.test(tipo) ? tipo : 'sem tipo';
     tipos[nome] = (tipos[nome] ?? 0) + 1;
-    const id = idDaTarefa(item);
-    if (id !== null) idsDasTarefas.push(id);
+    const id = idDaTarefa(item, PRINCIPAL);
+    if (id === null) continue;
+    conta.blocos += 1;
+    if (typeof proprio(item, 'recurringEventId') === 'string') conta.emSerie += 1;
+    idsDasTarefas.push(id);
   }
-  return { eventos: itens.length, ...conta, tipos, campos: [...campos].sort(), camposDaEtiqueta: [...camposDaEtiqueta].sort(), idsDasTarefas };
+  const idsRepetidos = new Set(idsDasTarefas.filter((id, i) => idsDasTarefas.indexOf(id) !== i)).size;
+  return { eventos: itens.length, ...conta, idsRepetidos, tipos, campos: [...campos].sort(), camposDaEtiqueta: [...camposDaEtiqueta].sort(), idsDasTarefas };
 }
 
 /**
@@ -943,7 +998,7 @@ export function marcarEventoFeito(dados: unknown, servico: ServicoDeAgenda): { f
   }
   if (proprio(atual, 'status') === 'cancelled' || !doDono(atual, PRINCIPAL)) return naoGravou;
   // Bloco do Google Tarefas: o feito vai à tarefa (marcarTarefaGoogle), nunca ao título.
-  if (idDaTarefa(atual) !== null) return naoGravou;
+  if (idDaTarefa(atual, PRINCIPAL) !== null) return naoGravou;
   const resumo = proprio(atual, 'summary');
   const texto = typeof resumo === 'string' ? resumo : '';
   const mudaTitulo = !temConvidados(atual);

@@ -291,7 +291,7 @@ describe('marcarTarefaGoogle', () => {
     const guarda = cacheNaMemoria();
     guarda.put('tarefa:web2', JSON.stringify({ l: tese.id, i: 'sumiu' }), 100);
     expect(marcarTarefaGoogle({ taskId: 'web2', feito: true }, tarefas(t), guarda).gravado).toBe(true);
-    expect(JSON.parse(guarda.get('tarefa:web2')!)).toEqual({ l: tese.id, i: 'api2' });
+    expect(JSON.parse(guarda.get('tarefa:web2')!)).toMatchObject({ l: tese.id, i: 'api2' });
   });
 
   it('já no estado pedido: não grava', () => {

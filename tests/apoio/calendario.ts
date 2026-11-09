@@ -36,6 +36,8 @@ export interface EventoGuardado {
   colorId?: string;
   /** Etiqueta (campo novo, que o v3 do Apps Script pode não devolver). */
   label?: { id?: string; backgroundColor?: string };
+  /** Ocorrência de uma série: o id da série. */
+  recurringEventId?: string;
   /** Id da tarefa do Google Tarefas (campo novo, idem). */
   taskId?: string;
 }
@@ -219,6 +221,7 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       organizer: e.organizer,
       creator: e.creator,
       colorId: e.colorId,
+      recurringEventId: e.recurringEventId,
       ...(CAMPOS_NOVOS.filter((c) => conhecidos.has(c) && e[c] !== undefined).reduce((o, c) => ({ ...o, [c]: e[c] }), {})),
     });
   }

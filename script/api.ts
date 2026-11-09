@@ -38,6 +38,8 @@ export interface Ambiente {
   guardaDeTarefas?: GuardaDeTarefas;
   /** Campos novos da agenda que o diagnosticoAgenda viu (label, taskId). */
   extrasDaAgenda?(): CampoExtra[];
+  /** A API recusou os campos extras: a leitura deles se desliga até o próximo diagnosticoAgenda. */
+  esquecerExtrasDaAgenda?(): void;
 }
 
 type Acao = (dados: unknown, ambiente: Ambiente) => unknown;
@@ -78,6 +80,13 @@ function eventos(dados: unknown, ambiente: Ambiente) {
   const guarda = ambiente.guardaDeTarefas ?? null;
   return listarEventos(dados, servico, {
     extras: extras(ambiente),
+    aoRecusarExtras: () => {
+      try {
+        ambiente.esquecerExtrasDaAgenda?.();
+      } catch {
+        // na próxima leitura tenta de novo e volta aos de base
+      }
+    },
     ...(tarefas ? { estadosDasTarefas: (ids, periodo) => estadosDasTarefas(ids, periodo, tarefas, guarda) } : {}),
   });
 }

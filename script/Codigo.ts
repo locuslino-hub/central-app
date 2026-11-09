@@ -266,6 +266,7 @@ const ambiente: Ambiente = {
   emailsGuardados,
   guardaDeTarefas,
   extrasDaAgenda,
+  esquecerExtrasDaAgenda: () => propriedades().setProperty(CHAVE_DOS_EXTRAS, ''),
 };
 
 export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
@@ -451,7 +452,8 @@ type Contagem = ReturnType<typeof diagnosticarEventos>;
 function linhaDosEventos(nome: string, c: Contagem): string {
   return (
     `${nome}: eventos: ${c.eventos}; com description de tarefa: ${c.comDescricaoDeTarefa}; com taskId: ${c.comTaskId}; ` +
-    `com colorId: ${c.comColorId}; com label: ${c.comLabel}; marcados como disponíveis: ${c.transparentes}.`
+    `com colorId: ${c.comColorId}; com label: ${c.comLabel}; marcados como disponíveis: ${c.transparentes}; ` +
+    `reconhecidos como bloco: ${c.blocos}; blocos em série: ${c.emSerie}; ids de tarefa repetidos: ${c.idsRepetidos}.`
   );
 }
 
@@ -491,7 +493,8 @@ export function diagnosticoAgenda() {
     const t = diagnosticarTarefas(ids, { de: hoje, ate }, tarefasGoogle());
     linhas.push(
       `Google Tarefas: listas: ${t.listas}; blocos de tarefa: ${t.blocos}; achados na leitura do período: ${t.noPeriodo}; ` +
-        `achados na busca completa: ${t.naBusca} (pelo link: ${t.peloLink}; pelo id: ${t.peloId}).`,
+        `achados na busca completa: ${t.naBusca} (pelo link: ${t.peloLink}; pelo id: ${t.peloId}); ` +
+        `espelhos da lista Central (saem da agenda): ${t.daCentral}.`,
     );
   } catch (erro) {
     linhas.push(`Google Tarefas falhou (${resumoDoErro(erro)}).`);

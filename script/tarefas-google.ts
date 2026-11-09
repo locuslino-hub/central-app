@@ -1,6 +1,12 @@
-// Espelho das tarefas da Central no Google Tarefas (spec 2026-11-09), pelo
-// serviço avançado Tasks (API v1). O Google é só espelho: o dono usa a Central,
-// e nada aqui lê o Google Tarefas para mudar a Central.
+// Google Tarefas pelo serviço avançado Tasks (API v1), com duas partes:
+// 1. Espelho das tarefas da Central (spec 2026-11-09, feito espelhado): o
+//    Google é só espelho; nada do que muda na lista "Central" volta à Central.
+// 2. Blocos do Google Tarefas na Agenda (spec 2026-11-09, blocos): tarefas que
+//    o dono agenda com hora em qualquer lista. Aqui se lê o estado delas (o
+//    feito do Google vale na Central, ver src/dados/eventos-feitos.ts) e se
+//    conclui ou reabre a tarefa. As espelhos da lista "Central" que voltarem
+//    como blocos são marcadas, e a leitura dos eventos as tira (a tarefa já
+//    está na Central).
 //
 // Regras fixas:
 // - tudo fica na lista "Central", criada se faltar;
@@ -276,9 +282,11 @@ export function provarTarefas(servico: ServicoDeTarefas): { listas: number; temC
 // ---------- blocos do Google Tarefas na Agenda (spec 2026-11-09, blocos) ----------
 //
 // Tarefas que o dono agenda com hora no Google Tarefas aparecem na Agenda como
-// eventos (com o link `tasks.google.com/task/<id>` na descrição). O feito
-// delas vive no Google Tarefas: aqui o script lê o estado em lote e conclui
-// ou reabre a tarefa, em qualquer lista.
+// eventos (com o link `tasks.google.com/task/<id>` no fim da descrição). O
+// feito delas vive no Google Tarefas: aqui o script lê o estado em lote e
+// conclui ou reabre a tarefa, em qualquer lista. As espelhos da lista
+// "Central" que voltarem como blocos são reconhecidas (a tarefa já está na
+// Central) para a leitura dos eventos as tirar.
 
 /** O cache do script (CacheService), onde fica o que já se achou. */
 export interface GuardaDeTarefas {
@@ -288,18 +296,40 @@ export interface GuardaDeTarefas {
   remove(chave: string): void;
 }
 
+/** Relógio (ms), para o teto de tempo das leituras. */
+export type Relogio = () => number;
+
 /** Onde cada tarefa está (lista e id da API), guardado por 6 h. */
 export const SEGUNDOS_DO_LOCAL = 6 * 60 * 60;
 /** O estado lido das tarefas de um período: cache curto, para leituras seguidas (semana, mês, hoje). */
 export const SEGUNDOS_DOS_ESTADOS = 2 * 60;
+/** Tarefa procurada e não achada: não se procura de novo por 10 min. */
+export const SEGUNDOS_DO_NAO_ACHADO = 10 * 60;
+/** As listas do dono (ids e qual é a "Central"): 30 min. */
+export const SEGUNDOS_DAS_LISTAS = 30 * 60;
+/** Teto da busca de uma tarefa para marcar: passou disso, `gravado: false`. */
+export const TETO_DA_BUSCA_MS = 20_000;
+/** Teto da leitura dos estados na ação `eventos`: passou disso, os blocos vêm sem estado. */
+export const TETO_DOS_ESTADOS_MS = 15_000;
 const CHAVE_DA_VERSAO = 'tarefas-versao';
+const CHAVE_DAS_LISTAS = 'tarefas-listas';
 const CAMPOS_DA_BUSCA = 'items(id,status,updated,webViewLink,deleted),nextPageToken';
 const LISTAS_NO_MAXIMO = 50;
 const PAGINAS_POR_LISTA = 20;
 const ESTADOS_NO_CACHE_NO_MAXIMO = 90_000;
+const CHAVE_NO_MAXIMO = 250;
 const DIA_MS = 24 * 60 * 60 * 1000;
 
-type Achada = { lista: string; id: string; idDaWeb: string | null; feito: boolean; atualizadaEm: number | null };
+type Lista = { id: string; central: boolean };
+type Achada = { lista: string; id: string; idDaWeb: string | null; feito: boolean; atualizadaEm: number | null; central: boolean };
+
+/** A leitura passou do teto de tempo. A mensagem é fixa. */
+class TempoEsgotado extends Error {
+  constructor() {
+    super('Google Tarefas (tempo): tempo esgotado');
+    this.name = 'TempoEsgotado';
+  }
+}
 
 const semPermissao = (erro: unknown) => erro instanceof FalhaDasTarefas && (erro.status === 401 || erro.status === 403);
 
@@ -310,57 +340,21 @@ function idDaWeb(link: unknown): string | null {
   return id && ID_DE_TAREFA.test(id) ? id : null;
 }
 
-function achada(lista: string, tarefa: TarefaDaApi | undefined): Achada | null {
+function achada(lista: Lista, tarefa: TarefaDaApi | undefined): Achada | null {
   if (!tarefa || tarefa.deleted === true || typeof tarefa.id !== 'string' || !ID_DE_TAREFA.test(tarefa.id)) return null;
   const ms = typeof tarefa.updated === 'string' ? Date.parse(tarefa.updated) : NaN;
   return {
-    lista,
+    lista: lista.id,
     id: tarefa.id,
     idDaWeb: idDaWeb(tarefa.webViewLink),
     feito: tarefa.status === 'completed',
     atualizadaEm: Number.isFinite(ms) ? ms : null,
+    central: lista.central,
   };
 }
 
 /** A tarefa é a do bloco? Pelo link da web ou pelo id da API. */
 const eDaTarefa = (a: Achada, taskId: string) => a.idDaWeb === taskId || a.id === taskId;
-
-/** Os ids de todas as listas do dono (com teto). */
-function todasAsListas(servico: ServicoDeTarefas): string[] {
-  const ids: string[] = [];
-  let pagina: string | undefined;
-  for (let vez = 0; vez < PAGINAS_NO_MAXIMO && ids.length < LISTAS_NO_MAXIMO; vez++) {
-    const args: Args = { maxResults: 100 };
-    if (pagina) args.pageToken = pagina;
-    const resposta = google('tasklists.list', () => servico.Tasklists.list(args));
-    for (const lista of Array.isArray(resposta?.items) ? resposta.items : []) {
-      if (typeof lista?.id === 'string' && ID_DO_GOOGLE.test(lista.id)) ids.push(lista.id);
-    }
-    pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
-    if (!pagina) break;
-  }
-  return ids.slice(0, LISTAS_NO_MAXIMO);
-}
-
-/**
- * Lê as tarefas de uma lista (concluídas e escondidas também), página a
- * página, até `aoAchar` responder true. `filtro`: dueMin/dueMax.
- */
-function lerLista(servico: ServicoDeTarefas, lista: string, filtro: Args, aoAchar: (a: Achada) => boolean): boolean {
-  let pagina: string | undefined;
-  for (let vez = 0; vez < PAGINAS_POR_LISTA; vez++) {
-    const args: Args = { maxResults: 100, showCompleted: true, showHidden: true, fields: CAMPOS_DA_BUSCA, ...filtro };
-    if (pagina) args.pageToken = pagina;
-    const resposta = google('tasks.list', () => servico.Tasks.list(lista, args));
-    for (const tarefa of Array.isArray(resposta?.items) ? resposta.items : []) {
-      const a = achada(lista, tarefa);
-      if (a && aoAchar(a)) return true;
-    }
-    pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
-    if (!pagina) break;
-  }
-  return false;
-}
 
 // O cache nunca derruba nada: sem ele, só se lê mais vezes.
 function lerDoCache(guarda: GuardaDeTarefas | null, chave: string): string | null {
@@ -372,10 +366,13 @@ function lerDoCache(guarda: GuardaDeTarefas | null, chave: string): string | nul
 }
 
 function gravarNoCache(guarda: GuardaDeTarefas | null, valores: Record<string, string>, segundos: number) {
-  if (!guarda || Object.keys(valores).length === 0) return;
+  // O CacheService não aceita chave com mais de 250 caracteres.
+  const validos: Record<string, string> = {};
+  for (const chave of Object.keys(valores)) if (chave.length <= CHAVE_NO_MAXIMO) validos[chave] = valores[chave];
+  if (!guarda || Object.keys(validos).length === 0) return;
   try {
-    if (guarda.putAll) guarda.putAll(valores, segundos);
-    else for (const chave of Object.keys(valores)) guarda.put(chave, valores[chave], segundos);
+    if (guarda.putAll) guarda.putAll(validos, segundos);
+    else for (const chave of Object.keys(validos)) guarda.put(chave, validos[chave], segundos);
   } catch {
     // segue sem cache
   }
@@ -389,14 +386,75 @@ function tirarDoCache(guarda: GuardaDeTarefas | null, chave: string) {
   }
 }
 
-const chaveDoLocal = (taskId: string) => `tarefa:${taskId}`;
+/** As listas do dono (com teto), guardadas por 30 min. */
+function todasAsListas(servico: ServicoDeTarefas, guarda: GuardaDeTarefas | null): Lista[] {
+  const guardadas = lerDoCache(guarda, CHAVE_DAS_LISTAS);
+  if (guardadas) {
+    try {
+      const lido = JSON.parse(guardadas) as unknown;
+      if (Array.isArray(lido) && lido.every((x) => Array.isArray(x) && typeof x[0] === 'string' && ID_DO_GOOGLE.test(x[0]))) {
+        return lido.map((x: unknown[]) => ({ id: x[0] as string, central: x[1] === 1 }));
+      }
+    } catch {
+      // lê de novo
+    }
+  }
+  const listas: Lista[] = [];
+  let pagina: string | undefined;
+  for (let vez = 0; vez < PAGINAS_NO_MAXIMO && listas.length < LISTAS_NO_MAXIMO; vez++) {
+    const args: Args = { maxResults: 100 };
+    if (pagina) args.pageToken = pagina;
+    const resposta = google('tasklists.list', () => servico.Tasklists.list(args));
+    for (const lista of Array.isArray(resposta?.items) ? resposta.items : []) {
+      if (typeof lista?.id === 'string' && ID_DO_GOOGLE.test(lista.id)) listas.push({ id: lista.id, central: lista.title === NOME_DA_LISTA });
+    }
+    pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
+    if (!pagina) break;
+  }
+  const cortadas = listas.slice(0, LISTAS_NO_MAXIMO);
+  gravarNoCache(guarda, { [CHAVE_DAS_LISTAS]: JSON.stringify(cortadas.map((l) => [l.id, l.central ? 1 : 0])) }, SEGUNDOS_DAS_LISTAS);
+  return cortadas;
+}
 
-function lerLocal(guarda: GuardaDeTarefas | null, taskId: string): { lista: string; id: string } | null {
+/**
+ * Lê as tarefas de uma lista (concluídas e escondidas também), página a
+ * página, até `aoAchar` responder true. `filtro`: dueMin/dueMax. Passou do
+ * `prazo` (ms do relógio), lança TempoEsgotado.
+ */
+function lerLista(
+  servico: ServicoDeTarefas,
+  lista: Lista,
+  filtro: Args,
+  aoAchar: (a: Achada) => boolean,
+  prazo: { ate: number; relogio: Relogio } | null,
+): boolean {
+  let pagina: string | undefined;
+  for (let vez = 0; vez < PAGINAS_POR_LISTA; vez++) {
+    if (prazo && prazo.relogio() > prazo.ate) throw new TempoEsgotado();
+    const args: Args = { maxResults: 100, showCompleted: true, showHidden: true, fields: CAMPOS_DA_BUSCA, ...filtro };
+    if (pagina) args.pageToken = pagina;
+    const resposta = google('tasks.list', () => servico.Tasks.list(lista.id, args));
+    for (const tarefa of Array.isArray(resposta?.items) ? resposta.items : []) {
+      const a = achada(lista, tarefa);
+      if (a && aoAchar(a)) return true;
+    }
+    pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
+    if (!pagina) break;
+  }
+  return false;
+}
+
+const chaveDoLocal = (taskId: string) => `tarefa:${taskId}`;
+const chaveDoNaoAchado = (taskId: string) => `tarefa-nao:${taskId}`;
+
+function lerLocal(guarda: GuardaDeTarefas | null, taskId: string): { lista: Lista; id: string } | null {
   const texto = lerDoCache(guarda, chaveDoLocal(taskId));
   if (!texto) return null;
   try {
-    const { l, i } = JSON.parse(texto) as { l?: unknown; i?: unknown };
-    return typeof l === 'string' && typeof i === 'string' && ID_DO_GOOGLE.test(l) && ID_DE_TAREFA.test(i) ? { lista: l, id: i } : null;
+    const { l, i, c } = JSON.parse(texto) as { l?: unknown; i?: unknown; c?: unknown };
+    return typeof l === 'string' && typeof i === 'string' && ID_DO_GOOGLE.test(l) && ID_DE_TAREFA.test(i)
+      ? { lista: { id: l, central: c === 1 }, id: i }
+      : null;
   } catch {
     return null;
   }
@@ -404,8 +462,7 @@ function lerLocal(guarda: GuardaDeTarefas | null, taskId: string): { lista: stri
 
 function guardarLocais(guarda: GuardaDeTarefas | null, locais: [taskId: string, a: Achada][]) {
   const valores: Record<string, string> = {};
-  // O CacheService não aceita chave com mais de 250 caracteres.
-  for (const [taskId, a] of locais) if (chaveDoLocal(taskId).length <= 250) valores[chaveDoLocal(taskId)] = JSON.stringify({ l: a.lista, i: a.id });
+  for (const [taskId, a] of locais) valores[chaveDoLocal(taskId)] = JSON.stringify({ l: a.lista, i: a.id, c: a.central ? 1 : 0 });
   gravarNoCache(guarda, valores, SEGUNDOS_DO_LOCAL);
 }
 
@@ -420,15 +477,30 @@ function diaMais(data: string, dias: number): string {
   return new Date(Date.UTC(ano, mes - 1, dia) + dias * DIA_MS).toISOString().slice(0, 10);
 }
 
-/** As tarefas com dia no período (com folga de um dia), de todas as listas. */
-function tarefasDoPeriodo(servico: ServicoDeTarefas, periodo: { de: string; ate: string }): Achada[] {
-  const filtro = { dueMin: `${diaMais(periodo.de, -1)}T00:00:00.000Z`, dueMax: `${diaMais(periodo.ate, 2)}T00:00:00.000Z` };
+/** dueMin/dueMax para as tarefas com dia no período, com folga de um dia. */
+function filtroDoPeriodo(periodo: { de: string; ate: string }): Args {
+  return { dueMin: `${diaMais(periodo.de, -1)}T00:00:00.000Z`, dueMax: `${diaMais(periodo.ate, 2)}T00:00:00.000Z` };
+}
+
+/** As tarefas com dia no período, de todas as listas. */
+function tarefasDoPeriodo(
+  servico: ServicoDeTarefas,
+  guarda: GuardaDeTarefas | null,
+  periodo: { de: string; ate: string },
+  prazo: { ate: number; relogio: Relogio } | null,
+): Achada[] {
   const todas: Achada[] = [];
-  for (const lista of todasAsListas(servico)) {
-    lerLista(servico, lista, filtro, (a) => {
-      todas.push(a);
-      return false;
-    });
+  for (const lista of todasAsListas(servico, guarda)) {
+    lerLista(
+      servico,
+      lista,
+      filtroDoPeriodo(periodo),
+      (a) => {
+        todas.push(a);
+        return false;
+      },
+      prazo,
+    );
   }
   return todas;
 }
@@ -440,7 +512,16 @@ function lerEstadosGuardados(texto: string | null): Achada[] | null {
     if (!Array.isArray(lido)) return null;
     return lido.flatMap((x: unknown): Achada[] =>
       Array.isArray(x) && typeof x[0] === 'string' && typeof x[1] === 'string' && (x[2] === null || typeof x[2] === 'string')
-        ? [{ lista: x[0], id: x[1], idDaWeb: x[2] as string | null, feito: x[3] === 1, atualizadaEm: typeof x[4] === 'number' ? x[4] : null }]
+        ? [
+            {
+              lista: x[0],
+              id: x[1],
+              idDaWeb: x[2] as string | null,
+              feito: x[3] === 1,
+              atualizadaEm: typeof x[4] === 'number' ? x[4] : null,
+              central: x[5] === 1,
+            },
+          ]
         : [],
     );
   } catch {
@@ -449,17 +530,19 @@ function lerEstadosGuardados(texto: string | null): Achada[] | null {
 }
 
 /**
- * Estado (feito e hora da última mudança) das tarefas dos blocos, para a
- * leitura dos eventos. Uma leitura por lista (só as tarefas com dia no
- * período), nunca uma por evento, guardada por 2 min; marcar uma tarefa
- * invalida o guardado. As que não aparecem ficam fora do mapa (o bloco vem
- * sem estado). O lugar de cada uma fica guardado por 6 h, para marcar.
+ * Estado (feito, hora da última mudança, se é espelho da "Central") das
+ * tarefas dos blocos, para a leitura dos eventos. Uma leitura por lista (só
+ * as tarefas com dia no período), nunca uma por evento, guardada por 2 min;
+ * marcar uma tarefa invalida o guardado. Passou de 15 s, lança (a leitura dos
+ * eventos segue sem estado). As que não aparecem ficam fora do mapa. O lugar
+ * de cada uma fica guardado por 6 h, para marcar.
  */
 export function estadosDasTarefas(
   ids: readonly string[],
   periodo: { de: string; ate: string },
   servico: ServicoDeTarefas,
   guarda: GuardaDeTarefas | null,
+  relogio: Relogio = Date.now,
 ): Map<string, EstadoDaTarefa> {
   const pedidos = ids.filter((id) => ID_DE_TAREFA.test(id));
   const resultado = new Map<string, EstadoDaTarefa>();
@@ -467,8 +550,8 @@ export function estadosDasTarefas(
   const chave = `tarefas-estados:${versaoDosEstados(guarda)}:${periodo.de}:${periodo.ate}`;
   let todas = lerEstadosGuardados(lerDoCache(guarda, chave));
   if (todas === null) {
-    todas = tarefasDoPeriodo(servico, periodo);
-    const texto = JSON.stringify(todas.map((a) => [a.lista, a.id, a.idDaWeb, a.feito ? 1 : 0, a.atualizadaEm]));
+    todas = tarefasDoPeriodo(servico, guarda, periodo, { ate: relogio() + TETO_DOS_ESTADOS_MS, relogio });
+    const texto = JSON.stringify(todas.map((a) => [a.lista, a.id, a.idDaWeb, a.feito ? 1 : 0, a.atualizadaEm, a.central ? 1 : 0]));
     if (texto.length <= ESTADOS_NO_CACHE_NO_MAXIMO) gravarNoCache(guarda, { [chave]: texto }, SEGUNDOS_DOS_ESTADOS);
   }
   const locais: [string, Achada][] = [];
@@ -476,39 +559,53 @@ export function estadosDasTarefas(
     if (resultado.has(taskId)) continue;
     const a = todas.find((t) => eDaTarefa(t, taskId));
     if (!a) continue;
-    resultado.set(taskId, { feito: a.feito, atualizadaEm: a.atualizadaEm });
+    resultado.set(taskId, { feito: a.feito, atualizadaEm: a.atualizadaEm, ...(a.central ? { daCentral: true } : {}) });
     locais.push([taskId, a]);
   }
   guardarLocais(guarda, locais);
   return resultado;
 }
 
-export function lerMarcaDeTarefa(dados: unknown): { taskId: string; feito: boolean } {
+/** `{taskId, feito, dia?}`: `dia` (AAAA-MM-DD) é o do bloco, para procurar primeiro só nele. */
+export function lerMarcaDeTarefa(dados: unknown): { taskId: string; feito: boolean; dia?: string } {
   exigir(objeto(dados));
-  const { taskId, feito } = dados;
+  const { taskId, feito, dia } = dados;
   exigir(typeof taskId === 'string' && ID_DE_TAREFA.test(taskId));
   exigir(typeof feito === 'boolean');
-  return { taskId, feito };
+  exigir(dia === undefined || dataValida(dia));
+  return { taskId, feito, ...(dia !== undefined ? { dia } : {}) };
 }
 
-/** Procura a tarefa em todas as listas, sem filtro de dia (concluídas e escondidas também). */
-function procurarTarefa(servico: ServicoDeTarefas, taskId: string): Achada | null {
+/** Procura a tarefa em todas as listas, com o filtro dado (concluídas e escondidas também). */
+function procurarTarefa(
+  servico: ServicoDeTarefas,
+  guarda: GuardaDeTarefas | null,
+  taskId: string,
+  filtro: Args,
+  prazo: { ate: number; relogio: Relogio },
+): Achada | null {
   let achou: Achada | null = null;
-  for (const lista of todasAsListas(servico)) {
-    const parou = lerLista(servico, lista, {}, (a) => {
-      if (!eDaTarefa(a, taskId)) return false;
-      achou = a;
-      return true;
-    });
+  for (const lista of todasAsListas(servico, guarda)) {
+    const parou = lerLista(
+      servico,
+      lista,
+      filtro,
+      (a) => {
+        if (!eDaTarefa(a, taskId)) return false;
+        achou = a;
+        return true;
+      },
+      prazo,
+    );
     if (parou) break;
   }
   return achou;
 }
 
 /** A tarefa no lugar guardado, ou null se ela não está mais lá. */
-function tarefaNoLocal(servico: ServicoDeTarefas, local: { lista: string; id: string }): Achada | null {
+function tarefaNoLocal(servico: ServicoDeTarefas, local: { lista: Lista; id: string }): Achada | null {
   try {
-    return achada(local.lista, google('tasks.get', () => servico.Tasks.get(local.lista, local.id)));
+    return achada(local.lista, google('tasks.get', () => servico.Tasks.get(local.lista.id, local.id)));
   } catch (erro) {
     if (sumiu(erro) || (erro instanceof FalhaDasTarefas && erro.status === 400)) return null;
     throw erro;
@@ -516,30 +613,38 @@ function tarefaNoLocal(servico: ServicoDeTarefas, local: { lista: string; id: st
 }
 
 /**
- * `marcarTarefaGoogle {taskId, feito}`: conclui (`completed`) ou reabre
+ * `marcarTarefaGoogle {taskId, feito, dia?}`: conclui (`completed`) ou reabre
  * (`needsAction`, sem a hora de conclusão) a tarefa de um bloco, em qualquer
  * lista. Acha pelo `webViewLink` (que termina no id do link do bloco) ou pelo
- * id da API; o lugar fica guardado por 6 h. Já no estado pedido, não grava.
- * Nunca mexe no título. Sem permissão (401/403), sem o serviço ou sem a
- * tarefa: `gravado: false`, sem erro (o feito fica só na Central).
+ * id da API: primeiro no lugar guardado (6 h), depois só nas tarefas do dia
+ * do bloco e, por fim, em tudo, com teto de 20 s. Não achada fica guardada
+ * como tal por 10 min. Já no estado pedido, não grava. Nunca mexe no título.
+ * `gravado: false`, sem erro (o feito fica só na Central): sem permissão
+ * (401/403), sem o serviço, sem a tarefa, tempo esgotado ou tarefa que o
+ * Google não deixa mudar (400, ex. atribuída pelo Docs ou pelo Chat).
  */
 export function marcarTarefaGoogle(
   dados: unknown,
   servico: ServicoDeTarefas | null,
   guarda: GuardaDeTarefas | null,
+  relogio: Relogio = Date.now,
 ): { feito: boolean; gravado: boolean } {
-  const { taskId, feito } = lerMarcaDeTarefa(dados);
+  const { taskId, feito, dia } = lerMarcaDeTarefa(dados);
   const naoGravou = { feito, gravado: false };
   if (!servico) return naoGravou;
+  if (lerDoCache(guarda, chaveDoNaoAchado(taskId))) return naoGravou;
+  const prazo = { ate: relogio() + TETO_DA_BUSCA_MS, relogio };
   try {
     const local = lerLocal(guarda, taskId);
     let tarefa = local ? tarefaNoLocal(servico, local) : null;
     if (local && !tarefa) tirarDoCache(guarda, chaveDoLocal(taskId));
+    if (!tarefa && dia !== undefined) tarefa = procurarTarefa(servico, guarda, taskId, filtroDoPeriodo({ de: dia, ate: dia }), prazo);
+    if (!tarefa) tarefa = procurarTarefa(servico, guarda, taskId, {}, prazo);
     if (!tarefa) {
-      tarefa = procurarTarefa(servico, taskId);
-      if (!tarefa) return naoGravou;
-      guardarLocais(guarda, [[taskId, tarefa]]);
+      gravarNoCache(guarda, { [chaveDoNaoAchado(taskId)]: '1' }, SEGUNDOS_DO_NAO_ACHADO);
+      return naoGravou;
     }
+    guardarLocais(guarda, [[taskId, tarefa]]);
     if (tarefa.feito === feito) return { feito, gravado: true };
     const corpo = feito ? { status: 'completed' } : { status: 'needsAction', completed: null };
     const alvo = tarefa;
@@ -547,36 +652,45 @@ export function marcarTarefaGoogle(
     gravarNoCache(guarda, { [CHAVE_DA_VERSAO]: String(Number(versaoDosEstados(guarda)) + 1) }, SEGUNDOS_DO_LOCAL);
     return { feito, gravado: true };
   } catch (erro) {
-    if (sumiu(erro) || semPermissao(erro)) return naoGravou;
+    if (erro instanceof TempoEsgotado) return naoGravou;
+    if (sumiu(erro) || semPermissao(erro) || (erro instanceof FalhaDasTarefas && erro.status === 400)) return naoGravou;
     throw erro;
   }
 }
 
 /**
  * Para diagnosticoAgenda: quantas tarefas dos blocos a leitura do período
- * acha, e quantas a busca completa acha (pelo link ou pelo id). Só contagens.
+ * acha, quantas a busca completa acha (pelo link ou pelo id) e quantas são
+ * espelhos da lista "Central". Só contagens.
  */
 export function diagnosticarTarefas(
   ids: readonly string[],
   periodo: { de: string; ate: string },
   servico: ServicoDeTarefas,
-): { listas: number; blocos: number; noPeriodo: number; naBusca: number; peloLink: number; peloId: number } {
-  const listas = todasAsListas(servico);
-  const doPeriodo = tarefasDoPeriodo(servico, periodo);
+): { listas: number; blocos: number; noPeriodo: number; naBusca: number; peloLink: number; peloId: number; daCentral: number } {
+  const listas = todasAsListas(servico, null);
+  const doPeriodo = tarefasDoPeriodo(servico, null, periodo, null);
   // A busca completa lê cada lista uma vez só, e compara na memória.
   const todas: Achada[] = [];
   for (const lista of listas) {
-    lerLista(servico, lista, {}, (a) => {
-      todas.push(a);
-      return false;
-    });
+    lerLista(
+      servico,
+      lista,
+      {},
+      (a) => {
+        todas.push(a);
+        return false;
+      },
+      null,
+    );
   }
-  const conta = { noPeriodo: 0, naBusca: 0, peloLink: 0, peloId: 0 };
+  const conta = { noPeriodo: 0, naBusca: 0, peloLink: 0, peloId: 0, daCentral: 0 };
   for (const taskId of ids) {
     if (doPeriodo.some((a) => eDaTarefa(a, taskId))) conta.noPeriodo += 1;
     const a = todas.find((t) => eDaTarefa(t, taskId));
     if (!a) continue;
     conta.naBusca += 1;
+    if (a.central) conta.daCentral += 1;
     if (a.idDaWeb === taskId) conta.peloLink += 1;
     else conta.peloId += 1;
   }

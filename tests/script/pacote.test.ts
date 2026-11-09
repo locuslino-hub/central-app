@@ -1293,6 +1293,8 @@ describe('diagnosticoAgenda (blocos do Google Tarefas e cores)', () => {
     expect(relatorio).toMatch(/Campos vistos: .*description.*summary/);
     expect(relatorio).toMatch(/Google Tarefas: listas: 1; blocos de tarefa: 2; achados na leitura do período: 1; achados na busca completa: 1 \(pelo link: 1; pelo id: 0\)/);
     expect(relatorio).toMatch(/label\): desligada; leitura do taskId: desligada/);
+    expect(relatorio).toMatch(/reconhecidos como bloco: 2; blocos em série: 0; ids de tarefa repetidos: 0\./);
+    expect(relatorio).toMatch(/espelhos da lista Central \(saem da agenda\): 0\./);
     for (const proibido of ['Secret', 'Marina', 'Renata', 'Souza', 'example.com', 'mudanças', 'tasks.google.com', 'Sala']) {
       expect(relatorio + erros.join('\n')).not.toContain(proibido);
     }
@@ -1314,6 +1316,19 @@ describe('diagnosticoAgenda (blocos do Google Tarefas e cores)', () => {
     const eventos = (resposta as { dados: { eventos: { id: string; cor?: unknown; tarefaGoogleId?: string }[] } }).dados.eventos;
     expect(eventos.find((e) => e.id === 'blocoSecreto1')).toMatchObject({ tarefaGoogleId: 'webSecreto1', cor: { chave: 'label:etqSecreta', hex: '#3f51b5' } });
     expect(eventos.find((e) => e.id === 'comumSecreto')!.cor).toEqual({ chave: 'cor:9', hex: '#3f51b5' });
+  });
+
+  it('conta ids de tarefa repetidos e espelhos da lista Central, sem os ids', () => {
+    const carregado = preparado();
+    const hoje = hojeEmLisboa();
+    const tarde = { inicio: `${hoje}T15:00:00Z`, fim: `${hoje}T16:00:00Z` };
+    carregado.calendario.evento(PRINCIPAL, { id: 'repetidoSecreto', summary: 'Tese de novo', ...tarde, description: `${AVISO}webSecreto1`, eventType: 'focusTime' });
+    const central = carregado.tarefasGoogle.lista('Central');
+    carregado.tarefasGoogle.tarefa(central, { id: 'apiEspelhoSecreta', idDaWeb: 'webSecreto2', due: `${hoje}T00:00:00.000Z` });
+    const relatorio = carregado.diagnosticar();
+    expect(relatorio).toMatch(/ids de tarefa repetidos: 1\./);
+    expect(relatorio).toMatch(/espelhos da lista Central \(saem da agenda\): 1\./);
+    expect(relatorio).not.toContain('Secret');
   });
 
   it('sem o Google Tarefas ligado, diz que falhou e segue', () => {
