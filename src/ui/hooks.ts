@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
-import type { Colecoes, Config, Documento, EstadoEmail, Pagina, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { Colecoes, Config, Documento, EstadoEmail, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -101,7 +101,7 @@ export function useTituloDaAba(titulo: string) {
 // ---- Dados que o menu e as páginas leem ----
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
-function useLista<C extends 'salas' | 'pessoas' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas'>(colecao: C): Colecoes[C][] | undefined {
+function useLista<C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas'>(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
     let ativo = true;
@@ -155,6 +155,11 @@ export function usePaginas(): Pagina[] | undefined {
 
 export function usePessoas(): Pessoa[] | undefined {
   return useLista('pessoas');
+}
+
+/** As palavras que a memória do chat liga a uma sala ("banheiro" é Casa). `undefined` enquanto lê. */
+export function usePalavras(): Palavra[] | undefined {
+  return useLista('palavras');
 }
 
 export function usePessoa(id: string | undefined): Pessoa | null | undefined {

@@ -17,6 +17,7 @@ import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { useDetalheDoEvento } from './DetalheEvento';
 import { useAgora, useDia, useSalas, useTarefas, useTela } from './hooks';
 import { ItemDeAgenda } from './ItemDeAgenda';
+import { useAdivinharSala, type Adivinhar } from './useAdivinharSala';
 import { NavegacaoDoCalendario } from './NavegacaoDoCalendario';
 import { abreviacaoDoDia, diaPorExtenso, periodoPorExtenso } from './quando';
 import { useEventos } from './useEventos';
@@ -29,9 +30,10 @@ type DiaProps = {
   hoje: string;
   salas: Sala[];
   aoAbrir: (item: ItemDeEvento, botao: HTMLElement) => void;
+  adivinhar: Adivinhar;
 };
 
-function DiaDaSemana({ dia, hoje, salas, aoAbrir }: DiaProps) {
+function DiaDaSemana({ dia, hoje, salas, aoAbrir, adivinhar }: DiaProps) {
   const eHoje = dia.data === hoje;
   const itens: Item[] = [...dia.diaInteiro, ...dia.horarios];
   const id = `dia-${dia.data}`;
@@ -60,7 +62,7 @@ function DiaDaSemana({ dia, hoje, salas, aoAbrir }: DiaProps) {
       ) : (
         <ul class="cal-lista">
           {itens.map((item) => (
-            <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={aoAbrir} />
+            <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={aoAbrir} adivinhar={adivinhar} />
           ))}
         </ul>
       )}
@@ -73,6 +75,7 @@ export function Semana({ data }: { data?: string }) {
   const agora = useAgora();
   const tela = useTela();
   const salas = useSalas();
+  const adivinhar = useAdivinharSala();
   const tarefas = useTarefas();
 
   const base = data ?? hoje;
@@ -95,7 +98,7 @@ export function Semana({ data }: { data?: string }) {
   const escolhido = escolha?.semana === segunda ? escolha.dia : padrao;
 
   const celular = tela === 'celular';
-  const props = { hoje, salas, aoAbrir: abrir };
+  const props = { hoje, salas, aoAbrir: abrir, adivinhar };
 
   return (
     <div class="semana" data-modo={celular ? 'dia' : 'dias'}>

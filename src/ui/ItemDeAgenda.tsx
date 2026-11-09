@@ -3,17 +3,27 @@
 import { descreverHorario, formatarMinutos, type Item, type ItemDeEvento } from '../dados/calendario';
 import type { Sala } from '../dados/tipos';
 import { corDaSala } from './Menu';
+import type { Adivinhar } from './useAdivinharSala';
 
 type Props = {
   item: Item;
   salas: Sala[];
   aoAbrir: (item: ItemDeEvento, botao: HTMLElement) => void;
+  /** Compromisso sem sala (veio do Google): a sala adivinhada pelo título. */
+  adivinhar?: Adivinhar;
 };
 
-export function ItemDeAgenda({ item, salas, aoAbrir }: Props) {
-  const salaId = item.tipo === 'evento' ? item.evento.salaId : item.tarefa.salaId;
+/** A sala do item: a gravada; num compromisso sem sala, a adivinhada pelo título. */
+export function salaDoItem(item: Item, adivinhar?: Adivinhar): string | null {
+  if (item.tipo !== 'evento') return item.tarefa.salaId;
+  return item.evento.salaId ?? adivinhar?.(item.evento.titulo) ?? null;
+}
+
+export function ItemDeAgenda({ item, salas, aoAbrir, adivinhar }: Props) {
+  const salaId = salaDoItem(item, adivinhar);
   const sala = salaId === null ? undefined : salas.find((s) => s.id === salaId);
-  const etiqueta = sala && <span class={`etiqueta ${corDaSala(sala.id)}`}>{sala.nome}</span>;
+  const cor = salaId === null ? 'sala-outra' : corDaSala(salaId);
+  const etiqueta = sala && <span class={`etiqueta ${cor}`}>{sala.nome}</span>;
 
   if (item.tipo === 'evento') {
     const { evento } = item;
@@ -21,7 +31,7 @@ export function ItemDeAgenda({ item, salas, aoAbrir }: Props) {
     const simples = !item.diaInteiro && !item.continuaAntes && !item.continuaDepois;
     return (
       <li
-        class={`cal-item cal-evento ${sala ? corDaSala(sala.id) : 'sala-outra'}`}
+        class={`cal-item cal-evento ${cor}`}
         data-tipo="evento"
         data-passado={String(item.passado)}
         data-livre={String(evento.livre)}
@@ -49,7 +59,7 @@ export function ItemDeAgenda({ item, salas, aoAbrir }: Props) {
   const { tarefa } = item;
   return (
     <li
-      class={`cal-item cal-tarefa ${sala ? corDaSala(sala.id) : 'sala-outra'}`}
+      class={`cal-item cal-tarefa ${cor}`}
       data-tipo={item.tipo}
       data-passado={String(item.passado)}
       data-feita={String(tarefa.feito)}

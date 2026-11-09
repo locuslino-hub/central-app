@@ -66,7 +66,8 @@ function partesDoNome(nome: string): string[] {
     .filter((parte) => parte.length > 1 && !TITULOS.has(parte) && !PARTICULAS.has(parte));
 }
 
-function montar(pessoas: Pessoa[], palavras: Palavra[], salas: Sala[]): MemoriaDoChat {
+/** A memória a partir de listas já lidas (o chat lê da loja; a tela usa o que já tem). */
+export function montarMemoria(pessoas: Pessoa[], palavras: Palavra[], salas: Sala[]): MemoriaDoChat {
   const vivas = <T extends { apagado?: boolean }>(lista: T[]) => lista.filter((x) => !x.apagado);
   pessoas = vivas(pessoas);
   palavras = vivas(palavras);
@@ -150,7 +151,7 @@ function emOrdem<T>(gravar: () => Promise<T>): Promise<T> {
 /** Lê pessoas, palavras e salas da loja. Ler de novo a cada frase pega o que veio do outro aparelho. */
 export async function carregarMemoria(): Promise<MemoriaDoChat> {
   const [pessoas, palavras, salas] = await Promise.all([listar('pessoas'), listar('palavras'), listar('salas')]);
-  return montar(pessoas, palavras, salas);
+  return montarMemoria(pessoas, palavras, salas);
 }
 
 /**

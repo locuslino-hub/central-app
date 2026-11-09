@@ -28,6 +28,7 @@ import { PorResponder } from './PorResponder';
 import { diaPorExtenso } from './quando';
 import { SemPrazo } from './SemPrazo';
 import { daChecklist } from './tarefas-lista';
+import { useAdivinharSala } from './useAdivinharSala';
 import { useAgoraDoDia, type AgoraDoDia } from './useAgoraDoDia';
 import './painel.css';
 import './tarefas.css';
@@ -100,6 +101,7 @@ function MensagemDoDia({ dia }: { dia: AgoraDoDia }) {
 
 function LinhaDoDia({ dia }: { dia: AgoraDoDia }) {
   const salas = useSalas();
+  const adivinhar = useAdivinharSala();
   const calendario = useMemo(
     () => montarCalendario({ eventos: dia.eventos.eventos, tarefas: dia.tarefas ?? [], de: dia.hoje, ate: dia.hoje, agora: dia.agora }),
     [dia.eventos.eventos, dia.tarefas, dia.hoje, dia.agora],
@@ -110,7 +112,7 @@ function LinhaDoDia({ dia }: { dia: AgoraDoDia }) {
         <h2 id="titulo-linha-do-dia">Linha do dia</h2>
         <p class="cartao-topo-nota">{textoDoTempoLivre(dia).curto}</p>
       </div>
-      <LinhaDia dia={calendario.dia(dia.hoje)} agora={dia.agora} salas={salas} fimDoDia={minutosDe(dia.fimDoDia)} />
+      <LinhaDia dia={calendario.dia(dia.hoje)} agora={dia.agora} salas={salas} fimDoDia={minutosDe(dia.fimDoDia)} adivinhar={adivinhar} />
     </section>
   );
 }

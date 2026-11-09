@@ -8,6 +8,7 @@ import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { useDetalheDoEvento } from './DetalheEvento';
 import { useAgora, useDia, useSalas, useTarefas } from './hooks';
 import { ItemDeAgenda } from './ItemDeAgenda';
+import { useAdivinharSala } from './useAdivinharSala';
 import { useEventos } from './useEventos';
 import { useVerTudo } from './VerTudo';
 import './calendario.css';
@@ -16,6 +17,7 @@ export function AgendaHoje() {
   const hoje = useDia();
   const agora = useAgora();
   const salas = useSalas();
+  const adivinhar = useAdivinharSala();
   const tarefas = useTarefas();
   const { leitura, atualizar } = useEventos(hoje, hoje);
   const { abrir, detalhe } = useDetalheDoEvento(salas, hoje);
@@ -41,7 +43,7 @@ export function AgendaHoje() {
       {itens.length > 0 && (
         <ul class="cal-lista">
           {itens.slice(0, mostrar).map((item) => (
-            <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={abrir} />
+            <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={abrir} adivinhar={adivinhar} />
           ))}
         </ul>
       )}

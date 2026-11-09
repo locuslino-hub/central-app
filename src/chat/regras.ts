@@ -98,6 +98,17 @@ function salaNomeada(n: string, listas: { sala: string; ini: number }[]): string
   return null;
 }
 
+/**
+ * A sala de um título sem sala (compromisso que veio do Google), pelas mesmas
+ * regras das tarefas: 1) nome da sala no título; 2) palavra guardada na
+ * memória; 3) sala da pessoa cadastrada citada. `null` se nada bate.
+ */
+export function salaDoTitulo(titulo: string, memoria: Pick<Memoria, 'acharSala' | 'acharPessoa'>): string | null {
+  const o = titulo.normalize('NFC');
+  if (!o.trim()) return null;
+  return salaNomeada(normalizar(o), []) ?? memoria.acharSala(o) ?? memoria.acharPessoa(o)?.salaId ?? null;
+}
+
 function idDaSala(termo: string): string {
   return TODAS.find(([t]) => new RegExp(`^(?:${t})$`).test(termo))![1];
 }

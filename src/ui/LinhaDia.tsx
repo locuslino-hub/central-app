@@ -12,7 +12,9 @@ import {
 } from '../dados/calendario';
 import { hojeEmLisboa, minutoEmLisboa } from '../dados/dia';
 import type { Sala } from '../dados/tipos';
+import { salaDoItem } from './ItemDeAgenda';
 import { corDaSala } from './Menu';
+import type { Adivinhar } from './useAdivinharSala';
 import './calendario.css';
 
 type Props = {
@@ -23,6 +25,8 @@ type Props = {
   inicioDoDia?: number;
   /** Fim da janela, em minutos (20h, o fim do dia). Cresce se algo termina depois. */
   fimDoDia?: number;
+  /** Compromisso sem sala (veio do Google): a sala adivinhada pelo título. */
+  adivinhar?: Adivinhar;
 };
 
 const titulo = (item: Item) => {
@@ -45,7 +49,7 @@ function frase(item: Item): string {
   return `${horario}: ${titulo(item)}${notas.map((nota) => `, ${nota}`).join('')}`;
 }
 
-export function LinhaDia({ dia, agora, salas, inicioDoDia = 8 * 60, fimDoDia = 20 * 60 }: Props) {
+export function LinhaDia({ dia, agora, inicioDoDia = 8 * 60, fimDoDia = 20 * 60, adivinhar }: Props) {
   const itens = dia.horarios;
   const comeco = Math.min(inicioDoDia, ...itens.map((i) => Math.floor(i.ini / 60) * 60));
   const fim = Math.min(MINUTOS_NO_DIA, Math.max(fimDoDia, ...itens.map((i) => Math.ceil(i.fim / 60) * 60)));
@@ -77,7 +81,7 @@ export function LinhaDia({ dia, agora, salas, inicioDoDia = 8 * 60, fimDoDia = 2
 
       <div class="lin-faixa" aria-hidden="true" data-linhas={numeroDeLinhas} style={{ '--linhas': numeroDeLinhas }}>
         {itens.map((item, i) => {
-          const salaId = item.tipo === 'evento' ? item.evento.salaId : item.tarefa.salaId;
+          const salaId = salaDoItem(item, adivinhar);
           const cor = salaId === null ? 'sala-outra' : corDaSala(salaId);
           const comum = {
             'data-titulo': titulo(item),
