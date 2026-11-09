@@ -44,6 +44,8 @@ function rotuloDe(id: IdComHref, hoje: Date): string {
       return 'Atividades';
     case 'sem-prazo':
       return 'Sem prazo';
+    case 'cores':
+      return 'Cores do Google';
     case 'conectar':
       return 'Conectar aparelho';
     case 'ia':

@@ -26,11 +26,12 @@ const ev = (titulo: string, inicio: string, fim: string, extra: Partial<Evento> 
 
 const diaCom = (eventos: Evento[]) => montarCalendario({ eventos, tarefas: [], de: HOJE, ate: HOJE, agora: AGORA }).dia(HOJE);
 
-/** Adivinhação de mentira: só "aula" e "projeto". */
+/** Adivinhação de mentira: só "aula" e "projeto"; a sala gravada vale antes. */
 const adivinhar = (titulo: string) => (/aula/i.test(titulo) ? 'sala-aulas' : /projeto/i.test(titulo) ? 'sala-investigacao' : null);
+const salaDoEvento = (e: Pick<Evento, 'salaId' | 'titulo'>) => e.salaId ?? adivinhar(e.titulo);
 
 describe('ItemDeAgenda: compromisso sem sala', () => {
-  const mostrar = (e: Evento, props: { adivinhar?: (titulo: string) => string | null } = {}) => {
+  const mostrar = (e: Evento, props: { salaDoEvento?: typeof salaDoEvento } = {}) => {
     const item = diaCom([e]).horarios[0] as ItemDeEvento;
     render(
       <ul>
@@ -41,15 +42,15 @@ describe('ItemDeAgenda: compromisso sem sala', () => {
   };
 
   it('ganha a cor da sala adivinhada pelo título', () => {
-    expect(mostrar(ev('Aula de métodos', '09:00', '10:30'), { adivinhar }).className).toContain('sala-aulas');
+    expect(mostrar(ev('Aula de métodos', '09:00', '10:30'), { salaDoEvento }).className).toContain('sala-aulas');
   });
 
   it('nada bate: fica neutro', () => {
-    expect(mostrar(ev('Dentista', '18:00', '18:45'), { adivinhar }).className).toContain('sala-outra');
+    expect(mostrar(ev('Dentista', '18:00', '18:45'), { salaDoEvento }).className).toContain('sala-outra');
   });
 
   it('a sala gravada vale antes da adivinhada', () => {
-    expect(mostrar(ev('Aula de métodos', '09:00', '10:30', { salaId: 'sala-mba' }), { adivinhar }).className).toContain('sala-mba');
+    expect(mostrar(ev('Aula de métodos', '09:00', '10:30', { salaId: 'sala-mba' }), { salaDoEvento }).className).toContain('sala-mba');
   });
 
   it('sem adivinhação, continua neutro', () => {
@@ -60,7 +61,7 @@ describe('ItemDeAgenda: compromisso sem sala', () => {
 describe('LinhaDia: compromisso sem sala', () => {
   it('o bloco ganha a cor da sala adivinhada; o que não bate fica neutro', () => {
     const dia = diaCom([ev('Reunião do projeto Aurora', '16:30', '17:15'), ev('Dentista', '18:00', '18:45')]);
-    render(<LinhaDia dia={dia} agora={AGORA} salas={[]} adivinhar={adivinhar} />);
+    render(<LinhaDia dia={dia} agora={AGORA} salas={[]} salaDoEvento={salaDoEvento} />);
     const bloco = (titulo: string) => document.querySelector(`[data-titulo="${titulo}"]`) as HTMLElement;
     expect(bloco('Reunião do projeto Aurora').className).toContain('sala-inv');
     expect(bloco('Dentista').className).toContain('sala-outra');

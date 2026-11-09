@@ -4,14 +4,14 @@
 import { descreverHorario, formatarMinutos, type Item, type ItemDeEvento } from '../dados/calendario';
 import type { Sala } from '../dados/tipos';
 import { corDaSala } from './Menu';
-import type { Adivinhar } from './useAdivinharSala';
+import type { SalaDoEvento } from './useAdivinharSala';
 
 type Props = {
   item: Item;
   salas: Sala[];
   aoAbrir: (item: ItemDeEvento, botao: HTMLElement) => void;
-  /** Compromisso sem sala (veio do Google): a sala adivinhada pelo título. */
-  adivinhar?: Adivinhar;
+  /** A sala do compromisso (gravada, pela cor do Google ou pelo título). Sem isto, só a gravada. */
+  salaDoEvento?: SalaDoEvento;
   /** Marcar ou desmarcar o compromisso como feito. Sem isto, não há caixa. */
   aoMarcarFeito?: (item: ItemDeEvento, feito: boolean) => void;
 };
@@ -29,14 +29,14 @@ export function CaixaDeFeito({ feito, rotulo, aoTocar }: { feito: boolean; rotul
   );
 }
 
-/** A sala do item: a gravada; num compromisso sem sala, a adivinhada pelo título. */
-export function salaDoItem(item: Item, adivinhar?: Adivinhar): string | null {
+/** A sala do item: a da tarefa; num compromisso, a resolvida (gravada, cor do Google, título). */
+export function salaDoItem(item: Item, salaDoEvento?: SalaDoEvento): string | null {
   if (item.tipo !== 'evento') return item.tarefa.salaId;
-  return item.evento.salaId ?? adivinhar?.(item.evento.titulo) ?? null;
+  return salaDoEvento ? salaDoEvento(item.evento) : item.evento.salaId;
 }
 
-export function ItemDeAgenda({ item, salas, aoAbrir, adivinhar, aoMarcarFeito }: Props) {
-  const salaId = salaDoItem(item, adivinhar);
+export function ItemDeAgenda({ item, salas, aoAbrir, salaDoEvento, aoMarcarFeito }: Props) {
+  const salaId = salaDoItem(item, salaDoEvento);
   const sala = salaId === null ? undefined : salas.find((s) => s.id === salaId);
   const cor = salaId === null ? 'sala-outra' : corDaSala(salaId);
   const etiqueta = sala && <span class={`etiqueta ${cor}`}>{sala.nome}</span>;

@@ -44,6 +44,12 @@ export function Salas({ titulo }: { titulo: string }) {
             <CartaoDaSala key={sala.id} sala={sala} tarefas={tarefas} pessoas={pessoas} />
           ))}
         </ul>
+        <p class="salas-cores">
+          <a class="botao-link" href={hrefDe('cores')}>
+            Cores do Google
+          </a>
+          <span>Ligue cada cor da sua agenda a uma sala.</span>
+        </p>
         <Pessoas />
       </div>
     </Pagina>

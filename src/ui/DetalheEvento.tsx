@@ -1,10 +1,12 @@
 // Detalhes de um evento do Google Agenda (só leitura): título, quando, agenda,
-// sala e um link para abrir no Google Agenda. Editar, mover e apagar ficam lá.
+// sala (a resolvida: gravada, pela cor do Google ou pelo título) e um link
+// para abrir no Google Agenda. Editar, mover e apagar ficam lá.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Evento } from '../dados/agenda';
 import type { ItemDeEvento } from '../dados/calendario';
 import type { Sala } from '../dados/tipos';
 import { quandoDoEvento } from './quando';
+import { useSalaDoEvento } from './useAdivinharSala';
 
 const FOCAVEIS = 'a[href], button:not([disabled])';
 
@@ -34,6 +36,7 @@ type Props = {
 
 export function DetalheEvento({ evento, passado, salas, hoje, aoFechar }: Props) {
   const caixa = useRef<HTMLDivElement>(null);
+  const salaDoEvento = useSalaDoEvento();
   useEffect(() => {
     caixa.current?.focus();
   }, []);
@@ -59,9 +62,14 @@ export function DetalheEvento({ evento, passado, salas, hoje, aoFechar }: Props)
     }
   }
 
-  const sala = evento.salaId === null ? undefined : salas.find((s) => s.id === evento.salaId);
+  const salaId = salaDoEvento(evento);
+  const sala = salaId === null ? undefined : salas.find((s) => s.id === salaId);
   const link = linkParaAbrir(evento.link);
-  const situacoes = [passado && 'Já passou', evento.livre && 'Livre: não ocupa tempo'].filter(Boolean) as string[];
+  const situacoes = [
+    passado && 'Já passou',
+    evento.livre && 'Livre: não ocupa tempo',
+    evento.tarefaGoogleId !== undefined && 'Tarefa do Google Tarefas: o feito vai para lá',
+  ].filter(Boolean) as string[];
 
   return (
     <>

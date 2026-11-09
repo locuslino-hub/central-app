@@ -13,6 +13,7 @@ export type IdDaRota =
   | 'ano'
   | 'salas'
   | 'sala'
+  | 'cores'
   | 'pessoa'
   | 'caixa'
   | 'quadro'
@@ -77,6 +78,7 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
   },
   salas: { caminho: 'salas', titulo: fixo('Salas') },
   sala: { caminho: 'sala/:id', titulo: fixo('Sala'), voltarPara: '#/salas' },
+  cores: { caminho: 'cores', titulo: fixo('Cores do Google'), voltarPara: '#/salas' },
   pessoa: { caminho: 'pessoa/:id', titulo: fixo('Pessoa'), voltarPara: '#/salas' },
   caixa: { caminho: 'caixa', titulo: fixo('Caixa') },
   quadro: { caminho: 'quadro', titulo: fixo('Quadro') },

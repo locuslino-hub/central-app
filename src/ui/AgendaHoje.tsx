@@ -11,7 +11,7 @@ import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { useDetalheDoEvento } from './DetalheEvento';
 import { useAgora, useDia, useSalas, useTarefas } from './hooks';
 import { ItemDeAgenda } from './ItemDeAgenda';
-import { useAdivinharSala } from './useAdivinharSala';
+import { useSalaDoEvento } from './useAdivinharSala';
 import { useComFeito, useEventos } from './useEventos';
 import { useVerTudo } from './VerTudo';
 import './calendario.css';
@@ -21,7 +21,7 @@ export function AgendaHoje() {
   const hoje = useDia();
   const agora = useAgora();
   const salas = useSalas();
-  const adivinhar = useAdivinharSala();
+  const salaDoEvento = useSalaDoEvento();
   const tarefas = useTarefas();
   const { leitura, atualizar } = useEventos(hoje, hoje);
   const { abrir, detalhe } = useDetalheDoEvento(salas, hoje);
@@ -61,7 +61,7 @@ export function AgendaHoje() {
               item={item}
               salas={salas}
               aoAbrir={abrir}
-              adivinhar={adivinhar}
+              salaDoEvento={salaDoEvento}
               aoMarcarFeito={item.tipo === 'evento' ? marcar : undefined}
             />
           ))}

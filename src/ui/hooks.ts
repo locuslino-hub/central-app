@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
 import { lerNome, NOME_MUDOU } from '../dados/nome';
-import type { Colecoes, Config, Documento, EstadoEmail, EventoFeito, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { Colecoes, Config, CorDaSala, Documento, EstadoEmail, EventoFeito, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -103,7 +103,7 @@ export function useTituloDaAba(titulo: string) {
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
 function useLista<
-  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos',
+  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos' | 'coresDasSalas',
 >(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
@@ -144,6 +144,11 @@ export function useTarefas(): Tarefa[] | undefined {
 /** Os compromissos marcados como feitos na Central (feito espelhado). `undefined` enquanto lê. */
 export function useEventosFeitos(): EventoFeito[] | undefined {
   return useLista('eventosFeitos');
+}
+
+/** Cores do Google ligadas a salas (tela Cores do Google). `undefined` enquanto lê. */
+export function useCoresDasSalas(): CorDaSala[] | undefined {
+  return useLista('coresDasSalas');
 }
 
 /** O que o dono já fez com cada e-mail (Feito, Agora não). `undefined` enquanto lê. */

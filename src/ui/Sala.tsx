@@ -22,6 +22,7 @@ import { Pagina } from './Pagina';
 import { juntar, nEmails, nTarefas } from './plural';
 import { AvisoDeEmail, EstadoDosEmails, ListaDeEmails } from './PorResponder';
 import { nomeDoDia } from './quando';
+import { useSalaDoEvento } from './useAdivinharSala';
 import { useCaixaDeEmails } from './useEmails';
 import { useEventos } from './useEventos';
 import './salas.css';
@@ -66,6 +67,7 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
   const ate = somarDias(hoje, DIAS_DE_COMPROMISSOS - 1);
   const { leitura, atualizar } = useEventos(hoje, ate);
   const { abrir, detalhe } = useDetalheDoEvento(salas, hoje);
+  const salaDoEvento = useSalaDoEvento();
 
   const daSala = (tarefas ?? []).filter((t: Tarefa) => t.salaId === sala.id && !t.apagado);
   const abertas = daSala.filter((t) => !t.feito);
@@ -75,10 +77,10 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
     .filter((p) => p.salaId === sala.id && !p.apagado)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
-  // Compromissos: só os desta sala, ainda por vir, dia a dia.
+  // Compromissos: só os desta sala (gravada, pela cor do Google ou pelo título), ainda por vir, dia a dia.
   const dias = useMemo(() => {
     const calendario = montarCalendario({
-      eventos: leitura.eventos.filter((e) => e.salaId === sala.id),
+      eventos: leitura.eventos.filter((e) => salaDoEvento(e) === sala.id),
       tarefas: [],
       de: hoje,
       ate,
@@ -91,7 +93,7 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
       if (itens.length > 0) lista.push({ dia, itens });
     }
     return lista;
-  }, [leitura.eventos, sala.id, hoje, ate, agora]);
+  }, [leitura.eventos, sala.id, hoje, ate, agora, salaDoEvento]);
   const totalDeCompromissos = dias.reduce((soma, { itens }) => soma + itens.length, 0);
   let restam = COMPROMISSOS_NA_SALA;
   const visiveis = dias
@@ -157,7 +159,7 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
               <h3 class="sala-dia-titulo">{nomeDoDia(dia, hoje)}</h3>
               <ul class="cal-lista">
                 {itens.map((item) => (
-                  <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={abrir} />
+                  <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={abrir} salaDoEvento={salaDoEvento} />
                 ))}
               </ul>
             </div>

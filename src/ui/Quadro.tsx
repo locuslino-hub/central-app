@@ -22,6 +22,7 @@ import { corDaSala } from './Menu';
 import { nEmails, nTarefas } from './plural';
 import { AvisoDeEmail, EstadoDosEmails, ListaDeEmails } from './PorResponder';
 import { nomeDoDia } from './quando';
+import { useSalaDoEvento, type SalaDoEvento } from './useAdivinharSala';
 import { useCaixaDeEmails, type ItemDeEmail } from './useEmails';
 import { useEventos } from './useEventos';
 import './emails.css';
@@ -90,9 +91,10 @@ type CorpoProps = {
   caixa: ReturnType<typeof useCaixaDeEmails>;
   conclusoes: ReturnType<typeof useConclusoes>;
   aoAbrir: Parameters<typeof ItemDeAgenda>[0]['aoAbrir'];
+  salaDoEvento: SalaDoEvento;
 };
 
-function CorpoDaColuna({ coluna, filtro, carregando, salas, hoje, caixa, conclusoes, aoAbrir }: CorpoProps) {
+function CorpoDaColuna({ coluna, filtro, carregando, salas, hoje, caixa, conclusoes, aoAbrir, salaDoEvento }: CorpoProps) {
   const mostrarAgenda = filtro !== 'emails';
   const vazia = coluna.tarefas.length === 0 && coluna.emails.length === 0 && (!mostrarAgenda || coluna.compromissos === 0);
   const idBase = `quadro-${coluna.id}`;
@@ -110,7 +112,7 @@ function CorpoDaColuna({ coluna, filtro, carregando, salas, hoje, caixa, conclus
               <h4 class="sala-dia-titulo">{nomeDoDia(dia, hoje)}</h4>
               <ul class="cal-lista">
                 {itens.map((item) => (
-                  <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={aoAbrir} />
+                  <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={aoAbrir} salaDoEvento={salaDoEvento} />
                 ))}
               </ul>
             </div>
@@ -149,6 +151,7 @@ export function Quadro() {
   const caixa = useCaixaDeEmails();
   const [filtro, setFiltro] = useState<FiltroDoQuadro>('tudo');
   const [escolhas, setEscolhas] = useState<Record<string, boolean>>({});
+  const salaDoEvento = useSalaDoEvento();
 
   const segunda = segundaDaSemana(hoje);
   const periodo: Periodo = { segunda, domingo: somarDias(segunda, 6) };
@@ -177,7 +180,7 @@ export function Quadro() {
         for (let dia = primeiro; dia <= ultimo; dia = somarDias(dia, 1)) {
           const { diaInteiro, horarios } = calendario.dia(dia);
           const itens = [...diaInteiro, ...horarios].filter(
-            (item) => item.tipo === 'evento' && item.evento.salaId === sala.id && (filtro === 'semana' || !item.passado),
+            (item) => item.tipo === 'evento' && salaDoEvento(item.evento) === sala.id && (filtro === 'semana' || !item.passado),
           );
           if (itens.length > 0) dias.push({ dia, itens });
         }
@@ -199,7 +202,7 @@ export function Quadro() {
     const mostrarSem = sem.emails.length > 0 || (filtro !== 'emails' && sem.tarefas.length > 0);
     return mostrarSem ? [...todas, sem] : todas;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [salas, tarefas, caixa.itens, calendario, filtro, hoje, segunda, ate]);
+  }, [salas, tarefas, caixa.itens, calendario, filtro, hoje, segunda, ate, salaDoEvento]);
 
   const carregando = tarefas === undefined || caixa.itens === undefined;
   const empilhado = tela === 'celular';
@@ -214,7 +217,7 @@ export function Quadro() {
   }, [inicial, pronto, colunas]);
   const aberta = (id: string) => escolhas[id] ?? id === inicial;
 
-  const props = { filtro, carregando, salas, hoje, caixa, conclusoes, aoAbrir: abrir };
+  const props = { filtro, carregando, salas, hoje, caixa, conclusoes, aoAbrir: abrir, salaDoEvento };
 
   return (
     <div class="quadro" data-modo={empilhado ? 'pilha' : 'colunas'}>

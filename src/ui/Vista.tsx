@@ -6,6 +6,7 @@ import { Atividades } from './Atividades';
 import { Caixa } from './Caixa';
 import { Chat } from './Chat';
 import { Conectar } from './Conectar';
+import { CoresDoGoogle } from './CoresDoGoogle';
 import { ConfigIA } from './ConfigIA';
 import { useTituloDaAba } from './hooks';
 import { Mes } from './Mes';
@@ -110,6 +111,12 @@ export function Vista({ rota }: { rota: RotaAtual }) {
       );
     case 'salas':
       return <Salas titulo={rota.titulo} />;
+    case 'cores':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <CoresDoGoogle />
+        </Pagina>
+      );
     case 'conectar':
       return <ConectarNaCasca titulo={rota.titulo} />;
     case 'ia':
