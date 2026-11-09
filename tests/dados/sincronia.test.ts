@@ -7,6 +7,7 @@ import {
   assinar,
   concluirEnvio,
   gravarDoServidor,
+  lerDiferencaDeRelogio,
   listar,
   listarAvisos,
   listarPendentes,
@@ -81,6 +82,33 @@ async function tarefaNosDois(titulo: string) {
   expect(await sincronizarAqui()).toBe('atualizado');
   return criada;
 }
+
+describe('relógio do servidor', () => {
+  it('depois de puxar, guarda a diferença entre o relógio do servidor e o deste aparelho', async () => {
+    no(notebook);
+    expect(await lerDiferencaDeRelogio()).toBeNull();
+    await sincronizarAqui();
+    expect(await lerDiferencaDeRelogio()).toBe(0); // o servidor de teste usa o mesmo Date.now
+
+    horario(10);
+    servidor.armazem.agora = () => Date.now() + 3 * 60 * MINUTO; // servidor 3 h adiantado
+    await sincronizarAqui();
+    expect(await lerDiferencaDeRelogio()).toBe(3 * 60 * MINUTO);
+  });
+
+  it('script antigo, que não manda agoraDoServidor: não guarda nada (a conferência de relógio é pulada)', async () => {
+    no(notebook);
+    await sincronizarAqui();
+    expect(await lerDiferencaDeRelogio()).toBe(0);
+    const antigo = async <T,>(acao: string, dados: object = {}): Promise<T> => {
+      const resposta = (await servidor.chamar<Record<string, unknown>>(acao, dados)) as Record<string, unknown>;
+      delete resposta.agoraDoServidor;
+      return resposta as T;
+    };
+    expect(await sincronizar({ chamar: antigo, esperar: semEspera })).toBe('atualizado');
+    expect(await lerDiferencaDeRelogio()).toBeNull();
+  });
+});
 
 describe('dois aparelhos', () => {
   it('tarefa criada no notebook aparece no celular, com hora e aparelho de origem e sem pendentes', async () => {

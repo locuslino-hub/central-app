@@ -182,6 +182,24 @@ test.describe('celular, 390 px', () => {
     expect(erros).toEqual([]);
   });
 
+  for (const largura of [390, 360]) {
+    test(`os nomes da barra de baixo cabem numa linha, a ${largura} px`, async ({ page }) => {
+      await page.setViewportSize({ width: largura, height: 800 });
+      await page.goto('/central-app/#/');
+      const barra = page.getByRole('navigation', { name: 'Principal' });
+      const linhas = await barra.locator('a span, button span').evaluateAll((spans) =>
+        spans.map((span) => {
+          const estilo = getComputedStyle(span);
+          const altura = parseFloat(estilo.lineHeight) || parseFloat(estilo.fontSize) * 1.2;
+          return { texto: span.textContent, linhas: Math.round(span.getBoundingClientRect().height / altura) };
+        }),
+      );
+      expect(linhas.map((l) => l.texto)).toEqual(['Painel', 'Atividades', 'Sem prazo', 'Salas', 'Chat', 'Mais']);
+      for (const { texto, linhas: n } of linhas) expect(n, `${texto} em uma linha`).toBe(1);
+      expect(await pequenos(page)).toEqual([]);
+    });
+  }
+
   test('Esta semana deixa a tarefa na semana, sem dia', async ({ page }) => {
     await dizerAoChat(page, 'Preciso parafusar o apoio do banheiro');
     await page.goto('/central-app/#/sem-prazo');

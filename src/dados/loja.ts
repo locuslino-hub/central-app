@@ -26,6 +26,8 @@ const LOCAL = 'local';
 const CHAVE_APARELHO = 'aparelho';
 /** Carimbo do servidor até onde este aparelho já puxou (R5). */
 const CHAVE_DESDE = 'desde';
+/** Relógio do servidor menos o deste aparelho, em ms, medido no último puxar (nulo: o script não informou). */
+const CHAVE_RELOGIO = 'relogio';
 
 // Nova coleção: acrescentar em script/colecoes.ts (o script valida pela mesma
 // lista) e em `Colecoes`, e subir VERSAO. As duas linhas abaixo não compilam se
@@ -304,6 +306,24 @@ export async function removerPendentes(seqs: readonly number[]): Promise<void> {
 export async function lerDesde(): Promise<number> {
   const desde: unknown = await comBanco((banco) => banco.get(LOCAL, CHAVE_DESDE));
   return typeof desde === 'number' ? desde : 0;
+}
+
+/**
+ * Guarda a diferença entre o relógio do servidor (`agoraDoServidor` do puxar)
+ * e o deste aparelho. `null` (script antigo, que não informa) apaga a marca:
+ * quem confere o relógio passa a não conferir.
+ */
+export async function salvarRelogioDoServidor(agoraDoServidor: number | null): Promise<void> {
+  await comBanco(async (banco) => {
+    if (agoraDoServidor === null || !Number.isFinite(agoraDoServidor)) await banco.delete(LOCAL, CHAVE_RELOGIO);
+    else await banco.put(LOCAL, agoraDoServidor - Date.now(), CHAVE_RELOGIO);
+  });
+}
+
+/** Servidor menos aparelho, em ms, ou `null` se o servidor não informou. */
+export async function lerDiferencaDeRelogio(): Promise<number | null> {
+  const diferenca: unknown = await comBanco((banco) => banco.get(LOCAL, CHAVE_RELOGIO));
+  return typeof diferenca === 'number' ? diferenca : null;
 }
 
 export async function salvarDesde(desde: number): Promise<void> {

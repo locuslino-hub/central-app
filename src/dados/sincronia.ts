@@ -12,6 +12,7 @@ import {
   listarPendentes,
   removerPendentes,
   salvarDesde,
+  salvarRelogioDoServidor,
 } from './loja';
 import type { Colecao, Mudanca, PendenteRegistro, Registro } from './tipos';
 
@@ -33,7 +34,7 @@ export const INTERVALO_MS = 60_000;
 // O script recusa corpo acima de 256 KB; a folga cobre o código e o envelope.
 const LIMITE_DO_LOTE = TAMANHO_MAXIMO_DO_CORPO - 4 * 1024;
 
-type RespostaPuxar = { registros: unknown[]; agora: number };
+type RespostaPuxar = { registros: unknown[]; agora: number; agoraDoServidor?: number };
 type RespostaEnviar = {
   aceitas: { colecao: string; id: string }[];
   conflitos: unknown[];
@@ -124,6 +125,8 @@ async function puxar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
   // `agora` do servidor como relógio: este aparelho pode estar atrasado.
   await gravarDoServidor(resposta.registros, resposta.agora);
   await salvarDesde(resposta.agora);
+  // Script antigo não manda `agoraDoServidor`: a marca é apagada e a conferência de relógio é pulada.
+  await salvarRelogioDoServidor(typeof resposta.agoraDoServidor === 'number' ? resposta.agoraDoServidor : null);
 }
 
 const chaveDe = (colecao: string, id: string) => JSON.stringify([colecao, id]);

@@ -129,7 +129,8 @@ type EdicaoProps = {
   tarefa: Tarefa;
   salas: readonly Sala[];
   hoje: string;
-  aoSalvar: (edicao: Edicao) => Promise<void>;
+  /** `false`: a tarefa não existe mais (apagada em outro aparelho). */
+  aoSalvar: (edicao: Edicao) => Promise<boolean>;
   aoApagar: () => Promise<void>;
   aoFechar: () => void;
 };
@@ -162,7 +163,9 @@ function EdicaoDeTarefa({ tarefa, salas, hoje, aoSalvar, aoApagar, aoFechar }: E
       setErro('Escreva o título.');
       return campoTitulo.current?.focus();
     }
-    const edicao: Edicao = { titulo };
+    const edicao: Edicao = {};
+    // Só o que mudou: o título não é regravado por cima de uma edição feita em outro aparelho.
+    if (titulo.trim() !== tarefa.titulo.trim()) edicao.titulo = titulo;
     if (salaId !== (tarefa.salaId ?? '')) edicao.salaId = salaId === '' ? null : salaId;
     if (temQuando && (quando !== inicial.valor || (quando === 'dia' && dia !== inicial.dia))) {
       if (quando === 'dia') {
@@ -179,10 +182,11 @@ function EdicaoDeTarefa({ tarefa, salas, hoje, aoSalvar, aoApagar, aoFechar }: E
       else if (quando === 'semana') edicao.quando = { tipo: 'semana', hoje };
       else if (quando === 'sem-prazo') edicao.quando = { tipo: 'sem-prazo' };
     }
+    if (Object.keys(edicao).length === 0) return aoFechar(); // nada mudou: nada a gravar
     emAndamento.current = true;
     setErro(null);
     try {
-      await aoSalvar(edicao);
+      if (!(await aoSalvar(edicao))) setErro('Esta tarefa não existe mais.');
     } catch (falha) {
       console.error('Não consegui salvar a tarefa', falha);
       setErro('Não consegui salvar. Tente de novo.');
@@ -415,8 +419,10 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
             aoSalvar={async (edicao) => {
               const confirmar = prepararFoco?.(tarefa.id);
               const gravou = await editarTarefa(tarefa.id, edicao);
-              if (gravou) confirmar?.();
+              if (!gravou) return false; // o formulário fica aberto, com o aviso
+              confirmar?.();
               fecharEdicao();
+              return true;
             }}
             aoApagar={() => conclusoes.apagar(tarefa)}
           />

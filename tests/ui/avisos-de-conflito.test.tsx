@@ -32,7 +32,7 @@ describe('aviso de conflito no Painel', () => {
   it('mostra uma linha por conflito, com o título da versão que foi substituída', async () => {
     await conflito('Rever capítulo 3', 'Rever capítulo 4');
     render(<AvisosDeConflito />);
-    expect(await screen.findByText('Uma mudança feita em outro aparelho substituiu esta: Rever capítulo 3')).toBeTruthy();
+    expect(await screen.findByText('Duas mudanças na mesma tarefa; ficou a mais recente. A outra era: Rever capítulo 3')).toBeTruthy();
   });
 
   it('Entendi tira o aviso da tela e do armazenamento', async () => {
@@ -41,7 +41,7 @@ describe('aviso de conflito no Painel', () => {
     const botao = await screen.findByRole('button', { name: /^Entendi/ });
     expect(botao.getAttribute('aria-label')).toBe('Entendi: Rever capítulo 3');
     fireEvent.click(botao);
-    await waitFor(() => expect(screen.queryByText(/substituiu esta/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/A outra era/)).toBeNull());
     expect(await listarAvisos()).toEqual([]);
   });
 
@@ -49,7 +49,7 @@ describe('aviso de conflito no Painel', () => {
     render(<AvisosDeConflito />);
     await new Promise((r) => setTimeout(r, 30));
     await conflito('Comprar café', 'Comprar café e pão');
-    expect(await screen.findByText(/substituiu esta: Comprar café$/)).toBeTruthy();
+    expect(await screen.findByText(/A outra era: Comprar café$/)).toBeTruthy();
   });
 
   it('pessoa também: mostra o nome', async () => {
@@ -58,13 +58,13 @@ describe('aviso de conflito no Painel', () => {
       { colecao: 'pessoas', registro: { ...local, salaId: 'sala-aulas', atualizadoEm: AGORA + 60_000, aparelho: 'celular' } },
     ]);
     render(<AvisosDeConflito />);
-    expect(await screen.findByText('Uma mudança feita em outro aparelho substituiu esta: Marina')).toBeTruthy();
+    expect(await screen.findByText('Duas mudanças na mesma pessoa; ficou a mais recente. A outra era: Marina')).toBeTruthy();
   });
 
   it('muitos conflitos: mostra 3 e diz quantos faltam, no plural certo', async () => {
     for (let i = 1; i <= 4; i++) await conflito(`Tarefa ${i}`, `Tarefa ${i} nova`, i * 1000);
     render(<AvisosDeConflito />);
-    await screen.findAllByText(/substituiu esta: Tarefa/);
+    await screen.findAllByText(/A outra era: Tarefa/);
     expect(screen.getAllByRole('button', { name: /^Entendi/ })).toHaveLength(3);
     expect(screen.getByText('Mais 1 aviso como este.')).toBeTruthy();
 
@@ -75,7 +75,7 @@ describe('aviso de conflito no Painel', () => {
   it('o aviso fica numa região viva e é texto puro (nada de HTML do título)', async () => {
     await conflito('<img src=x onerror=alert(1)>', 'Outro');
     const { container } = render(<AvisosDeConflito />);
-    await screen.findByText(/substituiu esta/);
+    await screen.findByText(/A outra era/);
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByRole('region', { name: 'Avisos de mudanças' })).toBeTruthy();
   });
@@ -88,7 +88,7 @@ describe('no Painel do dia', () => {
     history.replaceState(null, '', '/#/');
     render(<App />);
     const principal = within(document.querySelector('main') as HTMLElement);
-    const aviso = await principal.findByText(/substituiu esta: Rever capítulo 3/);
+    const aviso = await principal.findByText(/A outra era: Rever capítulo 3/);
     const checklist = principal.getByRole('heading', { name: 'Checklist do dia' });
     expect(aviso.compareDocumentPosition(checklist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await act(async () => {});

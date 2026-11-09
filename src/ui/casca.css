@@ -339,7 +339,7 @@
   gap: 2px;
   width: 100%;
   min-height: 56px;
-  padding: 4px 2px;
+  padding: 4px 0;
   border: 0;
   border-radius: 20px;
   background: none;
@@ -573,4 +573,12 @@
 }
 .cartao-agora .em-breve {
   margin-bottom: 6px;
+}
+
+/* Seis itens na barra de 390 px (ou 360): cada nome cabe numa linha, sem quebrar "Sem prazo". */
+.atalhos[data-variante='barra'] a,
+.atalhos[data-variante='barra'] button.mais {
+  font-size: 0.72rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }

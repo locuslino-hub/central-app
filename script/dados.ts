@@ -115,7 +115,16 @@ function analisar(conteudo: string | null): Arquivo {
   return arquivo;
 }
 
-export function puxar(dados: unknown, armazem: Armazem): { registros: Item[]; agora: number } {
+/**
+ * `agora`: a marca do arquivo (a hora da última escrita), para o `desde` do
+ * próximo puxar. `agoraDoServidor`: o relógio do servidor neste instante, que
+ * não é a mesma coisa: o arquivo pode estar parado há dias. O app o usa para
+ * conferir o relógio do aparelho antes de virar o dia.
+ */
+export function puxar(
+  dados: unknown,
+  armazem: Armazem,
+): { registros: Item[]; agora: number; agoraDoServidor: number } {
   exigir(objeto(dados) && marcaValida(dados.desde));
   const { desde } = dados;
   const arquivo = analisar(armazem.ler());
@@ -126,6 +135,7 @@ export function puxar(dados: unknown, armazem: Armazem): { registros: Item[]; ag
       .filter((guardado) => guardado.recebidoEm > desde)
       .map(({ colecao, registro }) => ({ colecao, registro })),
     agora: arquivo.ultimo,
+    agoraDoServidor: armazem.agora(),
   };
 }
 

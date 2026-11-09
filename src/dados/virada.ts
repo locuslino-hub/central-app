@@ -11,7 +11,7 @@
 // nova e o resultado é igual).
 import { segundaDaSemana } from '../chat/datas';
 import { hojeEmLisboa, vigiarODia } from './dia';
-import { lerDesde, lerRegistros, listar, salvar } from './loja';
+import { lerDiferencaDeRelogio, lerRegistros, listar, salvar } from './loja';
 import type { Tarefa } from './tipos';
 
 export type ResultadoDaVirada = {
@@ -142,9 +142,10 @@ export function iniciarVirada({
   const emDia = async (espera: Espera): Promise<boolean> => {
     if (!antes || !(await conectado?.())) return true;
     if (!espera.terminou || espera.resultado !== 'atualizado') return false;
-    // Recém-sincronizado: o "agora" do servidor guardado e o relógio daqui têm de concordar.
-    const doServidor = await lerDesde();
-    return doServidor === 0 || Math.abs(agora().getTime() - doServidor) <= DIFERENCA_MAXIMA_DE_RELOGIO_MS;
+    // Recém-sincronizado: o relógio do servidor (medido no puxar) e o daqui têm de concordar.
+    // Sem a medida (script antigo), uma sincronia atualizada basta.
+    const diferenca = await lerDiferencaDeRelogio();
+    return diferenca === null || Math.abs(diferenca) <= DIFERENCA_MAXIMA_DE_RELOGIO_MS;
   };
 
   const adiar = () => {

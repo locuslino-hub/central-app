@@ -1,6 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes, salvar, salvarDesde } from '../../src/dados/loja';
+import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes, salvar, salvarRelogioDoServidor } from '../../src/dados/loja';
 import { sincronizar } from '../../src/dados/sincronia';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { iniciarVirada, virarDia } from '../../src/dados/virada';
@@ -392,7 +392,7 @@ describe('iniciarVirada', () => {
           await gravarDoServidor([
             { colecao: 'tarefas', registro: { ...velha, data: '2026-11-06', atualizadoEm: AGORA + 1000, aparelho: 'outro' } },
           ]);
-          await salvarDesde(Date.now());
+          await salvarRelogioDoServidor(Date.now());
         }
         return estado;
       });
@@ -418,7 +418,7 @@ describe('iniciarVirada', () => {
       const parar = iniciarVirada({
         antes: async () => {
           const estado = estados.shift();
-          if (estado === 'atualizado') await salvarDesde(Date.now());
+          if (estado === 'atualizado') await salvarRelogioDoServidor(Date.now());
           return estado;
         },
         conectado,
@@ -450,7 +450,7 @@ describe('iniciarVirada', () => {
       const parar = iniciarVirada({
         antes: async () => {
           const estado = estados.shift();
-          if (estado === 'atualizado') await salvarDesde(Date.now());
+          if (estado === 'atualizado') await salvarRelogioDoServidor(Date.now());
           return estado;
         },
         conectado,
@@ -467,9 +467,14 @@ describe('iniciarVirada', () => {
       await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
       await salvar('tarefas', tarefa('Semana', { semana: '2026-11-02' }));
       const antes = await listar('tarefas');
-      await salvarDesde(AGORA); // o servidor disse "agora" = quinta 12:20
       vi.setSystemTime(AGORA + 3 * 24 * 3600_000); // o relógio do aparelho pulou 3 dias
-      const parar = iniciarVirada({ antes: async () => 'atualizado', conectado });
+      const parar = iniciarVirada({
+        antes: async () => {
+          await salvarRelogioDoServidor(AGORA); // o servidor diz que agora é quinta 12:20
+          return 'atualizado';
+        },
+        conectado,
+      });
       await vi.advanceTimersByTimeAsync(200);
       await esvaziar();
       expect(await listar('tarefas')).toEqual(antes);
@@ -480,17 +485,81 @@ describe('iniciarVirada', () => {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
       vi.setSystemTime(AGORA);
       await salvar('tarefas', tarefa('Ontem', { data: '2026-11-04' }));
-      await salvarDesde(AGORA + 30 * MIN);
-      const parar = iniciarVirada({ antes: async () => 'atualizado', conectado });
+      const parar = iniciarVirada({
+        antes: async () => {
+          await salvarRelogioDoServidor(AGORA + 30 * MIN); // o relógio daqui está 30 min atrasado
+          return 'atualizado';
+        },
+        conectado,
+      });
       await vi.advanceTimersByTimeAsync(200);
       await esvaziar();
       expect((await listar('tarefas'))[0].data).toBe('2026-11-04');
       parar();
 
-      await salvarDesde(AGORA + 2 * MIN);
-      const parar2 = iniciarVirada({ antes: async () => 'atualizado', conectado });
+      const parar2 = iniciarVirada({
+        antes: async () => {
+          await salvarRelogioDoServidor(AGORA + 2 * MIN);
+          return 'atualizado';
+        },
+        conectado,
+      });
       await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
       parar2();
+    });
+  });
+
+  describe('com a sincronia de verdade (o servidor sem escrita há 23 h)', () => {
+    let notebook: IDBFactory;
+    let servidor: ReturnType<typeof servidorDeTeste>;
+    const semEspera = () => Promise.resolve();
+    const conectado = () => Promise.resolve(true);
+    const HORA = 3600_000;
+
+    beforeEach(() => {
+      notebook = new IDBFactory();
+      globalThis.indexedDB = notebook;
+      servidor = servidorDeTeste();
+    });
+
+    /** Ontem à tarde alguém escreveu; desde então o arquivo do servidor não mudou. */
+    async function escritaDeOntem() {
+      vi.setSystemTime(AGORA - 23 * HORA);
+      await salvar('tarefas', tarefa('Do outro dia', { data: '2026-11-04' }));
+      await sincronizar({ chamar: servidor.chamar, esperar: semEspera });
+      vi.setSystemTime(AGORA);
+    }
+
+    it('relógio do aparelho certo: a virada grava (a última escrita do servidor ser antiga não bloqueia)', async () => {
+      await escritaDeOntem();
+      const parar = iniciarVirada({ antes: () => sincronizar({ chamar: servidor.chamar, esperar: semEspera }), conectado });
+      await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
+      parar();
+    });
+
+    it('relógio do aparelho 3 dias à frente do servidor: não grava', async () => {
+      await escritaDeOntem();
+      vi.setSystemTime(AGORA + 3 * 24 * HORA);
+      servidor.armazem.agora = () => AGORA; // o servidor sabe que ainda é quinta
+      const antes = await listar('tarefas');
+      const parar = iniciarVirada({ antes: () => sincronizar({ chamar: servidor.chamar, esperar: semEspera }), conectado });
+      await esvaziar();
+      await new Promise((r) => setTimeout(r, 100));
+      await esvaziar();
+      expect(await listar('tarefas')).toEqual(antes);
+      parar();
+    });
+
+    it('script antigo (sem agoraDoServidor): depois de uma sincronia atualizada, vira normalmente', async () => {
+      await escritaDeOntem();
+      const antigo = async <T,>(acao: string, dados: object = {}): Promise<T> => {
+        const resposta = (await servidor.chamar<Record<string, unknown>>(acao, dados)) as Record<string, unknown>;
+        delete resposta.agoraDoServidor;
+        return resposta as T;
+      };
+      const parar = iniciarVirada({ antes: () => sincronizar({ chamar: antigo, esperar: semEspera }), conectado });
+      await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe(HOJE));
+      parar();
     });
   });
 

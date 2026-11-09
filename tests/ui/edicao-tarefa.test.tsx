@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { apagar, listar, semear } from '../../src/dados/loja';
+import { apagar, gravarDoServidor, listar, listarPendentes, semear } from '../../src/dados/loja';
 import { Atividades } from '../../src/ui/Atividades';
 import { Checklist } from '../../src/ui/Checklist';
 import { SemPrazo } from '../../src/ui/SemPrazo';
@@ -113,6 +113,54 @@ describe('editar tarefa na linha', () => {
     fireEvent.click(dentro.getByRole('button', { name: 'Salvar' }));
     expect((await dentro.findByRole('alert')).textContent).toBe('Não consegui salvar. Tente de novo.');
     expect((dentro.getByLabelText('Título') as HTMLInputElement).value).toBe('Rever 2');
+  });
+});
+
+describe('editar só o que mudou', () => {
+  it('o título só vai na gravação se foi mudado: outra edição do título feita em outro aparelho não é desfeita', async () => {
+    const t = await criar('Rever capitulo', { data: '2026-11-05' });
+    render(<Checklist />);
+    const dentro = await abrir('Rever capitulo');
+    await waitFor(() => expect((dentro.getByLabelText('Sala') as HTMLSelectElement).options.length).toBe(8));
+    // Enquanto o formulário está aberto, o título muda em outro aparelho.
+    await gravarDoServidor([
+      { colecao: 'tarefas', registro: { ...t, titulo: 'Rever capítulo 3', atualizadoEm: Date.now() + 5000, aparelho: 'celular' } },
+    ]);
+    fireEvent.change(dentro.getByLabelText('Sala'), { target: { value: 'sala-aulas' } });
+    fireEvent.click(dentro.getByRole('button', { name: 'Salvar' }));
+    await waitFor(async () => expect((await unica()).salaId).toBe('sala-aulas'));
+    expect((await unica()).titulo).toBe('Rever capítulo 3');
+  });
+
+  it('sem nenhuma mudança, Salvar só fecha: nada é gravado', async () => {
+    await criar('Rever', { data: '2026-11-05' });
+    render(<Checklist />);
+    const dentro = await abrir('Rever');
+    const pendentes = (await listarPendentes()).length;
+    fireEvent.click(dentro.getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(screen.queryByLabelText('Título')).toBeNull());
+    expect((await listarPendentes()).length).toBe(pendentes);
+  });
+
+  it('tarefa apagada em outro aparelho: diz "Esta tarefa não existe mais." e mantém o formulário aberto', async () => {
+    const t = await criar('Sumindo', { data: '2026-11-05' });
+    render(<Checklist />);
+    const dentro = await abrir('Sumindo');
+    fireEvent.input(dentro.getByLabelText('Título'), { target: { value: 'Sumindo mesmo' } });
+    // Apagada por baixo dos panos, sem aviso da loja: a tela ainda não sabe (a janela da corrida).
+    await new Promise<void>((pronto, falha) => {
+      const abrir = indexedDB.open('central-dados');
+      abrir.onsuccess = () => {
+        const tx = abrir.result.transaction('tarefas', 'readwrite');
+        tx.objectStore('tarefas').put({ ...t, apagado: true });
+        tx.oncomplete = () => pronto();
+        tx.onerror = () => falha(tx.error);
+      };
+    });
+    fireEvent.click(dentro.getByRole('button', { name: 'Salvar' }));
+    expect((await dentro.findByRole('alert')).textContent).toBe('Esta tarefa não existe mais.');
+    expect((dentro.getByLabelText('Título') as HTMLInputElement).value).toBe('Sumindo mesmo');
+    expect(await listar('tarefas')).toEqual([]);
   });
 });
 

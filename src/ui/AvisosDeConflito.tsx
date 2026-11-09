@@ -19,6 +19,22 @@ function rotuloDoRegistro(registro: unknown): string {
   return 'um item';
 }
 
+/** "na mesma tarefa", "na mesma pessoa"... A frase fala da mudança, não de quem a fez. */
+function daMesma(colecao: string): string {
+  switch (colecao) {
+    case 'tarefas':
+      return 'na mesma tarefa';
+    case 'pessoas':
+      return 'na mesma pessoa';
+    case 'salas':
+      return 'na mesma sala';
+    case 'documentos':
+      return 'no mesmo documento';
+    default:
+      return 'no mesmo item';
+  }
+}
+
 function useAvisos(): [Aviso[], () => Promise<unknown>] {
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const ativo = useRef(true);
@@ -68,7 +84,7 @@ export function AvisosDeConflito() {
           const titulo = rotuloDoRegistro(aviso.perdedora);
           return (
             <li key={aviso.id} class="aviso-de-conflito">
-              <span>{`Uma mudança feita em outro aparelho substituiu esta: ${titulo}`}</span>
+              <span>{`Duas mudanças ${daMesma(aviso.colecao)}; ficou a mais recente. A outra era: ${titulo}`}</span>
               <button
                 type="button"
                 class="tarefa-entendi"

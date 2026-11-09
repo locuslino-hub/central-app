@@ -59,7 +59,19 @@ describe('vence', () => {
 
 describe('puxar', () => {
   it('sem arquivo no Drive devolve lista vazia e agora 0', () => {
-    expect(puxar({ desde: 0 }, armazemNaMemoria())).toEqual({ registros: [], agora: 0 });
+    const armazem = armazemNaMemoria();
+    expect(puxar({ desde: 0 }, armazem)).toEqual({ registros: [], agora: 0, agoraDoServidor: armazem.agora() });
+  });
+
+  it('agoraDoServidor é o relógio do servidor agora, não a hora da última escrita no arquivo', () => {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(tarefa('t1', 'Ler capítulo', T0))] }, armazem);
+    const escrita = puxar({ desde: 0 }, armazem);
+    armazem.relogio += 23 * 60 * MINUTO; // ninguém escreve há 23 h
+    const depois = puxar({ desde: 0 }, armazem);
+    expect(depois.agora).toBe(escrita.agora); // a marca do arquivo não anda
+    expect(depois.agoraDoServidor).toBe(armazem.agora());
+    expect(depois.agoraDoServidor - depois.agora).toBeGreaterThanOrEqual(23 * 60 * MINUTO);
   });
 
   it('devolve o que foi enviado, sem campos internos do servidor', () => {
@@ -90,7 +102,7 @@ describe('puxar', () => {
     const armazem = armazemNaMemoria();
     enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
     const { agora } = puxar({ desde: 0 }, armazem);
-    expect(puxar({ desde: agora }, armazem)).toEqual({ registros: [], agora });
+    expect(puxar({ desde: agora }, armazem)).toEqual({ registros: [], agora, agoraDoServidor: armazem.agora() });
   });
 
   it('o carimbo sempre sobe, mesmo com o relógio parado ou voltando', () => {
