@@ -1,8 +1,10 @@
-// A página de cada rota. Painel do dia (checklist e Sem prazo), Sem prazo, Atividades,
-// Salas (com o cadastro de pessoas), Conectar e Chat existem; as demais mostram o
-// título e dizem que ainda não estão prontas, até a tarefa delas chegar.
+// A página de cada rota. Painel do dia (checklist, agenda de hoje e Sem prazo), Semana, Mês,
+// Ano, Sem prazo, Atividades, Salas (com o cadastro de pessoas), Conectar e Chat existem; as
+// demais mostram o título e dizem que ainda não estão prontas, até a tarefa delas chegar.
 import type { ComponentChildren } from 'preact';
 import { hrefDe, type RotaAtual } from '../rotas';
+import { AgendaHoje } from './AgendaHoje';
+import { Ano } from './Ano';
 import { Atividades } from './Atividades';
 import { AvisosDeConflito } from './AvisosDeConflito';
 import { Chat } from './Chat';
@@ -10,8 +12,10 @@ import { Checklist } from './Checklist';
 import { Conectar } from './Conectar';
 import { usePessoa, useSala, useSalas, useTituloDaAba } from './hooks';
 import { corDaSala } from './Menu';
+import { Mes } from './Mes';
 import { Pessoas } from './Pessoas';
 import { SemPrazo } from './SemPrazo';
+import { Semana } from './Semana';
 import './tarefas.css';
 
 function Pagina({ titulo, children }: { titulo: string; children?: ComponentChildren }) {
@@ -117,8 +121,29 @@ export function Vista({ rota }: { rota: RotaAtual }) {
           <AvisosDeConflito />
           <div class="hoje-grade">
             <Checklist />
+            <AgendaHoje />
+          </div>
+          <div class="hoje-grade">
             <SemPrazo />
           </div>
+        </Pagina>
+      );
+    case 'semana':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <Semana data={rota.data} />
+        </Pagina>
+      );
+    case 'mes':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <Mes data={rota.data} />
+        </Pagina>
+      );
+    case 'ano':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <Ano data={rota.data} />
         </Pagina>
       );
     case 'sem-prazo':

@@ -332,9 +332,6 @@ describe('páginas', () => {
 
   it.each([
     '#/agora',
-    '#/semana',
-    '#/mes',
-    '#/ano',
     '#/caixa',
     '#/quadro',
     '#/sala/sala-mba',
@@ -345,7 +342,7 @@ describe('páginas', () => {
   });
 
   it('as telas que existem não dizem "Em breve"', async () => {
-    for (const hash of ['#/', '#/atividades', '#/sem-prazo', '#/salas', '#/chat']) {
+    for (const hash of ['#/', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat']) {
       const { unmount } = render(<App />);
       navegar(hash);
       expect(within(document.querySelector('main') as HTMLElement).queryByText('Esta tela chega numa próxima versão.')).toBeNull();
@@ -637,13 +634,13 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
   const emBreve = (li: Element | null) => li?.querySelector('.em-breve')?.textContent ?? null;
   const itemDe = (nome: string, dentro: HTMLElement) => within(dentro).getByRole('link', { name: nome }).closest('li');
 
-  it('no menu do computador: Esta semana, mês, ano, Caixa e Quadro têm a marca; o que existe, não', async () => {
+  it('no menu do computador: Caixa e Quadro têm a marca; o que existe (inclusive o calendário), não', async () => {
     await mostrar('#/', 1280);
     const menu = principal();
-    for (const nome of ['Esta semana', 'Novembro', '2026', 'Caixa', 'Quadro']) {
+    for (const nome of ['Caixa', 'Quadro']) {
       expect(emBreve(itemDe(nome, menu))).toBe('Em breve');
     }
-    for (const nome of ['Salas', 'Atividades', 'Sem prazo']) {
+    for (const nome of ['Esta semana', 'Novembro', '2026', 'Salas', 'Atividades', 'Sem prazo']) {
       expect(emBreve(itemDe(nome, menu))).toBeNull();
     }
   });
@@ -665,14 +662,12 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
     expect(agora.getByText('Em breve')).toBeTruthy();
   });
 
-  it('na folha Mais do celular: Esta semana, mês, ano e Quadro têm a marca; Atividades e Sem prazo, não', async () => {
+  it('na folha Mais do celular: só o Quadro tem a marca; o calendário, Atividades e Sem prazo, não', async () => {
     await mostrar('#/', 390);
     fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
     const folha = screen.getByRole('dialog', { name: 'Mais' });
-    for (const nome of ['Esta semana', 'Novembro', '2026', 'Quadro']) {
-      expect(emBreve(itemDe(nome, folha))).toBe('Em breve');
-    }
-    for (const nome of ['Atividades', 'Sem prazo', 'Conectar aparelho']) {
+    expect(emBreve(itemDe('Quadro', folha))).toBe('Em breve');
+    for (const nome of ['Esta semana', 'Novembro', '2026', 'Atividades', 'Sem prazo', 'Conectar aparelho']) {
       expect(emBreve(itemDe(nome, folha))).toBeNull();
     }
   });

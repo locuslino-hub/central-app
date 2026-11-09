@@ -64,6 +64,22 @@ export function useDia(): string {
   return dia;
 }
 
+/** O instante de agora, renovado a cada minuto e ao voltar ao app: marca o que já passou. */
+export function useAgora(): Date {
+  const [agora, setAgora] = useState(() => new Date());
+  useEffect(() => {
+    const renovar = () => setAgora(new Date());
+    document.addEventListener('visibilitychange', renovar);
+    const relogio = setInterval(renovar, 60_000);
+    renovar();
+    return () => {
+      document.removeEventListener('visibilitychange', renovar);
+      clearInterval(relogio);
+    };
+  }, []);
+  return agora;
+}
+
 export function useRota(hoje: Date): RotaAtual {
   const [hash, setHash] = useState(() => location.hash);
   useEffect(() => {

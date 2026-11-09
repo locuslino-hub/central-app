@@ -174,7 +174,7 @@ test.describe('celular, 390 px', () => {
     await expect(barra.getByRole('link')).toHaveText(['Painel', 'Atividades', 'Sem prazo', 'Salas', 'Chat']);
     await barra.getByRole('button', { name: 'Mais' }).click();
     const folha = page.getByRole('dialog', { name: 'Mais' });
-    await expect(folha.getByText('Em breve')).toHaveCount(4);
+    await expect(folha.getByText('Em breve')).toHaveCount(1);
     expect(await pequenos(page)).toEqual([]);
     await folha.getByRole('link', { name: 'Quadro' }).click();
     await expect(principal.getByText('Esta tela chega numa próxima versão.')).toBeVisible();
@@ -220,7 +220,7 @@ test.describe('celular, 390 px', () => {
 test.describe('computador, 1280 px', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test('Painel do dia: checklist e Sem prazo lado a lado, Atividades agrupada', async ({ page }) => {
+  test('Painel do dia: checklist ao lado da agenda de hoje, Sem prazo embaixo, Atividades agrupada', async ({ page }) => {
     const erros = vigiarErros(page);
     await cadastrarPessoa(page, 'Prof. Souza', 'Doutoramento');
     await dizerAoChat(page, 'Marcar reunião com o Prof. Souza');
@@ -232,9 +232,14 @@ test.describe('computador, 1280 px', () => {
     const semPrazo = principal.getByRole('region', { name: 'Sem prazo' });
     await expect(checklist.getByRole('checkbox')).toHaveCount(1);
     await expect(semPrazo.getByRole('checkbox')).toHaveCount(1);
+    // Ordem da especificação: Checklist ao lado da Agenda de hoje; Sem prazo na linha seguinte.
+    const agenda = principal.getByRole('region', { name: 'Agenda de hoje' });
+    await expect(agenda).toBeVisible();
     const a = (await checklist.boundingBox())!;
+    const g = (await agenda.boundingBox())!;
     const b = (await semPrazo.boundingBox())!;
-    expect(Math.abs(a.y - b.y)).toBeLessThan(2); // lado a lado
+    expect(Math.abs(a.y - g.y)).toBeLessThan(2); // lado a lado
+    expect(b.y).toBeGreaterThan(Math.max(a.y + a.height, g.y + g.height) - 1); // embaixo
     expect(await pequenos(page)).toEqual([]);
     expect(await semRolagemDeLado(page)).toBe(true);
 

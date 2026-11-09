@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Tarefa } from '../../src/dados/tipos';
-import { formatarDuracao, quandoDaTarefa, rotuloDaDuracao } from '../../src/ui/quando';
+import {
+  abreviacaoDoDia,
+  diaPorExtenso,
+  formatarDuracao,
+  periodoPorExtenso,
+  quandoDaTarefa,
+  rotuloDaDuracao,
+} from '../../src/ui/quando';
 import { quandoNaLista } from '../../src/ui/tarefas-lista';
 
 const HOJE = '2026-11-05'; // quinta
@@ -82,5 +89,35 @@ describe('quandoNaLista (o que a linha mostra)', () => {
   });
   it('prazo mostra o dia e a hora do prazo', () => {
     expect(quandoNaLista(t({ data: '2026-11-13', prazoHora: '17:00' }), HOJE)).toBe('Até sexta, 13/11, às 17:00');
+  });
+});
+
+describe('diaPorExtenso', () => {
+  it('dia da semana, dia e mês; o ano só quando não é o de hoje', () => {
+    expect(diaPorExtenso('2026-11-05', HOJE)).toBe('Quinta-feira, 5 de novembro');
+    expect(diaPorExtenso('2026-11-08', HOJE)).toBe('Domingo, 8 de novembro');
+    expect(diaPorExtenso('2026-11-07', HOJE)).toBe('Sábado, 7 de novembro');
+    expect(diaPorExtenso('2027-01-01', HOJE)).toBe('Sexta-feira, 1 de janeiro de 2027');
+    expect(diaPorExtenso('2026-03-10', HOJE)).toBe('Terça-feira, 10 de março');
+  });
+});
+
+describe('abreviacaoDoDia', () => {
+  it('três letras, com acento onde tem', () => {
+    expect(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08'].map(abreviacaoDoDia)).toEqual([
+      'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom',
+    ]);
+  });
+});
+
+describe('periodoPorExtenso', () => {
+  it('no mesmo mês: "2 a 8 de novembro de 2026"', () => {
+    expect(periodoPorExtenso('2026-11-02', '2026-11-08')).toBe('2 a 8 de novembro de 2026');
+  });
+  it('em meses diferentes do mesmo ano', () => {
+    expect(periodoPorExtenso('2026-10-26', '2026-11-01')).toBe('26 de outubro a 1 de novembro de 2026');
+  });
+  it('em anos diferentes', () => {
+    expect(periodoPorExtenso('2026-12-28', '2027-01-03')).toBe('28 de dezembro de 2026 a 3 de janeiro de 2027');
   });
 });

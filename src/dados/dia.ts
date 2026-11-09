@@ -21,6 +21,13 @@ export function hojeEmLisboa(agora: Date = new Date()): string {
   return `${parte('year')}-${parte('month')}-${parte('day')}`;
 }
 
+/** O minuto do dia em Lisboa, de 0 (00:00) a 1439 (23:59). */
+export function minutoEmLisboa(agora: Date = new Date()): number {
+  const partes = HORA_DE_LISBOA.formatToParts(agora);
+  const valor = (tipo: string) => Number(partes.find((p) => p.type === tipo)!.value);
+  return valor('hour') * 60 + valor('minute');
+}
+
 /**
  * Milissegundos até as 00:00 de Lisboa, contando as horas do relógio de parede.
  * Nos dois dias do ano em que a hora muda a conta erra por 1 h: quem usa isto

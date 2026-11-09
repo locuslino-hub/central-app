@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hojeEmLisboa, msAteMeiaNoiteEmLisboa, vigiarODia } from '../../src/dados/dia';
+import { hojeEmLisboa, minutoEmLisboa, msAteMeiaNoiteEmLisboa, vigiarODia } from '../../src/dados/dia';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon, UTC+0 no inverno).
 const QUINTA_12H20 = new Date('2026-11-05T12:20:00Z');
@@ -10,6 +10,15 @@ describe('hojeEmLisboa', () => {
     // 23:30 UTC de 5/11 já é 6/11 em Lisboa no verão (UTC+1).
     expect(hojeEmLisboa(new Date('2026-07-05T23:30:00Z'))).toBe('2026-07-06');
     expect(hojeEmLisboa(new Date('2026-07-05T22:59:59Z'))).toBe('2026-07-05');
+  });
+});
+
+describe('minutoEmLisboa', () => {
+  it('é o minuto do dia em Lisboa (0 a 1439), no inverno e no verão', () => {
+    expect(minutoEmLisboa(QUINTA_12H20)).toBe(12 * 60 + 20);
+    expect(minutoEmLisboa(new Date('2026-07-05T22:30:00Z'))).toBe(23 * 60 + 30); // UTC+1
+    expect(minutoEmLisboa(new Date('2026-11-06T00:00:00Z'))).toBe(0);
+    expect(minutoEmLisboa(new Date('2026-11-05T23:59:59Z'))).toBe(23 * 60 + 59);
   });
 });
 

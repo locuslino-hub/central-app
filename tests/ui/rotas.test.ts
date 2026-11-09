@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hrefDe, nomeDoMes, resolverRota } from '../../src/rotas';
+import { hrefDe, hrefDoCalendario, nomeDoMes, resolverRota } from '../../src/rotas';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon).
 const AGORA = new Date(2026, 10, 5, 12, 20);
@@ -73,6 +73,39 @@ describe('resolverRota', () => {
   it('o título do mês e do ano segue a data', () => {
     expect(resolverRota('#/mes', new Date(2026, 11, 1)).titulo).toBe('Dezembro');
     expect(resolverRota('#/ano', new Date(2027, 0, 1)).titulo).toBe('2027');
+  });
+});
+
+describe('semana, mês e ano com data (?d=AAAA-MM-DD)', () => {
+  it('a data vai para a rota e o título segue a data', () => {
+    expect(resolverRota('#/semana?d=2026-11-03', AGORA)).toMatchObject({ id: 'semana', data: '2026-11-03', titulo: 'Esta semana' });
+    expect(resolverRota('#/semana?d=2026-11-16', AGORA)).toMatchObject({ data: '2026-11-16', titulo: 'Semana de 16/11' });
+    expect(resolverRota('#/semana?d=2026-11-09', AGORA).titulo).toBe('Próxima semana');
+    expect(resolverRota('#/mes?d=2026-12-10', AGORA)).toMatchObject({ id: 'mes', data: '2026-12-10', titulo: 'Dezembro' });
+    expect(resolverRota('#/mes?d=2027-01-05', AGORA).titulo).toBe('Janeiro de 2027');
+    expect(resolverRota('#/ano?d=2027-03-01', AGORA)).toMatchObject({ id: 'ano', data: '2027-03-01', titulo: '2027' });
+  });
+
+  it('sem data (ou com data que não existe) vale hoje, e a rota não leva data', () => {
+    for (const hash of ['#/semana', '#/semana?d=', '#/semana?d=abc', '#/semana?d=2026-02-30', '#/semana?d=2026-13-01', '#/semana?x=1']) {
+      const rota = resolverRota(hash, AGORA);
+      expect(rota.id).toBe('semana');
+      expect(rota.data, hash).toBeUndefined();
+      expect(rota.titulo).toBe('Esta semana');
+    }
+    expect(resolverRota('#/mes?d=2026-02-30', AGORA).titulo).toBe('Novembro');
+  });
+
+  it('a data é lida com outros parâmetros ao lado, e só nas três telas do calendário', () => {
+    expect(resolverRota('#/semana?x=1&d=2026-11-16', AGORA).data).toBe('2026-11-16');
+    expect(resolverRota('#/quadro?d=2026-11-16', AGORA).data).toBeUndefined();
+    expect(resolverRota('#/', AGORA).data).toBeUndefined();
+  });
+
+  it('monta o endereço de cada tela com a data', () => {
+    expect(hrefDoCalendario('semana', '2026-11-16')).toBe('#/semana?d=2026-11-16');
+    expect(hrefDoCalendario('mes', '2026-12-01')).toBe('#/mes?d=2026-12-01');
+    expect(hrefDoCalendario('ano')).toBe('#/ano');
   });
 });
 

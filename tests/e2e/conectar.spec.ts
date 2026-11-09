@@ -23,7 +23,8 @@ test('conecta o aparelho e guarda a conexão no navegador', async ({ page }) => 
   });
 
   await page.goto('/central-app/');
-  await page.getByRole('link', { name: 'Conectar aparelho' }).click();
+  // O link do menu: a Agenda de hoje, no Painel, também leva a Conectar aparelho quando falta conexão.
+  await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Conectar aparelho' }).click();
 
   await page.getByLabel('URL').fill(URL_FICTICIA);
   await page.getByLabel('Código do aparelho').fill('codigo-errado-ficticio-0123456789abcdef');

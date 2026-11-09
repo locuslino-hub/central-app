@@ -1,0 +1,774 @@
+/* Calendário (Tarefa 11): Agenda de hoje, linha do dia, semana, mês, ano e detalhes do evento.
+   Só classes, como o resto do app. As cores das salas vêm de .sala-* (--c texto, --f fundo).
+   O que passou, é livre ou está feito diz isso em palavras (.cal-nota); a cor só reforça. */
+
+/* ---- Topo de semana, mês e ano: período e navegação ---- */
+
+.cal-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+}
+.cal-periodo {
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 1.7rem;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.cal-nav {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+}
+.cal-seta {
+  display: grid;
+  place-items: center;
+  width: var(--toque);
+  height: var(--toque);
+  border-radius: 50%;
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+  color: var(--tinta);
+  text-decoration: none;
+}
+.cal-seta:hover {
+  background: var(--poco);
+}
+.cal-seta-proxima .icone {
+  transform: scaleX(-1);
+}
+
+/* ---- Avisos da agenda: discretos ---- */
+
+.cal-avisos {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+.cal-aviso {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.cal-aviso-falha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  padding: 2px 6px 2px 16px;
+  border-radius: var(--r-m);
+  background: var(--pessego);
+  color: var(--tinta);
+}
+.cal-aviso-falha p {
+  margin: 8px 0;
+}
+.cal-aviso-falha .botao,
+.cal-aviso-falha .botao-link {
+  margin: 2px 0;
+}
+
+/* ---- Linhas de agenda (Agenda de hoje, dias da semana) ---- */
+
+.cal-lista {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-item {
+  min-width: 0;
+  border-left: 4px solid var(--c, var(--campo));
+  border-radius: 6px var(--r-p) var(--r-p) 6px;
+  background: var(--f, var(--poco));
+  color: var(--tinta);
+}
+.cal-botao {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0 12px;
+  width: 100%;
+  min-height: var(--toque);
+  padding: 8px 12px 9px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-botao:hover {
+  background: rgb(255 255 255 / 0.5);
+}
+.cal-botao:focus-visible {
+  outline-offset: -3px;
+}
+.cal-hora {
+  min-width: 3.3rem;
+  color: var(--c, var(--tinta2));
+  font-family: var(--titulo);
+  font-size: 1.55rem;
+  line-height: 1.05;
+}
+.cal-corpo {
+  min-width: 0;
+}
+.cal-titulo {
+  display: block;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.cal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin-top: 2px;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+}
+.cal-nota {
+  padding: 0 8px;
+  border: 1px solid var(--tinta3);
+  border-radius: 99px;
+  color: var(--tinta2);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* Tarefas: cartão branco, para não parecerem eventos. */
+.cal-tarefa {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 12px;
+  padding: 8px 12px 9px;
+  border: 1px solid var(--fio);
+  border-left: 4px solid var(--c, var(--campo));
+  background: var(--folha);
+}
+.cal-tarefa .cal-hora:empty {
+  display: none;
+}
+.cal-tarefa .cal-hora:empty + .cal-corpo {
+  grid-column: 1 / -1;
+}
+/* Prazo: um marcador na hora, sem bloco. */
+.cal-prazo {
+  padding: 4px 12px 5px;
+  border-color: transparent;
+  border-left-color: transparent;
+  background: none;
+}
+.cal-prazo .cal-hora {
+  font-size: 1.15rem;
+}
+.cal-prazo .cal-hora::before {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.4em;
+  background: var(--c, var(--tinta2));
+  transform: rotate(45deg);
+}
+.cal-tarefa[data-feita='true'] .cal-titulo {
+  color: var(--tinta2);
+  text-decoration: line-through;
+}
+
+/* O que passou: fundo neutro e texto mais claro, que ainda se lê (e a palavra "passado"). */
+.cal-item[data-passado='true'] {
+  --c: var(--tinta3);
+  --f: var(--poco);
+}
+.cal-item[data-passado='true'] .cal-titulo,
+.cal-item[data-passado='true'] .cal-hora {
+  color: var(--tinta2);
+}
+.cal-prazo[data-passado='true'] {
+  background: none;
+}
+/* Livre: só o contorno, mais leve. */
+.cal-item[data-livre='true'] {
+  border: 1px dashed var(--c, var(--campo));
+  border-left-width: 4px;
+  background: transparent;
+}
+
+.cal-vazio {
+  margin: 0;
+  color: var(--tinta3);
+  font-size: 0.88rem;
+}
+
+/* ---- Semana ---- */
+
+.semana-corpo {
+  container: semana / inline-size;
+}
+.semana-dias {
+  display: grid;
+  gap: 12px;
+}
+.cal-dia {
+  min-width: 0;
+  padding: 12px 12px 14px;
+  border-radius: var(--r-m);
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+}
+.cal-dia[data-hoje='true'] {
+  box-shadow: 0 0 0 2px var(--pinho), var(--relevo-p);
+}
+.cal-dia-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0 0 8px;
+  font: 600 0.95rem/1.2 var(--ui);
+}
+.cal-dia-numero {
+  font-family: var(--titulo);
+  font-size: 1.9rem;
+  font-weight: 400;
+  line-height: 1;
+}
+.cal-hoje {
+  align-self: center;
+  margin-left: auto;
+  padding: 1px 9px;
+  border-radius: 99px;
+  background: var(--pinho);
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.cal-tarefas-semana {
+  margin: 0 0 14px;
+  padding: 16px 18px 18px;
+}
+.cal-tarefas-semana .cal-tarefas-titulo {
+  margin: 0 0 2px;
+  font-size: 1.5rem;
+}
+.cal-nota-do-cartao {
+  margin: 0 0 10px;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+
+/* Página larga: sete colunas, uma por dia. */
+@container semana (min-width: 40rem) {
+  .semana-dias {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: start;
+    gap: 6px;
+  }
+  .semana-dias .cal-dia {
+    padding: 8px 5px 10px;
+  }
+  .semana-dias .cal-dia-titulo {
+    gap: 0 4px;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+  }
+  .semana-dias .cal-dia-numero {
+    font-size: 1.45rem;
+  }
+  .semana-dias .cal-hoje {
+    margin-left: 0;
+    padding: 0 7px;
+    font-size: 0.7rem;
+  }
+  .semana-dias .cal-lista {
+    gap: 6px;
+  }
+  .semana-dias .cal-botao,
+  .semana-dias .cal-tarefa {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 5px 6px 7px;
+  }
+  .semana-dias .cal-hora {
+    min-width: 0;
+    font-size: 1.1rem;
+  }
+  .semana-dias .cal-titulo {
+    font-size: 0.82rem;
+    hyphens: auto;
+    overflow-wrap: break-word;
+  }
+  .semana-dias .cal-meta {
+    gap: 2px 5px;
+    font-size: 0.74rem;
+  }
+  .semana-dias .cal-quando-simples {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .semana-dias .cal-nota {
+    padding: 0 6px;
+    font-size: 0.7rem;
+  }
+  .semana-dias .etiqueta {
+    max-width: 100%;
+    padding: 0 7px;
+    overflow: hidden;
+    font-size: 0.7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* No celular: a faixa dos sete dias e, embaixo, o dia escolhido. */
+.cal-faixa {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 12px;
+}
+.cal-faixa-dia {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 1px;
+  min-width: var(--toque);
+  min-height: 66px;
+  padding: 4px 0 6px;
+  border: 0;
+  border-radius: var(--r-p);
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+  color: var(--tinta2);
+  font: 500 0.8rem/1.2 var(--ui);
+  cursor: pointer;
+}
+.cal-faixa-dia[data-hoje='true'] {
+  box-shadow: 0 0 0 2px var(--pinho), var(--relevo-p);
+}
+.cal-faixa-dia[aria-pressed='true'] {
+  background: var(--pinho);
+  color: #fff;
+}
+.cal-faixa-numero {
+  font-family: var(--titulo);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.cal-faixa-ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+.cal-faixa-dia[data-tem='true'] .cal-faixa-ponto {
+  background: currentColor;
+}
+
+/* ---- Mês ---- */
+
+.mes-quadro {
+  container: mes / inline-size;
+  padding: 12px 12px 14px;
+  border-radius: var(--r-m);
+}
+.mes-grade {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  table-layout: fixed;
+}
+.mes-grade th {
+  padding: 2px 0 4px;
+  color: var(--tinta3);
+  font: 600 0.8rem/1.2 var(--ui);
+  text-align: center;
+}
+.mes-grade td {
+  padding: 0;
+}
+.mes-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 62px;
+  padding: 6px 6px 4px;
+  overflow: hidden;
+  border-radius: var(--r-p);
+  background: var(--poco);
+  color: var(--tinta);
+  text-decoration: none;
+}
+.mes-dia:hover {
+  background: var(--agua);
+}
+.mes-dia:focus-visible {
+  outline-offset: -3px;
+}
+.mes-dia[data-fora='true'] {
+  background: transparent;
+  color: var(--tinta3);
+}
+.mes-dia[data-passado='true'] {
+  color: var(--tinta3);
+}
+.mes-dia[data-hoje='true'] {
+  background: var(--pinho);
+  color: #fff;
+}
+.mes-numero {
+  font-family: var(--titulo);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.mes-pontos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-height: 8px;
+}
+.mes-ponto,
+.mes-anel {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.mes-ponto {
+  background: var(--acao);
+}
+.mes-anel {
+  border: 1.5px solid var(--acao);
+}
+.mes-dia[data-passado='true'] .mes-ponto {
+  background: var(--campo);
+}
+.mes-dia[data-passado='true'] .mes-anel {
+  border-color: var(--campo);
+}
+.mes-dia[data-hoje='true'] .mes-ponto {
+  background: #fff;
+}
+.mes-dia[data-hoje='true'] .mes-anel {
+  border-color: #fff;
+}
+.mes-extra {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.mes-titulo {
+  display: none;
+}
+.cal-legenda {
+  margin: 10px 4px 0;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+}
+
+/* Celular: sem o cartão em volta, para cada dia ter 44 px de largura mesmo em 360 px. */
+@media (max-width: 699px) {
+  .painel.mes-quadro {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .mes-grade {
+    border-spacing: 2px;
+  }
+  .cal-legenda {
+    margin-top: 12px;
+  }
+}
+
+/* Página larga: cabem os títulos dos dois primeiros eventos. */
+@container mes (min-width: 36rem) {
+  .mes-dia {
+    min-height: 92px;
+  }
+  .mes-titulo {
+    display: block;
+    max-width: 100%;
+    padding: 0 5px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: var(--agua);
+    color: var(--tinta);
+    font-size: 0.74rem;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mes-dia[data-passado='true'] .mes-titulo,
+  .mes-dia[data-fora='true'] .mes-titulo {
+    background: var(--fio);
+    color: var(--tinta2);
+  }
+  .mes-dia[data-hoje='true'] .mes-titulo {
+    background: #fff;
+    color: var(--pinho2);
+  }
+}
+
+/* ---- Ano ---- */
+
+.ano-meses {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr));
+  gap: 12px;
+}
+.ano-mes {
+  padding: 10px 12px 14px;
+  border-radius: var(--r-m);
+}
+.ano-mes .ano-mes-titulo {
+  margin: 0;
+  font-size: 1.4rem;
+}
+.ano-mes-link {
+  display: inline-flex;
+  align-items: center;
+  min-width: var(--toque);
+  min-height: var(--toque);
+  color: var(--tinta);
+  text-decoration: none;
+}
+.ano-mes-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.ano-contagem {
+  margin: 0 0 6px;
+  color: var(--tinta2);
+  font-size: 0.8rem;
+}
+.ano-atual {
+  margin-left: 8px;
+  padding: 1px 9px;
+  font-family: var(--ui);
+  font-size: 0.72rem;
+  vertical-align: middle;
+  border-radius: 99px;
+  background: var(--pinho);
+  color: #fff;
+  font-weight: 600;
+}
+.ano-mini {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+.ano-letra,
+.ano-dia {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  color: var(--tinta2);
+  font-size: 0.68rem;
+  line-height: 1;
+}
+.ano-letra {
+  color: var(--tinta3);
+  font-weight: 600;
+}
+.ano-dia[data-passado='true'] {
+  color: var(--tinta3);
+}
+.ano-dia[data-tem='true'] {
+  background: var(--agua);
+  color: var(--tinta);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ano-dia[data-hoje='true'] {
+  background: var(--pinho);
+  color: #fff;
+  text-decoration: none;
+}
+
+/* ---- Detalhes do evento ---- */
+
+.detalhe-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(38 43 38 / 0.35);
+}
+.detalhe {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  gap: 12px;
+  width: min(92vw, 28rem);
+  max-height: calc(100dvh - 32px);
+  padding: 22px 24px 20px;
+  overflow-y: auto;
+  border-radius: var(--r-g);
+  background: var(--folha);
+  box-shadow: var(--relevo);
+  transform: translate(-50%, -50%);
+  animation: sobe 0.18s ease-out;
+}
+.detalhe:focus {
+  outline: none;
+}
+.detalhe .detalhe-titulo {
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 1.9rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.detalhe-dados {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+}
+.detalhe-dados dt {
+  color: var(--tinta3);
+  font-size: 0.9rem;
+}
+.detalhe-dados dd {
+  margin: 0;
+  font-weight: 500;
+}
+.detalhe-dados dt + dd + dd {
+  grid-column: 2;
+}
+.detalhe-nota {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.detalhe .botao {
+  width: 100%;
+}
+@media (max-width: 699px) {
+  .detalhe {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    border-radius: 26px 26px 0 0;
+    transform: none;
+  }
+}
+
+/* ---- Agenda de hoje (cartão) ---- */
+
+.agenda-hoje .cal-avisos {
+  margin-bottom: 10px;
+}
+
+/* ---- Linha do dia ---- */
+
+.linha-dia {
+  position: relative;
+}
+.lin-faixa {
+  position: relative;
+  height: calc(var(--linhas, 1) * 30px + 10px);
+  overflow: hidden;
+  border-radius: var(--r-p);
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+}
+.lin-bloco,
+.lin-prazo {
+  position: absolute;
+  top: calc(5px + var(--linha, 0) * 30px);
+  display: flex;
+  align-items: center;
+  height: 26px;
+}
+.lin-bloco {
+  min-width: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--f, var(--poco));
+  color: var(--c, var(--tinta2));
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lin-texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lin-bloco[data-passado='true'] {
+  background: var(--poco);
+  color: var(--tinta3);
+}
+.lin-bloco[data-livre='true'] {
+  border: 1px dashed var(--c, var(--campo));
+  background: transparent;
+}
+.lin-prazo {
+  gap: 5px;
+  margin-left: -6px;
+  color: var(--tinta);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lin-prazo::before {
+  content: '';
+  flex: none;
+  width: 11px;
+  height: 11px;
+  background: var(--c, var(--tinta2));
+  transform: rotate(45deg) scale(0.8);
+}
+.lin-prazo[data-passado='true'] {
+  color: var(--tinta3);
+}
+.lin-agora {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+  background: var(--alerta);
+  pointer-events: none;
+}
+.lin-horas {
+  position: relative;
+  height: 20px;
+  margin-top: 4px;
+}
+.lin-hora {
+  position: absolute;
+  color: var(--tinta3);
+  font-size: 0.78rem;
+  transform: translateX(-50%);
+}
+.lin-hora:first-child {
+  transform: none;
+}
+.lin-hora:last-child {
+  transform: translateX(-100%);
+}

@@ -1,5 +1,9 @@
 // Rotas por hash (`#/semana`). Cada rota tem um título de vista; as telas que
-// ainda não existem usam só esse título (src/ui/Vista.tsx).
+// ainda não existem usam só esse título (src/ui/Vista.tsx). Semana, mês e ano
+// aceitam `?d=AAAA-MM-DD` para abrir outro período (`#/semana?d=2026-11-16`).
+import { segundaDaSemana } from './chat/datas';
+import { hojeEmLisboa } from './dados/dia';
+import { NOMES_DOS_MESES, nomeDaSemana } from './ui/quando';
 
 export type IdDaRota =
   | 'hoje'
@@ -24,9 +28,6 @@ export type IdDaRota =
  */
 export const ROTAS_EM_BREVE: ReadonlySet<IdDaRota> = new Set<IdDaRota>([
   'agora',
-  'semana',
-  'mes',
-  'ano',
   'caixa',
   'quadro',
   'sala',
@@ -42,6 +43,8 @@ export type RotaAtual = {
   titulo: string;
   /** Parte `:id` de `#/sala/:id` e `#/pessoa/:id`, já decodificada. */
   param?: string;
+  /** Semana, mês e ano: o dia pedido em `?d=` (existe de verdade). Sem ele, vale hoje. */
+  data?: string;
   /** Para onde o link "Voltar" leva, nas páginas que não estão no menu. */
   voltarPara?: string;
 };
@@ -49,8 +52,10 @@ export type RotaAtual = {
 type Definicao = {
   /** Caminho sem o `#/`. `:id` marca o parâmetro. */
   caminho: string;
-  titulo: (agora: Date) => string;
+  titulo: (agora: Date, data?: string) => string;
   voltarPara?: string;
+  /** Aceita `?d=`. */
+  comData?: boolean;
 };
 
 const fixo = (texto: string) => () => texto;
@@ -58,9 +63,29 @@ const fixo = (texto: string) => () => texto;
 const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
   hoje: { caminho: '', titulo: fixo('Painel do dia') },
   agora: { caminho: 'agora', titulo: fixo('Agora') },
-  semana: { caminho: 'semana', titulo: fixo('Esta semana') },
-  mes: { caminho: 'mes', titulo: (agora) => nomeDoMes(agora) },
-  ano: { caminho: 'ano', titulo: (agora) => String(agora.getFullYear()) },
+  semana: {
+    caminho: 'semana',
+    comData: true,
+    titulo: (agora, data) => {
+      const hoje = hojeEmLisboa(agora);
+      return nomeDaSemana(segundaDaSemana(data ?? hoje), hoje);
+    },
+  },
+  mes: {
+    caminho: 'mes',
+    comData: true,
+    titulo: (agora, data) => {
+      if (data === undefined) return nomeDoMes(agora);
+      const [ano, mes] = data.split('-').map(Number);
+      const nome = nomeDoMes(new Date(ano, mes - 1, 1));
+      return ano === agora.getFullYear() ? nome : `${nome} de ${ano}`;
+    },
+  },
+  ano: {
+    caminho: 'ano',
+    comData: true,
+    titulo: (agora, data) => (data === undefined ? String(agora.getFullYear()) : data.slice(0, 4)),
+  },
   salas: { caminho: 'salas', titulo: fixo('Salas') },
   sala: { caminho: 'sala/:id', titulo: fixo('Sala') },
   pessoa: { caminho: 'pessoa/:id', titulo: fixo('Pessoa') },
@@ -74,24 +99,23 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
 
 const NAO_ENCONTRADA: RotaAtual = { id: 'nao-encontrada', titulo: 'Página não encontrada' };
 
-const MESES = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-];
 
 /** Mês por extenso, com maiúscula. Lista fixa: não depende do idioma do aparelho. */
 export function nomeDoMes(data: Date): string {
-  return MESES[data.getMonth()];
+  return NOMES_DOS_MESES[data.getMonth()];
+}
+
+/** A data de `?d=`, só se existir no calendário (31/02 não existe). */
+function dataDaConsulta(consulta: string): string | undefined {
+  for (const par of consulta.split('&')) {
+    const [nome, valor] = par.split('=');
+    if (nome !== 'd' || !/^\d{4}-\d{2}-\d{2}$/.test(valor ?? '')) continue;
+    const [a, m, d] = valor.split('-').map(Number);
+    const x = new Date(Date.UTC(2000, m - 1, d));
+    x.setUTCFullYear(a);
+    return x.getUTCFullYear() === a && x.getUTCMonth() === m - 1 && x.getUTCDate() === d ? valor : undefined;
+  }
+  return undefined;
 }
 
 function decodificar(texto: string): string | undefined {
@@ -107,7 +131,8 @@ function decodificar(texto: string): string | undefined {
  * não existem. Endereço que não existe vira "não encontrada".
  */
 export function resolverRota(hash: string, agora: Date = new Date()): RotaAtual {
-  const semConsulta = hash.split('?')[0];
+  const [semConsulta, ...restoDaConsulta] = hash.split('?');
+  const consulta = restoDaConsulta.join('?');
   if (semConsulta !== '' && semConsulta !== '#' && !semConsulta.startsWith('#/')) return NAO_ENCONTRADA;
   const resto = semConsulta.slice(2);
   if (resto.startsWith('/')) return NAO_ENCONTRADA; // `#//semana`
@@ -117,7 +142,8 @@ export function resolverRota(hash: string, agora: Date = new Date()): RotaAtual 
   for (const [id, definicao] of Object.entries(ROTAS) as [Exclude<IdDaRota, 'nao-encontrada'>, Definicao][]) {
     if (!definicao.caminho.endsWith(':id')) {
       if (definicao.caminho !== caminho) continue;
-      return { id, titulo: definicao.titulo(agora), voltarPara: definicao.voltarPara };
+      const data = definicao.comData ? dataDaConsulta(consulta) : undefined;
+      return { id, titulo: definicao.titulo(agora, data), data, voltarPara: definicao.voltarPara };
     }
     const prefixo = definicao.caminho.slice(0, -':id'.length);
     if (!caminho.startsWith(prefixo)) continue;
@@ -135,4 +161,10 @@ export function hrefDe(id: Exclude<IdDaRota, 'nao-encontrada'>, param?: string):
   const { caminho } = ROTAS[id];
   const completo = param === undefined ? caminho : caminho.replace(':id', encodeURIComponent(param));
   return `#/${completo}`;
+}
+
+/** O hash de semana, mês ou ano, aberto no período que contém `data` (sem ela, o de hoje). */
+export function hrefDoCalendario(id: 'semana' | 'mes' | 'ano', data?: string): string {
+  const base = hrefDe(id);
+  return data === undefined ? base : `${base}?d=${data}`;
 }

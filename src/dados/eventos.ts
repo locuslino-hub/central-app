@@ -1,0 +1,151 @@
+// Os eventos do Google Agenda que as telas de calendário mostram. Ficam só na
+// memória deste aparelho: não vão para o IndexedDB, nem para o arquivo do Drive,
+// nem para a exportação. O Google é a fonte; ao fechar o app, lê-se de novo.
+//
+// Quem mostra (src/ui/useEventos.ts) atualiza ao abrir, ao voltar ao app e a
+// cada 15 minutos. Falha nunca apaga o que já estava na tela.
+import { ErroConexao, ErroScript, chamar } from '../conexao/cliente';
+import { lerConexao } from '../conexao/guarda';
+import { ErroAgenda, listarEventos, type Evento, type RespostaEventos } from './agenda';
+
+/**
+ * - `nao-conectado`: este aparelho ainda não tem a conexão com o script.
+ * - `sem-internet`: o pedido não chegou.
+ * - `codigo`: o script não aceita o código deste aparelho (confirmado pelo ping): reconectar.
+ * - `nao-liberada`: o código vale (o ping funciona), mas o script não conhece a agenda:
+ *   falta aprovar a permissão no script (um script antigo responde "código inválido" a ações novas).
+ * - `falhou`: o script ou o Google Agenda recusou.
+ */
+export type FalhaDeEventos = 'nao-conectado' | 'sem-internet' | 'codigo' | 'nao-liberada' | 'falhou';
+
+export type Leitura = {
+  eventos: Evento[];
+  /** O script pulou alguma agenda ou bateu num teto. */
+  incompleto: boolean;
+  falha: FalhaDeEventos | null;
+  /** Hora (ms) da última leitura que deu certo. */
+  lidoEm: number | null;
+  /** Hora (ms) da última tentativa, deu certo ou não. */
+  tentadoEm: number | null;
+  carregando: boolean;
+};
+
+export type Dependencias = {
+  listar: (periodo: { de: string; ate: string }) => Promise<RespostaEventos>;
+  pingar: () => Promise<unknown>;
+  conectado: () => Promise<boolean>;
+  agora: () => number;
+};
+
+const PADRAO: Dependencias = {
+  listar: (periodo) => listarEventos(periodo),
+  pingar: () => chamar('ping'),
+  conectado: () =>
+    lerConexao().then(
+      (conexao) => conexao !== null && conexao !== undefined,
+      () => false,
+    ),
+  agora: () => Date.now(),
+};
+
+/** Quantos períodos ficam na memória (semanas, meses e anos já vistos). */
+const PERIODOS_GUARDADOS = 30;
+
+const VAZIA: Leitura = {
+  eventos: [],
+  incompleto: false,
+  falha: null,
+  lidoEm: null,
+  tentadoEm: null,
+  carregando: false,
+};
+
+const leituras = new Map<string, Leitura>();
+/** Sobe em `esquecerEventos`: uma leitura que terminar depois disso é descartada. */
+let geracao = 0;
+const emAndamento = new Map<string, Promise<Leitura>>();
+const ouvintes = new Set<() => void>();
+
+const chave = (de: string, ate: string) => `${de}|${ate}`;
+
+function avisar() {
+  for (const ouvinte of [...ouvintes]) ouvinte();
+}
+
+function guardar(id: string, leitura: Leitura) {
+  leituras.delete(id); // reinsere no fim: sai primeiro quem foi visto há mais tempo
+  leituras.set(id, leitura);
+  while (leituras.size > PERIODOS_GUARDADOS) leituras.delete(leituras.keys().next().value as string);
+}
+
+/** O que há na memória para o período. Vazia se nunca foi lido. O objeto só muda quando a leitura muda. */
+export function lerEventos(de: string, ate: string): Leitura {
+  return leituras.get(chave(de, ate)) ?? VAZIA;
+}
+
+/** Chama `ouvinte` a cada mudança em qualquer leitura. Devolve a função que desliga. */
+export function assinarEventos(ouvinte: () => void): () => void {
+  ouvintes.add(ouvinte);
+  return () => void ouvintes.delete(ouvinte);
+}
+
+/** Esquece tudo (testes). */
+export function esquecerEventos() {
+  geracao++;
+  leituras.clear();
+  emAndamento.clear();
+}
+
+async function falhaDe(erro: unknown, dep: Dependencias): Promise<FalhaDeEventos> {
+  if (!(erro instanceof ErroAgenda)) return 'falhou';
+  if (erro.falha === 'sem-internet') return 'sem-internet';
+  if (erro.falha !== 'codigo-invalido') return 'falhou';
+  // Um script que não conhece a ação também responde "código inválido".
+  // Só o ping separa os dois casos: com o ping funcionando, o código vale.
+  try {
+    await dep.pingar();
+    return 'nao-liberada';
+  } catch (erroDoPing) {
+    if (erroDoPing instanceof ErroConexao) return 'sem-internet';
+    if (erroDoPing instanceof ErroScript && erroDoPing.erro === 'codigo-invalido') return 'codigo';
+    return 'falhou';
+  }
+}
+
+async function ler(id: string, de: string, ate: string, dep: Dependencias): Promise<Leitura> {
+  const minha = geracao;
+  const antes = leituras.get(id) ?? VAZIA;
+  guardar(id, { ...antes, carregando: true });
+  avisar();
+  const tentadoEm = dep.agora();
+  let depois: Leitura;
+  try {
+    if (!(await dep.conectado())) {
+      depois = { ...antes, falha: 'nao-conectado', tentadoEm, carregando: false };
+    } else {
+      const { eventos, incompleto } = await dep.listar({ de, ate });
+      depois = { eventos, incompleto, falha: null, lidoEm: tentadoEm, tentadoEm, carregando: false };
+    }
+  } catch (erro) {
+    depois = { ...antes, falha: await falhaDe(erro, dep), tentadoEm, carregando: false };
+  }
+  if (minha === geracao) guardar(id, depois);
+  return depois;
+}
+
+/**
+ * Lê os eventos de `de` a `ate` (dias de Lisboa, `ate` incluído) e guarda na
+ * memória. Nunca rejeita: o resultado diz se falhou. Pedidos juntos para o
+ * mesmo período viram uma chamada só.
+ */
+export function atualizarEventos(de: string, ate: string, dep: Partial<Dependencias> = {}): Promise<Leitura> {
+  const id = chave(de, ate);
+  const andando = emAndamento.get(id);
+  if (andando) return andando;
+  const promessa = ler(id, de, ate, { ...PADRAO, ...dep }).finally(() => {
+    emAndamento.delete(id);
+    avisar();
+  });
+  emAndamento.set(id, promessa);
+  return promessa;
+}
