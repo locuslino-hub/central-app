@@ -79,7 +79,7 @@ const CAMPOS_DA_MARCA = 'id,status,extendedProperties';
 const CAMPOS_DO_EVENTO =
   'id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)';
 /** O que marcarEventoFeito precisa ler antes de gravar. */
-const CAMPOS_DO_FEITO = 'id,status,eventType,summary,organizer(self),attendees(self),extendedProperties';
+const CAMPOS_DO_FEITO = 'id,status,eventType,summary,description,organizer(self),attendees(self),extendedProperties';
 
 const DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
 const HORA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -942,6 +942,8 @@ export function marcarEventoFeito(dados: unknown, servico: ServicoDeAgenda): { f
     throw erro;
   }
   if (proprio(atual, 'status') === 'cancelled' || !doDono(atual, PRINCIPAL)) return naoGravou;
+  // Bloco do Google Tarefas: o feito vai à tarefa (marcarTarefaGoogle), nunca ao título.
+  if (idDaTarefa(atual) !== null) return naoGravou;
   const resumo = proprio(atual, 'summary');
   const texto = typeof resumo === 'string' ? resumo : '';
   const mudaTitulo = !temConvidados(atual);

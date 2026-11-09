@@ -3,7 +3,7 @@
 // blocos e cores): o bloco é reconhecido pelo link na descrição (ou pelo
 // campo taskId), conta como ocupado e tem o feito vivendo no Google Tarefas.
 import { describe, expect, it, vi } from 'vitest';
-import { PedidoInvalido, listarEventos, type ServicoDeAgenda } from '../../script/agenda';
+import { PedidoInvalido, listarEventos, marcarEventoFeito, type ServicoDeAgenda } from '../../script/agenda';
 import { tratar, type Ambiente } from '../../script/api';
 import {
   SEGUNDOS_DO_LOCAL,
@@ -106,6 +106,13 @@ describe('bloco do Google Tarefas na leitura dos eventos', () => {
     expect(incompleto).toBe(false);
     expect(erro.mock.calls.flat().join(' ')).not.toMatch(/Aurora|webAbc|bloco1|marina/);
     erro.mockRestore();
+  });
+
+  it('marcarEventoFeito num bloco (de um app antigo) não mexe no título: gravado false', () => {
+    const cal = agendasDoDono();
+    bloco(cal, 'bloco1', 'webAbc', { eventType: 'default' });
+    expect(marcarEventoFeito({ id: 'bloco1', feito: true }, servico(cal))).toEqual({ feito: true, gravado: false });
+    expect(cal.de('Events.patch')).toEqual([]);
   });
 
   it('id inválido no link não vira bloco', () => {

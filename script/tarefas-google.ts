@@ -404,7 +404,8 @@ function lerLocal(guarda: GuardaDeTarefas | null, taskId: string): { lista: stri
 
 function guardarLocais(guarda: GuardaDeTarefas | null, locais: [taskId: string, a: Achada][]) {
   const valores: Record<string, string> = {};
-  for (const [taskId, a] of locais) valores[chaveDoLocal(taskId)] = JSON.stringify({ l: a.lista, i: a.id });
+  // O CacheService não aceita chave com mais de 250 caracteres.
+  for (const [taskId, a] of locais) if (chaveDoLocal(taskId).length <= 250) valores[chaveDoLocal(taskId)] = JSON.stringify({ l: a.lista, i: a.id });
   gravarNoCache(guarda, valores, SEGUNDOS_DO_LOCAL);
 }
 
