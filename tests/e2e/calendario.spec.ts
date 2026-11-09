@@ -200,10 +200,19 @@ test.describe('computador, 1280 px', () => {
     expect(new Set(caixas.map((c) => c.y)).size).toBe(1);
     for (let i = 1; i < 7; i++) expect(caixas[i].x).toBeGreaterThan(caixas[i - 1].x + 60);
 
-    // Hoje é um só, dito em palavras.
+    // Hoje é um só: pílula coral no título, e "hoje" dito para o leitor de tela.
     const hoje = principal.locator('.cal-dia[data-hoje="true"]');
     await expect(hoje).toHaveCount(1);
-    await expect(hoje.getByText('hoje')).toBeVisible();
+    await expect(hoje.getByRole('heading', { name: /, hoje$/ })).toHaveAttribute('aria-current', 'date');
+
+    // Grade de horas, como no modelo: régua à esquerda, blocos na hora deles, linha de agora em hoje.
+    await expect(principal.locator('.sem-regua')).toContainText('8h');
+    const foco = (await hoje.locator('.cal-item', { hasText: 'Foco na dissertação' }).boundingBox())!;
+    const reuniao = (await hoje.locator('.cal-item', { hasText: 'Reunião de orientação' }).boundingBox())!;
+    expect(reuniao.y).toBeGreaterThan(foco.y + foco.height); // 12:00 em cima, 16:30 embaixo
+    const agora = (await hoje.locator('.sem-agora').boundingBox())!;
+    expect(agora.y).toBeGreaterThan(foco.y); // 12:20, dentro do bloco das 12:00
+    expect(agora.y).toBeLessThan(foco.y + foco.height);
 
     // O que passou, o que é livre e o que é prazo.
     const aula = principal.locator('.cal-item', { hasText: 'Aula de Modelagem' });
@@ -314,6 +323,52 @@ test.describe('computador, 1280 px', () => {
     expect(await pequenos(page)).toEqual([]);
     await capturar(page, 'painel-1280');
     expect(erros).toEqual([]);
+  });
+});
+
+test.describe('computador, 1440 px: mês e ano ocupam o painel central', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('mês: a grade vai até o fim da janela, semanas da mesma altura, títulos até onde cabe', async ({ page }) => {
+    await abrir(page, '#/mes');
+    const principal = page.getByRole('main');
+    const grade = principal.getByRole('table', { name: 'Novembro de 2026' });
+    await expect(grade.getByRole('link')).toHaveCount(42);
+    const quadro = (await principal.locator('.mes-quadro').boundingBox())!;
+    expect(900 - (quadro.y + quadro.height)).toBeLessThan(48); // só a margem de baixo da página
+    const semanas = await grade.locator('tbody tr').evaluateAll((linhas) => linhas.map((l) => l.getBoundingClientRect().height));
+    expect(semanas).toHaveLength(6);
+    expect(Math.max(...semanas) - Math.min(...semanas)).toBeLessThan(2);
+
+    // Pílulas na cor da sala, como no modelo; o que não cabe vira "e mais N". Janela mais alta: cabem mais.
+    const hoje = grade.getByRole('link', { name: /hoje/ });
+    await expect(hoje.locator('.mes-mais')).toHaveText(/^e mais \d+$/);
+    await expect(hoje.locator('.mes-titulo', { hasText: 'Foco na dissertação' })).toHaveClass(/(^| )sala-dout( |$)/);
+    await expect(hoje.locator('.mes-pontos')).toBeHidden(); // os pontos ficam só no celular
+    await page.setViewportSize({ width: 1440, height: 1400 });
+    await expect(hoje.locator('.mes-titulo')).toHaveCount(5);
+    await expect(hoje.locator('.mes-mais')).toHaveCount(0);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(hoje.locator('.mes-mais')).toHaveCount(1);
+    expect(await semRolagemDeLado(page)).toBe(true);
+    expect(await pequenos(page)).toEqual([]);
+  });
+
+  test('ano: doze meses iguais em 3 colunas, num cartão só, dias com compromisso na cor da sala', async ({ page }) => {
+    await abrir(page, '#/ano');
+    const principal = page.getByRole('main');
+    const meses = principal.locator('.ano-mes');
+    await expect(meses).toHaveCount(12);
+    const caixas = await meses.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((c) => ({ x: Math.round(c.x), y: Math.round(c.y), w: Math.round(c.width), h: Math.round(c.height) })));
+    expect(new Set(caixas.map((c) => c.x)).size).toBe(3);
+    expect(new Set(caixas.map((c) => c.y)).size).toBe(4);
+    expect(new Set(caixas.map((c) => c.w)).size).toBe(1);
+    expect(Math.max(...caixas.map((c) => c.h)) - Math.min(...caixas.map((c) => c.h))).toBeLessThan(2);
+    const novembro = principal.locator('.ano-mes', { hasText: 'Novembro' });
+    await expect(novembro.locator('.ano-dia[data-hoje="true"]')).toHaveText('5');
+    await expect(novembro.locator('.ano-dia', { hasText: /^10$/ })).toHaveClass(/(^| )sala-ori( |$)/); // Defesa de Aurora
+    expect(await semRolagemDeLado(page)).toBe(true);
+    expect(await pequenos(page)).toEqual([]);
   });
 });
 

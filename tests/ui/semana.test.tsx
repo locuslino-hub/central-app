@@ -1,7 +1,8 @@
 import { configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { semear } from '../../src/dados/loja';
-import { Semana } from '../../src/ui/Semana';
+import type { DiaDoCalendario, Item } from '../../src/dados/calendario';
+import { horasDaSemana, posicoesNoDia, Semana } from '../../src/ui/Semana';
 import { agendaDeTeste, evento } from '../apoio/agenda-ui';
 import { criar } from '../apoio/tarefas';
 
@@ -352,5 +353,49 @@ describe('Semana (celular, 390 px): um dia de cada vez', () => {
     render(<Semana />);
     const nav = within(screen.getByRole('navigation', { name: 'Semanas' }));
     expect(nav.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['#/semana?d=2026-10-26', '#/semana', '#/semana?d=2026-11-09']);
+  });
+});
+
+describe('Semana (computador): grade de horas, como no modelo', () => {
+  const bloco = (ini: number, fim: number, extra: Partial<{ continuaAntes: boolean; continuaDepois: boolean }> = {}) =>
+    ({ tipo: 'evento', chave: `${ini}-${fim}`, ini, fim, continuaAntes: false, continuaDepois: false, ...extra }) as unknown as Item;
+  const dia = (horarios: Item[]) => ({ data: '2026-11-05', diaInteiro: [], horarios, recusados: 0, total: horarios.length }) as DiaDoCalendario;
+
+  it('a grade vai das 8h às 20h e cresce para o que começa antes ou acaba depois', () => {
+    expect(horasDaSemana([dia([bloco(9 * 60, 10 * 60)])])).toEqual({ de: 8, ate: 20 });
+    expect(horasDaSemana([dia([bloco(7 * 60 + 30, 9 * 60)]), dia([bloco(20 * 60, 21 * 60 + 15)])])).toEqual({ de: 7, ate: 22 });
+    // O que cruza a meia-noite não estica a grade até 0h nem até 24h.
+    expect(horasDaSemana([dia([bloco(22 * 60, 1440, { continuaDepois: true })]), dia([bloco(0, 60, { continuaAntes: true })])])).toEqual({ de: 8, ate: 23 });
+  });
+
+  it('cada bloco tem começo e duração na grade; o que se sobrepõe divide a largura', () => {
+    const horas = { de: 8, ate: 20 };
+    const [a, b, c, d] = posicoesNoDia([bloco(9 * 60, 11 * 60), bloco(10 * 60, 11 * 60), bloco(14 * 60, 15 * 60), bloco(15 * 60, 16 * 60)], horas);
+    expect(a).toEqual({ ini: 60, fim: 180, coluna: 0, colunas: 2 });
+    expect(b).toEqual({ ini: 120, fim: 180, coluna: 1, colunas: 2 });
+    expect(c).toEqual({ ini: 360, fim: 420, coluna: 0, colunas: 1 });
+    expect(d).toEqual({ ini: 420, fim: 480, coluna: 0, colunas: 1 });
+    // Um bloco curto ocupa na tela pelo menos um toque: o seguinte, colado nele, vai para o lado.
+    const [e, f] = posicoesNoDia([bloco(9 * 60, 9 * 60 + 15), bloco(9 * 60 + 30, 10 * 60)], horas);
+    expect([e.colunas, f.coluna]).toEqual([2, 1]);
+    // O que vem do dia anterior começa no alto.
+    expect(posicoesNoDia([bloco(0, 60, { continuaAntes: true })], horas)[0]).toMatchObject({ ini: 0, fim: 0 });
+  });
+
+  it('a página mostra a régua das horas, os blocos posicionados e a linha de agora só em hoje', async () => {
+    const agenda = await agendaDeTeste();
+    agenda.responder([em('2026-11-05', '09:00', '10:30', 'Aula de métodos'), em('2026-11-03', '14:00', '15:00', 'Seminário')]);
+    render(<Semana />);
+    await screen.findByText('Aula de métodos');
+    const regua = document.querySelector('.sem-regua') as HTMLElement;
+    expect(regua.getAttribute('aria-hidden')).toBe('true');
+    expect(regua.textContent).toContain('8h');
+    expect(regua.textContent).toContain('19h');
+    const aula = screen.getByText('Aula de métodos').closest('li') as HTMLElement;
+    expect(aula.style.getPropertyValue('--ini')).toBe('60');
+    expect(aula.style.getPropertyValue('--dur')).toBe('90');
+    expect(document.querySelectorAll('.sem-agora')).toHaveLength(1);
+    expect(secaoEl(/^Quinta/).querySelector('.sem-agora')).not.toBeNull();
+    expect((secaoEl(/^Quinta/).querySelector('.sem-agora') as HTMLElement).style.getPropertyValue('--ini')).toBe(String(4 * 60 + 20));
   });
 });

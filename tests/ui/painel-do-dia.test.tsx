@@ -133,6 +133,10 @@ describe('o passo do dono: cadastrar pessoas e ver o chat usá-las', () => {
 
     // Agora o chat (no painel da direita) sabe a sala dela.
     const painel = within(screen.getByRole('complementary'));
+    // O chat do painel começa recolhido: abre na barra.
+    if (painel.getByRole('button', { name: /^Chat/ }).getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(painel.getByRole('button', { name: /^Chat/ }));
+    }
     fireEvent.input(painel.getByRole('textbox', { name: 'Escreva ou dite' }), { target: { value: 'Marcar reunião com a Marina' } });
     fireEvent.click(painel.getByRole('button', { name: 'Enviar' }));
     const cartao = within(await painel.findByRole('article'));

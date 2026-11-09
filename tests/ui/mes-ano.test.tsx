@@ -1,7 +1,8 @@
 import { configure, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Ano } from '../../src/ui/Ano';
-import { Mes } from '../../src/ui/Mes';
+import type { Item } from '../../src/dados/calendario';
+import { Mes, titulosDoDia } from '../../src/ui/Mes';
 import { agendaDeTeste, evento } from '../apoio/agenda-ui';
 import { criar } from '../apoio/tarefas';
 
@@ -91,12 +92,29 @@ describe('Mês', () => {
     expect(within(x).getByText('+2')).toBeTruthy();
   });
 
-  it('o dia mostra os títulos dos dois primeiros eventos (a tela larga decide se cabem)', async () => {
+  it('o dia mostra os compromissos como pílulas na cor da sala, até três, e "e mais N" (a tela larga decide se cabem)', async () => {
     const agenda = await agendaDeTeste();
-    agenda.responder([em('2026-11-10', '09:00', '10:00', 'Aula'), em('2026-11-10', '11:00', '12:00', 'Seminário'), em('2026-11-10', '14:00', '15:00', 'Reunião')]);
+    agenda.responder([
+      em('2026-11-10', '09:00', '10:00', 'Aula', { salaId: 'sala-aulas' }),
+      em('2026-11-10', '11:00', '12:00', 'Seminário'),
+      em('2026-11-10', '14:00', '15:00', 'Reunião'),
+    ]);
     render(<Mes />);
     const x = await screen.findByRole('link', { name: /^Terça-feira, 10 de novembro, 3 eventos/ });
-    expect([...x.querySelectorAll('.mes-titulo')].map((e) => e.textContent)).toEqual(['Aula', 'Seminário']);
+    expect([...x.querySelectorAll('.mes-titulo')].map((e) => e.textContent)).toEqual(['Aula', 'Seminário', 'Reunião']);
+    expect(x.querySelector('.mes-titulo')!.className).toContain('sala-aulas');
+    expect(x.querySelector('.mes-mais')).toBeNull();
+  });
+
+  it('pílulas: o que não cabe nas linhas vira "e mais N" na última', () => {
+    const item = (titulo: string) => ({ tipo: 'tarefa', chave: titulo, tarefa: { titulo }, dia: '2026-11-10', ini: 0, fim: 0, passado: false }) as unknown as Item;
+    const cinco = ['A', 'B', 'C', 'D', 'E'].map(item);
+    expect(titulosDoDia(cinco, [], null)).toMatchObject({ fora: 2 });
+    expect(titulosDoDia(cinco, [], null).itens).toHaveLength(3);
+    expect(titulosDoDia(cinco.slice(0, 4), [], null)).toMatchObject({ fora: 0 });
+    expect(titulosDoDia(cinco, [], 5)).toMatchObject({ fora: 0 });
+    expect(titulosDoDia(cinco, [], 2)).toMatchObject({ fora: 4 });
+    expect(titulosDoDia(cinco.slice(0, 2), cinco.slice(2), 9).itens.map((i) => (i as { chave: string }).chave)).toEqual(['A', 'B', 'C', 'D', 'E']);
   });
 
   it('dia que já passou fica atenuado e diz "passado"; hoje e os próximos, não', async () => {

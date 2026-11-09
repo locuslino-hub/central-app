@@ -1,9 +1,11 @@
 // O ano: doze meses pequenos. Cada mês abre o mês; os dias com compromissos
-// aparecem marcados. Só leitura.
+// aparecem marcados (na página larga, num círculo na cor da sala). Só leitura.
 import { useMemo } from 'preact/hooks';
 import { mesesDoAno, montarCalendario, periodoDoAno } from '../dados/calendario';
 import { AvisoDaAgenda } from './AvisoDaAgenda';
 import { useAgora, useDia, useTarefas } from './hooks';
+import { corDaSalaDoItem } from './Mes';
+import { useSalaDoEvento } from './useAdivinharSala';
 import { NavegacaoDoCalendario } from './NavegacaoDoCalendario';
 import { NOMES_DOS_MESES } from './quando';
 import { useEventos } from './useEventos';
@@ -16,6 +18,7 @@ export function Ano({ data }: { data?: string }) {
   const hoje = useDia();
   const agora = useAgora();
   const tarefas = useTarefas();
+  const adivinhar = useSalaDoEvento();
 
   const base = data ?? hoje;
   const ano = Number(base.slice(0, 4));
@@ -65,21 +68,22 @@ export function Ano({ data }: { data?: string }) {
                     {letra}
                   </span>
                 ))}
-                {semanas.flat().map((dia) =>
-                  Number(dia.slice(5, 7)) === mes ? (
+                {semanas.flat().map((dia) => {
+                  if (Number(dia.slice(5, 7)) !== mes) return <span key={dia} class="ano-dia ano-dia-fora" />;
+                  const doDia = calendario.dia(dia);
+                  const primeiro = doDia.diaInteiro[0] ?? doDia.horarios[0];
+                  return (
                     <span
                       key={dia}
-                      class="ano-dia"
+                      class={`ano-dia${primeiro ? ` ${corDaSalaDoItem(primeiro, adivinhar)}` : ''}`}
                       data-hoje={String(dia === hoje)}
-                      data-tem={String(calendario.dia(dia).total > 0)}
+                      data-tem={String(doDia.total > 0)}
                       data-passado={String(dia < hoje)}
                     >
                       {Number(dia.slice(8))}
                     </span>
-                  ) : (
-                    <span key={dia} class="ano-dia ano-dia-fora" />
-                  ),
-                )}
+                  );
+                })}
               </div>
             </section>
           );
