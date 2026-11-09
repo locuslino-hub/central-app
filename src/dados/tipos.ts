@@ -119,8 +119,27 @@ export type EventoPendente = {
   salaId: string | null;
 };
 
-export type PendenteCriarEvento = { seq: number; tipo: 'agenda'; acao: 'criarEvento'; evento: EventoPendente };
-export type PendenteRemoverEvento = { seq: number; tipo: 'agenda'; acao: 'removerEvento'; id: string };
+/**
+ * Controle de uma ação de agenda na fila: quando entrou e quantas vezes o
+ * script ou o Google a recusou (sem internet não conta). Passando do limite
+ * (`agendaEsgotada`), a sincronia para de tentar, mas a entrada fica e o
+ * Painel avisa; nada é apagado sozinho.
+ */
+export type ControleDaFila = { criadoEm?: number; tentativas?: number };
+
+export type PendenteCriarEvento = ControleDaFila & {
+  seq: number;
+  tipo: 'agenda';
+  acao: 'criarEvento';
+  evento: EventoPendente;
+  /**
+   * Migração (Tarefa 12): id da tarefa antiga com hora que este evento substitui.
+   * A tarefa fica à vista até o script confirmar; só então vira lápide, na mesma
+   * escrita que tira esta entrada da fila.
+   */
+  migrarTarefaId?: string;
+};
+export type PendenteRemoverEvento = ControleDaFila & { seq: number; tipo: 'agenda'; acao: 'removerEvento'; id: string };
 export type PendenteAgenda = PendenteCriarEvento | PendenteRemoverEvento;
 
 export type Pendente = PendenteRegistro | PendenteAgenda;

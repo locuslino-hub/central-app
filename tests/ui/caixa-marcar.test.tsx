@@ -233,3 +233,53 @@ describe('concluir uma tarefa de marcar', () => {
     expect(agenda.eventos.size).toBe(0);
   });
 });
+
+describe('acabamento da caixa e do desfazer', () => {
+  it('quando o aviso de fila aparece, o foco vai para o botão Entendi', async () => {
+    const { caixa, agenda } = await abrir();
+    agenda.modo('rede');
+    preencher(caixa, '15:30');
+
+    fireEvent.click(caixa.getByRole('button', { name: 'Colocar na agenda' }));
+
+    const entendi = await caixa.findByRole('button', { name: 'Entendi' });
+    await waitFor(() => expect(document.activeElement).toBe(entendi));
+  });
+
+  it('enquanto grava, Esc e o fundo não fecham a caixa', async () => {
+    const { caixa, agenda, elemento } = await abrir();
+    let soltar: () => void = () => {};
+    agenda.aoCriar(() => new Promise<void>((pronto) => (soltar = pronto)));
+    preencher(caixa, '15:30');
+
+    fireEvent.click(caixa.getByRole('button', { name: 'Colocar na agenda' }));
+    await waitFor(() => expect(agenda.de('criarEvento')).toHaveLength(1));
+    fireEvent.keyDown(elemento, { key: 'Escape' });
+    fireEvent.click(document.querySelector('.detalhe-fundo')!);
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+
+    soltar();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await feita()).toBe(true);
+  });
+
+  it('o Desfazer que falha continua valendo: o botão fica e, quando a conexão volta, desfaz', async () => {
+    const { caixa, agenda } = await abrir();
+    preencher(caixa, '15:30');
+    fireEvent.click(caixa.getByRole('button', { name: 'Colocar na agenda' }));
+    const desfazer = await screen.findByRole('button', { name: `Desfazer: ${TITULO}` });
+    agenda.modo('recusar');
+
+    fireEvent.click(desfazer);
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Não consegui salvar. Tente de novo.');
+    expect(screen.getByRole('button', { name: `Desfazer: ${TITULO}` })).toBeTruthy();
+    expect(await feita()).toBe(true);
+    expect(agenda.eventos.size).toBe(1);
+
+    agenda.modo('ok');
+    fireEvent.click(screen.getByRole('button', { name: `Desfazer: ${TITULO}` }));
+    await waitFor(async () => expect(await feita()).toBe(false));
+    expect(agenda.eventos.size).toBe(0);
+  });
+});

@@ -52,7 +52,14 @@ export function useConclusoes(): Conclusoes {
       if (tarefa.feito) {
         const entrada = entradas.current.get(tarefa.id);
         entradas.current.delete(tarefa.id);
-        await (entrada ? entrada.reverter() : reabrirTarefa(tarefa.id));
+        try {
+          await (entrada ? entrada.reverter() : reabrirTarefa(tarefa.id));
+        } catch (erro) {
+          // Não desfez: a entrada volta, e Desfazer segue valendo para tentar de novo.
+          if (entrada) entradas.current.set(tarefa.id, entrada);
+          atualizar();
+          throw erro;
+        }
         atualizar();
         return;
       }
@@ -87,7 +94,14 @@ export function useConclusoes(): Conclusoes {
       if (!entrada) return;
       entradas.current.delete(id);
       atualizar();
-      await entrada.reverter();
+      try {
+        await entrada.reverter();
+      } catch (erro) {
+        // Não desfez: a entrada volta, e Desfazer segue valendo para tentar de novo.
+        entradas.current.set(id, entrada);
+        atualizar();
+        throw erro;
+      }
     },
     async apagar(tarefa) {
       const entrada = await apagarTarefa(tarefa.id);

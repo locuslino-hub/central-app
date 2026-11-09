@@ -6,6 +6,7 @@ import { hrefDe, type RotaAtual } from '../rotas';
 import { AgendaHoje } from './AgendaHoje';
 import { Ano } from './Ano';
 import { Atividades } from './Atividades';
+import { AvisoDaFila } from './AvisoDaFila';
 import { AvisosDeConflito } from './AvisosDeConflito';
 import { Chat } from './Chat';
 import { Checklist } from './Checklist';
@@ -119,6 +120,7 @@ export function Vista({ rota }: { rota: RotaAtual }) {
       return (
         <Pagina titulo={rota.titulo}>
           <AvisosDeConflito />
+          <AvisoDaFila />
           <div class="hoje-grade">
             <Checklist />
             <AgendaHoje />

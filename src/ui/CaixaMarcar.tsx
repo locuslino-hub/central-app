@@ -42,16 +42,27 @@ export function CaixaMarcar({ tarefaId, titulo, dia: diaDaTarefa, hoje, aoColoca
   const campoInicio = useRef<HTMLInputElement>(null);
   const campoFim = useRef<HTMLInputElement>(null);
   const emAndamento = useRef(false);
+  const botaoEntendi = useRef<HTMLButtonElement>(null);
   const id = `marcar-${tarefaId}`;
 
   useEffect(() => {
     caixa.current?.focus();
   }, []);
 
+  // O aviso troca o formulário pelo botão Entendi: o foco vai para ele, não se perde.
+  useEffect(() => {
+    if (aviso) botaoEntendi.current?.focus();
+  }, [aviso]);
+
+  // Enquanto grava, fechar deixaria a tarefa concluída por trás de uma caixa que sumiu.
+  const fechar = () => {
+    if (!emAndamento.current) aoFechar();
+  };
+
   function aoTeclar(tecla: KeyboardEvent) {
     if (tecla.key === 'Escape') {
       tecla.stopPropagation();
-      aoFechar();
+      fechar();
       return;
     }
     if (tecla.key !== 'Tab') return;
@@ -120,7 +131,7 @@ export function CaixaMarcar({ tarefaId, titulo, dia: diaDaTarefa, hoje, aoColoca
 
   return (
     <>
-      <div class="detalhe-fundo" aria-hidden="true" onClick={aoFechar} />
+      <div class="detalhe-fundo" aria-hidden="true" onClick={fechar} />
       <div
         class="detalhe marcar"
         role="dialog"
@@ -142,7 +153,7 @@ export function CaixaMarcar({ tarefaId, titulo, dia: diaDaTarefa, hoje, aoColoca
             <p class="marcar-aviso" role="status">
               Tarefa concluída. {aviso}
             </p>
-            <button type="button" class="botao primario" onClick={aoFechar}>
+            <button type="button" class="botao primario" ref={botaoEntendi} onClick={aoFechar}>
               Entendi
             </button>
           </>

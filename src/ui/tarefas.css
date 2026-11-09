@@ -477,3 +477,9 @@
 .marcar .botao {
   width: 100%;
 }
+
+.aviso-da-fila-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}

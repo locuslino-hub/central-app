@@ -11,10 +11,14 @@ import {
   enfileirarAgenda,
   gravarDoServidor,
   lerDesde,
+  agendaEsgotada,
+  concluirMigracao,
   lerPendente,
   lerRegistros,
   listarPendentes,
+  registrarTentativa,
   removerPendentes,
+  retirarPendente,
   salvarDesde,
   salvarRelogioDoServidor,
 } from './loja';
@@ -210,38 +214,46 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
  * - sem internet: para (a fila fica como está) e a rodada diz `por-enviar`;
  * - pedido inválido: nunca daria certo, sai da fila;
  * - o script ou o Google recusou (ex.: permissão ainda não aprovada, ou script
- *   que ainda não conhece a ação, que responde "código inválido"): fica na fila,
- *   em silêncio, e a próxima rodada tenta de novo. Código de fato recusado já
- *   parou a rodada em `puxar`.
+ *   que ainda não conhece a ação, que responde "código inválido"): a recusa é
+ *   contada, a ação fica na fila em silêncio e a próxima rodada tenta de novo.
+ *   Passando do limite (`agendaEsgotada`) a sincronia deixa de tentar, mas a
+ *   entrada fica guardada e o Painel avisa (AvisoDaFila).
+ * Devolve `true` se gravou registros (a migração apaga a tarefa antiga): a rodada
+ * então envia de novo.
  */
-async function enviarAgenda(chamar: Chamar) {
+async function enviarAgenda(chamar: Chamar): Promise<boolean> {
   const acoes = (await listarPendentes()).filter((p): p is PendenteAgenda => p.tipo === 'agenda');
   let mudou = false;
+  let gravou = false;
   for (const acao of acoes) {
+    if (agendaEsgotada(acao)) continue;
     // Lê de novo: o dono pode ter desfeito a criação desde que a fila foi lida.
     if (!(await lerPendente(acao.seq))) continue;
     try {
       if (acao.acao === 'criarEvento') {
         await criarEvento(acao.evento, { chamar });
         mudou = true;
-        if (await lerPendente(acao.seq)) {
-          await removerPendentes([acao.seq]);
-        } else {
+        if (acao.migrarTarefaId) {
+          await concluirMigracao(acao.seq, acao.migrarTarefaId, acao.evento);
+          gravou = true;
+        } else if (!(await retirarPendente(acao.seq))) {
           // Desfeito enquanto era enviado: o evento já existe e precisa sair.
           await removerEventoCriadoSemQuerer(acao.evento.id, chamar);
         }
       } else {
         await removerEvento(acao.id, { chamar });
         mudou = true;
-        await removerPendentes([acao.seq]);
+        await retirarPendente(acao.seq);
       }
     } catch (erro) {
       if (!(erro instanceof ErroAgenda)) throw erro;
       if (erro.falha === 'sem-internet') throw new ErroConexao();
-      if (erro.falha === 'invalido') await removerPendentes([acao.seq]);
+      if (erro.falha === 'invalido') await retirarPendente(acao.seq);
+      else await registrarTentativa(acao.seq);
     }
   }
   if (mudou) marcarEventosObsoletos();
+  return gravou;
 }
 
 async function removerEventoCriadoSemQuerer(id: string, chamar: Chamar) {
@@ -280,7 +292,8 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
   try {
     await puxar(chamar, esperar);
     await enviar(chamar, esperar);
-    await enviarAgenda(chamar);
+    // A migração apaga tarefas antigas: esses registros saem já nesta rodada.
+    if (await enviarAgenda(chamar)) await enviar(chamar, esperar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';
   } catch (erro) {
     final = await estadoDoErro(erro);

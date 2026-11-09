@@ -45,27 +45,62 @@ export function tituloDoCompromisso(titulo: string): string {
 }
 
 /**
+ * Compromisso já criado (ou na fila) cuja tarefa ainda não concluiu: se o dono
+ * tenta de novo com os mesmos dados, o evento é o mesmo (nada duplica); com
+ * dados diferentes, o anterior é desfeito antes de criar o novo.
+ */
+const criadosSemConcluir = new Map<string, { eventoId: string; situacao: SituacaoDaAgenda; marcacao: Marcacao }>();
+
+const mesma = (a: Marcacao, b: Marcacao) => a.dia === b.dia && a.inicio === b.inicio && a.fim === b.fim;
+
+/**
  * Cria o compromisso e conclui a tarefa. O desfazer devolvido remove o
- * compromisso (ou tira o pedido da fila) e reabre a tarefa. Se concluir falhar
- * depois de criar, o compromisso criado é desfeito e o erro sobe: nada fica pela metade.
+ * compromisso (ou tira o pedido da fila) e reabre a tarefa; se remover falhar,
+ * a tarefa segue concluída e dá para tentar de novo.
+ * Se concluir falhar depois de criar, o erro sobe e o evento fica: tentar de
+ * novo reaproveita o mesmo evento, sem duplicar (id apagado no Google não
+ * volta, então o evento não é desfeito às cegas).
  * Tarefa que sumiu nesse meio tempo (`entrada` indefinida): o compromisso fica.
  */
 export async function colocarNaAgenda(
   tarefa: Pick<Tarefa, 'id' | 'titulo' | 'salaId'>,
-  { dia, inicio, fim }: Marcacao,
+  marcacao: Marcacao,
 ): Promise<{ entrada: Desfazivel | undefined; agenda: SituacaoDaAgenda }> {
-  const { eventoId, situacao } = await criarCompromisso({
-    titulo: tituloDoCompromisso(tarefa.titulo),
-    data: dia,
-    inicio,
-    fim,
-    salaId: tarefa.salaId,
-  });
-  try {
-    const entrada = await concluirTarefa(tarefa.id, () => desfazerCompromisso(eventoId));
-    return { entrada, agenda: situacao };
-  } catch (erro) {
-    await desfazerCompromisso(eventoId).catch(() => {});
-    throw erro;
+  let previo = criadosSemConcluir.get(tarefa.id);
+  if (previo && !mesma(previo.marcacao, marcacao)) {
+    try {
+      await desfazerCompromisso(previo.eventoId);
+    } catch (erro) {
+      // Criar outro agora duplicaria: o dono tenta de novo.
+      console.error('Não consegui desfazer o compromisso da tentativa anterior', erro);
+      throw erro;
+    }
+    criadosSemConcluir.delete(tarefa.id);
+    previo = undefined;
   }
+  if (!previo) {
+    const { eventoId, situacao } = await criarCompromisso({
+      titulo: tituloDoCompromisso(tarefa.titulo),
+      data: marcacao.dia,
+      inicio: marcacao.inicio,
+      fim: marcacao.fim,
+      salaId: tarefa.salaId,
+    });
+    previo = { eventoId, situacao, marcacao: { ...marcacao } };
+    criadosSemConcluir.set(tarefa.id, previo);
+  }
+  const { eventoId, situacao } = previo;
+  let removido = false;
+  const entrada = await concluirTarefa(tarefa.id, async () => {
+    if (removido) return;
+    await desfazerCompromisso(eventoId);
+    removido = true;
+  });
+  criadosSemConcluir.delete(tarefa.id);
+  return { entrada, agenda: situacao };
+}
+
+/** Esquece o que ficou criado sem concluir (testes). */
+export function esquecerMarcacoes() {
+  criadosSemConcluir.clear();
 }

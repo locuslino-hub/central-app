@@ -316,7 +316,7 @@ describe('criarItem com compromisso (chat)', () => {
   });
 });
 
-describe('migrarCompromissos', () => {
+describe('migrarCompromissos (duas fases)', () => {
   const antiga = (extra: object = {}) => ({
     titulo: 'Reunião com a Marina',
     salaId: 'sala-orientacoes',
@@ -329,56 +329,103 @@ describe('migrarCompromissos', () => {
     marcar: false,
     ...extra,
   });
+  const criarDaFila = async () =>
+    (await daAgenda()).filter((p): p is Extract<PendenteAgenda, { acao: 'criarEvento' }> => p.acao === 'criarEvento');
 
-  it('leva a tarefa com hora para a fila da agenda e a apaga, numa vez só', async () => {
+  it('fase 1: o pedido entra na fila com migrarTarefaId e a tarefa continua à vista', async () => {
     const tarefa = await salvar('tarefas', antiga());
     const comum = await salvar('tarefas', { ...antiga(), titulo: 'Sem hora', inicio: undefined });
 
     expect(await migrarCompromissos()).toBe(1);
 
-    expect((await listar('tarefas')).map((t) => t.id)).toEqual([comum.id]);
-    const [acao] = await daAgenda();
+    expect((await listar('tarefas')).map((t) => t.id).sort()).toEqual([tarefa.id, comum.id].sort());
+    const [acao] = await criarDaFila();
     expect(acao).toMatchObject({
-      acao: 'criarEvento',
+      migrarTarefaId: tarefa.id,
       evento: { titulo: 'Reunião com a Marina', data: '2026-11-06', inicio: '15:30', fim: '17:00', salaId: 'sala-orientacoes' },
     });
-    expect(acao.acao === 'criarEvento' && acao.evento.id).toMatch(/^[0-9a-f]{32}$/);
-    expect((await listar('tarefas', { comApagados: true })).find((t) => t.id === tarefa.id)?.apagado).toBe(true);
+    expect(acao.evento.id).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it('é idempotente: rodar de novo não cria mais nada', async () => {
+  it('é idempotente: rodar de novo não põe outro pedido na fila', async () => {
     await salvar('tarefas', antiga());
     await migrarCompromissos();
     expect(await migrarCompromissos()).toBe(0);
     expect(await daAgenda()).toHaveLength(1);
   });
 
-  it('dois aparelhos chegam ao mesmo id de evento, e o script não duplica', async () => {
+  it('fase 2: só depois de o script confirmar, a tarefa vira lápide e o pedido sai da fila', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
     const tarefa = await salvar('tarefas', antiga());
     await migrarCompromissos();
-    const [primeira] = await daAgenda();
+    const [acao] = await criarDaFila();
+
+    expect(await sincronizarCom(agenda)).toBe('atualizado');
+
+    expect(await daAgenda()).toEqual([]);
+    expect([...agenda.eventos.keys()]).toEqual([acao.evento.id]);
+    expect(await listar('tarefas')).toEqual([]);
+    expect((await listar('tarefas', { comApagados: true })).find((t) => t.id === tarefa.id)?.apagado).toBe(true);
+  });
+
+  it('sem internet ou com o script recusando, a tarefa segue à vista (nada se perde)', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    const tarefa = await salvar('tarefas', antiga());
+    await migrarCompromissos();
+
+    agenda.modo('rede');
+    await sincronizarCom(agenda);
+    agenda.modo('recusar');
+    await sincronizarCom(agenda);
+
+    expect((await listar('tarefas')).map((t) => t.id)).toEqual([tarefa.id]);
+    expect(await daAgenda()).toHaveLength(1);
+  });
+
+  it('dois aparelhos chegam ao mesmo id de evento, e o script não duplica', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    const tarefa = await salvar('tarefas', antiga());
+    await migrarCompromissos();
+    const [primeira] = await criarDaFila();
 
     globalThis.indexedDB = new (await import('fake-indexeddb')).IDBFactory();
     await semear();
     await salvar('tarefas', { ...tarefa });
     await migrarCompromissos();
-    const [segunda] = await daAgenda();
+    const [segunda] = await criarDaFila();
+    expect(segunda.evento.id).toBe(primeira.evento.id);
 
-    expect(primeira.acao === 'criarEvento' && segunda.acao === 'criarEvento' && segunda.evento.id).toBe(
-      primeira.acao === 'criarEvento' ? primeira.evento.id : '',
-    );
+    await sincronizarCom(agenda);
+    expect(agenda.eventos.size).toBe(1);
   });
 
-  it('o evento sai na sincronia, com o mesmo id, e a fila esvazia', async () => {
+  it('tarefa que o dono mudou depois do plano não é levada', async () => {
+    const tarefa = await salvar('tarefas', antiga());
+    const evento = { id: 'a'.repeat(32), titulo: tarefa.titulo, data: '2026-11-06', inicio: '15:30', fim: '17:00', salaId: null };
+    await salvar('tarefas', { ...tarefa, titulo: 'Reunião com a Marina (adiada)' });
+
+    const { levarTarefasParaAgenda } = await import('../../src/dados/loja');
+    expect(await levarTarefasParaAgenda([{ tarefaId: tarefa.id, evento }])).toBe(0);
+    expect(await daAgenda()).toEqual([]);
+  });
+
+  it('o dono muda o título entre as fases: a tarefa fica, sem a hora, e a próxima abertura não duplica', async () => {
     const agenda = agendaEscrita();
     await agenda.instalar();
-    await salvar('tarefas', antiga());
+    const tarefa = await salvar('tarefas', antiga());
     await migrarCompromissos();
-    const [acao] = await daAgenda();
+    await salvar('tarefas', { ...(await listar('tarefas'))[0], titulo: 'Reunião com a Marina e a Renata' });
 
-    expect(await sincronizarCom(agenda)).toBe('atualizado');
-    expect(await daAgenda()).toEqual([]);
-    expect([...agenda.eventos.keys()]).toEqual([acao.acao === 'criarEvento' ? acao.evento.id : '']);
+    await sincronizarCom(agenda);
+
+    const [viva] = await listar('tarefas');
+    expect(viva).toMatchObject({ id: tarefa.id, titulo: 'Reunião com a Marina e a Renata' });
+    expect('inicio' in viva).toBe(false);
+    expect(agenda.eventos.size).toBe(1);
+    expect(await migrarCompromissos()).toBe(0);
   });
 
   it('o fim não passa da meia-noite; hora que a agenda recusaria deixa a tarefa como está', async () => {
@@ -388,14 +435,84 @@ describe('migrarCompromissos', () => {
 
     expect(await migrarCompromissos()).toBe(1);
 
-    const [acao] = await daAgenda();
-    expect(acao.acao === 'criarEvento' && acao.evento.fim).toBe('23:59');
-    const vivas = (await listar('tarefas')).map((t) => t.id);
-    expect(vivas).toEqual(expect.arrayContaining([quebrada.id, longo.id]));
+    const [acao] = await criarDaFila();
+    expect(acao.evento.fim).toBe('23:59');
+    expect((await listar('tarefas')).map((t) => t.id)).toEqual(expect.arrayContaining([quebrada.id, longo.id]));
   });
 
   it('tarefa já concluída também é levada: o compromisso existiu', async () => {
     await salvar('tarefas', antiga({ feito: true }));
     expect(await migrarCompromissos()).toBe(1);
+  });
+});
+
+describe('retirarPendente e a corrida do desfazer', () => {
+  it('retirarPendente é de uma vez só: a primeira diz que havia, a segunda que não', async () => {
+    const { enfileirarAgenda, retirarPendente } = await import('../../src/dados/loja');
+    const seq = await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: 'b'.repeat(32) });
+    expect(await retirarPendente(seq)).toBe(true);
+    expect(await retirarPendente(seq)).toBe(false);
+  });
+
+  it('desfeito logo depois da resposta do Google: a sincronia vê que a entrada saiu e remove o evento', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('rede');
+    const { eventoId } = await criarCompromisso(novo);
+    agenda.modo('ok');
+    agenda.aoCriado(() => desfazerCompromisso(eventoId));
+
+    await sincronizarCom(agenda);
+
+    expect(agenda.eventos.size).toBe(0);
+    expect(await daAgenda()).toEqual([]);
+  });
+});
+
+describe('limite de tentativas', () => {
+  it('depois de 20 recusas a sincronia para de tentar, mas a entrada fica guardada', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('recusar');
+    await criarCompromisso(novo); // entra na fila sem tentativas contadas
+    for (let i = 0; i < 20; i++) await sincronizarCom(agenda);
+    expect((await daAgenda())[0].tentativas).toBe(20);
+    const antes = agenda.de('criarEvento').length;
+
+    expect(await sincronizarCom(agenda)).toBe('por-enviar');
+    expect(agenda.de('criarEvento').length).toBe(antes);
+    expect(await daAgenda()).toHaveLength(1);
+
+    // Mesmo com o Google de volta, nada é enviado sozinho; "Tentar de novo" libera.
+    agenda.modo('ok');
+    await sincronizarCom(agenda);
+    expect(agenda.eventos.size).toBe(0);
+    const { reiniciarAgendaParada } = await import('../../src/dados/loja');
+    await reiniciarAgendaParada();
+    expect(await sincronizarCom(agenda)).toBe('atualizado');
+    expect(agenda.eventos.size).toBe(1);
+  });
+
+  it('sem internet não conta tentativa', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('rede');
+    await criarCompromisso(novo);
+    for (let i = 0; i < 25; i++) await sincronizarCom(agenda);
+    expect((await daAgenda())[0].tentativas).toBe(0);
+  });
+
+  it('mais de 7 dias na fila também para, sem apagar', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('recusar');
+    await criarCompromisso(novo);
+    vi.setSystemTime(new Date(2026, 10, 13, 12, 21));
+    const antes = agenda.de('criarEvento').length;
+
+    await sincronizarCom(agenda);
+
+    expect(agenda.de('criarEvento').length).toBe(antes);
+    expect(await daAgenda()).toHaveLength(1);
   });
 });

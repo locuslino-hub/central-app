@@ -16,7 +16,7 @@ type Modo = 'ok' | 'rede' | 'recusar';
 export function agendaEscrita() {
   const eventos = new Map<string, Evento>();
   const pedidos: { acao: string; dados: any }[] = [];
-  const estado: { modo: Modo; aoCriar?: () => void | Promise<void> } = { modo: 'ok' };
+  const estado: { modo: Modo; aoCriar?: () => void | Promise<void>; aoCriado?: () => void | Promise<void> } = { modo: 'ok' };
 
   async function chamar<T>(acao: string, dados: any = {}): Promise<T> {
     if (!ACOES.includes(acao)) return {} as T;
@@ -40,6 +40,7 @@ export function agendaEscrita() {
         link: null,
       };
       eventos.set(evento.id, evento);
+      await estado.aoCriado?.(); // depois de o Google criar e antes de a resposta chegar ao app
       return evento as T;
     }
     if (acao === 'removerEvento') return { removido: eventos.delete(dados.id) } as T;
@@ -63,6 +64,10 @@ export function agendaEscrita() {
     aoCriar(fazer: (() => void | Promise<void>) | undefined) {
       estado.aoCriar = fazer;
     },
+    /** Roda algo depois de o evento existir, antes de a resposta chegar ao app. */
+    aoCriado(fazer: (() => void | Promise<void>) | undefined) {
+      estado.aoCriado = fazer;
+    },
     /** Guarda uma conexão e põe esta agenda no lugar do `fetch`. */
     async instalar({ conectar = true }: { conectar?: boolean } = {}) {
       if (conectar) await salvarConexao({ url: URL_FICTICIA, codigo: CODIGO });
@@ -71,6 +76,13 @@ export function agendaEscrita() {
         vi.fn(async (_url: string, init: { body: string }) => {
           const { acao, dados } = JSON.parse(init.body);
           let resposta: unknown;
+          // O resto do script (sincronia dos registros): servidor vazio que aceita tudo.
+          if (acao === 'puxar') resposta = { ok: true, dados: { registros: [], agora: Date.now() } };
+          else if (acao === 'enviar') {
+            const aceitas = (dados.mudancas as { colecao: string; registro: { id: string } }[]).map((m) => ({ colecao: m.colecao, id: m.registro.id }));
+            resposta = { ok: true, dados: { aceitas, conflitos: [], recusadas: [], substituidas: [], agora: Date.now() } };
+          }
+          if (resposta !== undefined) return { text: async () => JSON.stringify(resposta) };
           try {
             resposta = { ok: true, dados: await chamar(acao, dados) };
           } catch (erro) {

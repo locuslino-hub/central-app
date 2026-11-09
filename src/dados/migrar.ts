@@ -1,13 +1,15 @@
 // Migração dos compromissos antigos (Tarefa 12): até aqui o chat guardava
 // compromisso como tarefa com hora de início (`Tarefa.inicio`, R28). Agora o
-// compromisso mora no Google Agenda. Esta migração leva cada tarefa dessas para
-// lá e a apaga (lápide, que sincroniza), uma vez e sem duplicar:
+// compromisso mora no Google Agenda. Em duas fases, para nunca perder nada:
+// 1. aqui: o pedido `criarEvento` entra na fila `pendentes` (com `migrarTarefaId`)
+//    e a tarefa continua à vista;
+// 2. na sincronia (`concluirMigracao`), só depois de o script confirmar o evento:
+//    a tarefa vira lápide e o pedido sai da fila, numa escrita só.
+// Uma vez e sem duplicar:
 // - o id do evento sai do id da tarefa, então os dois aparelhos chegam ao mesmo
 //   evento, e o script devolve o já criado em vez de criar outro;
-// - a tarefa só some na mesma escrita que põe o pedido na fila, e a fila só
-//   esvazia quando o script confirma;
 // - tarefa que a agenda recusaria (hora que não existe, título comprido) fica
-//   como está, para nada se perder.
+//   como está; a que o dono mudou depois do plano não é levada (nem duplicada).
 import { lerNovoEvento } from '../../script/agenda';
 import { levarTarefasParaAgenda, listar } from './loja';
 import type { EventoPendente, Tarefa } from './tipos';
@@ -49,7 +51,7 @@ async function eventoDe(tarefa: Tarefa): Promise<EventoPendente | null> {
   return null;
 }
 
-/** Quantas tarefas foram levadas para a fila da agenda. Pode rodar quantas vezes quiser. */
+/** Quantos pedidos novos entraram na fila da agenda. Pode rodar quantas vezes quiser. */
 export async function migrarCompromissos(): Promise<number> {
   const planos: { tarefaId: string; evento: EventoPendente }[] = [];
   for (const tarefa of await listar('tarefas')) {

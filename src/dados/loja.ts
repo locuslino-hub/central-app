@@ -240,51 +240,130 @@ export async function listarPendentes(): Promise<Pendente[]> {
 
 // ---- Ações do Google Agenda na fila (Tarefa 12) ----
 
-/**
- * Leva tarefas antigas com hora de início para a agenda, numa escrita só por
- * tarefa: a tarefa vira lápide (sincroniza) e o `criarEvento` entra na fila.
- * Lê a tarefa de novo dentro da escrita; a que já foi levada, concluída por
- * outro caminho ou apagada é pulada. Devolve quantas foram.
- */
-export async function levarTarefasParaAgenda(planos: readonly { tarefaId: string; evento: EventoPendente }[]): Promise<number> {
-  let levadas = 0;
-  for (const { tarefaId, evento } of planos) {
-    const levou = await comBanco(async (banco) => {
-      const tx = escrever(banco, ['tarefas', PENDENTES, LOCAL]);
-      const loja = tx.objectStore('tarefas');
-      const atual: Colecoes['tarefas'] | undefined = await loja.get(tarefaId);
-      if (!atual || atual.apagado || !atual.inicio) {
-        await tx.done;
-        return false;
-      }
-      const aparelho = await aparelhoNa(tx);
-      await loja.put({ ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho });
-      await enfileirar(tx, 'tarefas', tarefaId);
-      await tx.objectStore(PENDENTES).add({ tipo: 'agenda', acao: 'criarEvento', evento });
-      await tx.done;
-      return true;
-    });
-    if (levou) {
-      levadas++;
-      notificar({ colecao: 'tarefas', id: tarefaId });
-    }
-  }
-  return levadas;
-}
+/** Tentativas recusadas, ou dias na fila, depois dos quais a sincronia desiste de tentar sozinha. */
+export const TENTATIVAS_NO_MAXIMO = 20;
+export const DIAS_NA_FILA_NO_MAXIMO = 7;
 
-/** A ação, sem o `seq` que o IndexedDB dá. */
+/** A ação, como se entrega a `enfileirarAgenda`: o `seq` e o controle são postos aqui. */
 export type AcaoDeAgenda =
-  | Omit<Extract<PendenteAgenda, { acao: 'criarEvento' }>, 'seq'>
-  | Omit<Extract<PendenteAgenda, { acao: 'removerEvento' }>, 'seq'>;
+  | Omit<Extract<PendenteAgenda, { acao: 'criarEvento' }>, 'seq' | 'criadoEm' | 'tentativas'>
+  | Omit<Extract<PendenteAgenda, { acao: 'removerEvento' }>, 'seq' | 'criadoEm' | 'tentativas'>;
+
+/** A sincronia parou de tentar esta ação: muitas recusas ou muito tempo na fila. */
+export function agendaEsgotada(acao: PendenteAgenda, agora = Date.now()): boolean {
+  if ((acao.tentativas ?? 0) >= TENTATIVAS_NO_MAXIMO) return true;
+  return acao.criadoEm !== undefined && agora - acao.criadoEm > DIAS_NA_FILA_NO_MAXIMO * 24 * 60 * 60 * 1000;
+}
 
 /** Põe a ação na fila `pendentes`, junto das de registro. Devolve o `seq`. */
 export async function enfileirarAgenda(acao: AcaoDeAgenda): Promise<number> {
   return comBanco(async (banco) => {
     const tx = escrever(banco, [PENDENTES]);
-    const seq = (await tx.objectStore(PENDENTES).add(acao)) as number;
+    const seq = (await tx.objectStore(PENDENTES).add({ ...acao, criadoEm: Date.now(), tentativas: 0 })) as number;
     await tx.done;
     return seq;
   });
+}
+
+/**
+ * Tira uma entrada da fila de uma vez só. `true` se ela estava lá: quem a
+ * enviou com sucesso e recebe `false` sabe que alguém a desfez no meio do envio.
+ */
+export async function retirarPendente(seq: number): Promise<boolean> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const havia = (await fila.getKey(seq)) !== undefined;
+    if (havia) await fila.delete(seq);
+    await tx.done;
+    return havia;
+  });
+}
+
+/** Conta uma recusa do script ou do Google (sem internet não conta). */
+export async function registrarTentativa(seq: number): Promise<void> {
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const atual: Pendente | undefined = await fila.get(seq);
+    if (atual?.tipo === 'agenda') await fila.put({ ...atual, tentativas: (atual.tentativas ?? 0) + 1 });
+    await tx.done;
+  });
+}
+
+/** "Tentar de novo": as ações paradas voltam a valer, com a contagem e o prazo zerados. */
+export async function reiniciarAgendaParada(): Promise<void> {
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const agora = Date.now();
+    const todas: Pendente[] = await fila.getAll();
+    for (const p of todas) {
+      if (p.tipo === 'agenda' && agendaEsgotada(p, agora)) await fila.put({ ...p, criadoEm: agora, tentativas: 0 });
+    }
+    await tx.done;
+  });
+}
+
+/**
+ * Migração, fase 1: põe na fila o `criarEvento` de cada tarefa antiga com hora.
+ * A tarefa continua à vista. Lê a tarefa de novo dentro da escrita e pula a que
+ * já foi levada, apagada, ou cujo título, dia ou hora mudaram desde o plano;
+ * pula também a que já tem um pedido na fila. Devolve quantas entraram.
+ */
+export async function levarTarefasParaAgenda(planos: readonly { tarefaId: string; evento: EventoPendente }[]): Promise<number> {
+  let levadas = 0;
+  for (const { tarefaId, evento } of planos) {
+    const levou = await comBanco(async (banco) => {
+      const tx = escrever(banco, ['tarefas', PENDENTES]);
+      const atual: Colecoes['tarefas'] | undefined = await tx.objectStore('tarefas').get(tarefaId);
+      const fila = tx.objectStore(PENDENTES);
+      const todas: Pendente[] = await fila.getAll();
+      const jaNaFila = todas.some((p) => p.tipo === 'agenda' && p.acao === 'criarEvento' && p.migrarTarefaId === tarefaId);
+      const mudou =
+        !atual || atual.apagado || atual.titulo !== evento.titulo || atual.data !== evento.data || atual.inicio !== evento.inicio;
+      if (jaNaFila || mudou) {
+        await tx.done;
+        return false;
+      }
+      await fila.add({ tipo: 'agenda', acao: 'criarEvento', evento, migrarTarefaId: tarefaId, criadoEm: Date.now(), tentativas: 0 });
+      await tx.done;
+      return true;
+    });
+    if (levou) levadas++;
+  }
+  return levadas;
+}
+
+/**
+ * Migração, fase 2: o script confirmou o evento. Numa escrita só, tira a
+ * entrada da fila e resolve a tarefa antiga: se segue como no plano, vira
+ * lápide (sincroniza); se o dono a mudou nesse meio tempo, fica, só sem a hora
+ * de início (o evento já existe; nada do que ele escreveu se perde).
+ */
+export async function concluirMigracao(seq: number, tarefaId: string, evento: EventoPendente): Promise<void> {
+  const mudada = await comBanco(async (banco) => {
+    const tx = escrever(banco, ['tarefas', PENDENTES, LOCAL]);
+    await tx.objectStore(PENDENTES).delete(seq);
+    const loja = tx.objectStore('tarefas');
+    const atual: Colecoes['tarefas'] | undefined = await loja.get(tarefaId);
+    if (!atual || atual.apagado || !atual.inicio) {
+      await tx.done;
+      return false;
+    }
+    const aparelho = await aparelhoNa(tx);
+    const igual = atual.titulo === evento.titulo && atual.data === evento.data && atual.inicio === evento.inicio;
+    if (igual) {
+      await loja.put({ ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho });
+    } else {
+      const { inicio: _inicio, ...semHora } = atual;
+      await loja.put({ ...semHora, atualizadoEm: carimbo(atual), aparelho });
+    }
+    await enfileirar(tx, 'tarefas', tarefaId);
+    await tx.done;
+    return true;
+  });
+  if (mudada) notificar({ colecao: 'tarefas', id: tarefaId });
 }
 
 /** Uma entrada da fila, ou `undefined` se já saiu (enviada ou desfeita). */

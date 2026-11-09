@@ -346,6 +346,30 @@ describe('desfazer', () => {
     expect(pilha.ultimo()).toBeUndefined();
   });
 
+  it('desfazer que falha devolve a entrada ao mesmo lugar, e dá para tentar de novo', async () => {
+    const pilha = criarDesfazer();
+    let falhar = true;
+    const feitos: string[] = [];
+    pilha.registrar('primeiro', () => {
+      feitos.push('primeiro');
+    });
+    const entrada = pilha.registrar('segundo', () => {
+      if (falhar) throw new Error('sem conexão');
+      feitos.push('segundo');
+    });
+    pilha.registrar('terceiro', () => {});
+
+    await expect(entrada.reverter()).rejects.toThrow('sem conexão');
+    expect(pilha.ultimo()?.rotulo).toBe('terceiro');
+
+    falhar = false;
+    await entrada.reverter();
+    await entrada.reverter();
+    expect(feitos).toEqual(['segundo']);
+    await pilha.ultimo()!.reverter();
+    expect(pilha.ultimo()?.rotulo).toBe('primeiro');
+  });
+
   it('pilhas criadas à parte não se misturam', () => {
     const a = criarDesfazer();
     a.registrar('de a', () => {});
