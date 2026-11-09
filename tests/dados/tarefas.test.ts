@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { desfazer } from '../../src/dados/desfazer';
-import { apagar, listar, listarPendentes, salvar } from '../../src/dados/loja';
+import { apagar, listar, listarPendentes as listarTodosOsPendentes, salvar } from '../../src/dados/loja';
 import {
   apagarTarefa,
   concluirTarefa,
@@ -14,6 +14,10 @@ import {
   reabrirTarefa,
 } from '../../src/dados/tarefas';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
+
+/** A fila sem o espelho no Google (que tem testes próprios em tests/dados/espelho.test.ts). */
+const listarPendentes = async () => (await listarTodosOsPendentes()).filter((p) => p.tipo !== 'espelho');
+
 
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa.
 const AGORA = Date.parse('2026-11-05T12:20:00Z');

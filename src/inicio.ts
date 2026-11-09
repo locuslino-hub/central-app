@@ -1,7 +1,7 @@
 // O que o app liga ao abrir (chamado por main.tsx). Fica fora de main.tsx para
 // poder ser testado: main.tsx só liga isto e desenha a tela.
 import { lerConexao } from './conexao/guarda';
-import { semear, semearPalavras } from './dados/loja';
+import { enfileirarEspelhosQueFaltam, semear, semearPalavras } from './dados/loja';
 import { migrarCompromissos } from './dados/migrar';
 import { iniciarSincronia, sincronizar } from './dados/sincronia';
 import { iniciarVirada } from './dados/virada';
@@ -22,6 +22,8 @@ export function iniciarApp() {
   semearPalavras().catch((erro: unknown) => console.error('Não consegui criar as palavras iniciais', erro));
   // Compromissos que o chat guardava como tarefa com hora vão para o Google Agenda (uma vez, sem duplicar).
   migrarCompromissos().catch((erro: unknown) => console.error('Não consegui levar os compromissos para a agenda', erro));
+  // Tarefas abertas sem espelho no Google Tarefas (de antes do espelho) entram na fila uma vez.
+  enfileirarEspelhosQueFaltam().catch((erro: unknown) => console.error('Não consegui pôr as tarefas no espelho', erro));
   iniciarSincronia();
   // Vira o dia ao abrir, na meia-noite e ao voltar ao app. Sincroniza antes de virar:
   // este aparelho pode ter ficado dias fechado, e virar em cima de uma cópia velha

@@ -12,7 +12,7 @@ const URL_VALIDA = /^https?:\/\/\S+$/i;
 /** `HH:MM`, de 00:00 a 23:59. */
 const HORA_VALIDA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
-type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?';
+type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?' | 'booleano';
 
 /** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
 export const ESQUEMAS = {
@@ -29,6 +29,7 @@ export const ESQUEMAS = {
     semanaVencida: 'texto?',
     emailId: 'texto?',
     adiadaAte: 'texto?',
+    googleTarefaId: 'texto?',
   },
   palavras: { termo: 'texto', salaId: 'texto' },
   documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?' },
@@ -36,6 +37,7 @@ export const ESQUEMAS = {
   estadosEmail: { adiadaAte: 'texto?' },
   rascunhos: { texto: 'texto', salaId: 'textoOuNulo?' },
   config: { fimDoDia: 'texto' },
+  eventosFeitos: { eventoId: 'texto', agendaId: 'texto', data: 'texto', feito: 'booleano' },
 } as const satisfies Record<string, Record<string, Tipo>>;
 
 export type NomeDaColecao = keyof typeof ESQUEMAS;
@@ -65,6 +67,8 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return typeof valor === 'string' && URL_VALIDA.test(valor);
     case 'hora?':
       return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
+    case 'booleano':
+      return typeof valor === 'boolean';
   }
 }
 

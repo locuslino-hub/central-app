@@ -10,7 +10,7 @@ import {
   lerDiferencaDeRelogio,
   listar,
   listarAvisos,
-  listarPendentes,
+  listarPendentes as listarTodosOsPendentes,
   salvar,
   semear,
 } from '../../src/dados/loja';
@@ -23,6 +23,13 @@ import {
 } from '../../src/dados/sincronia';
 import type { Mudanca, ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { servidorDeTeste } from '../apoio/servidor';
+
+/**
+ * A fila dos registros. O espelho no Google Tarefas (que este servidor não
+ * tem, como um script sem a permissão) fica de fora: ele tem testes próprios
+ * em tests/dados/espelho.test.ts.
+ */
+const listarPendentes = async () => (await listarTodosOsPendentes()).filter((p) => p.tipo !== 'espelho');
 
 // Relógio fixo: quinta, 2026-11-05, 12:20 em Lisboa (WET = UTC em novembro).
 const AGORA = Date.parse('2026-11-05T12:20:00Z');
@@ -653,7 +660,7 @@ describe('estado', () => {
     const [um, dois] = await Promise.all([sincronizarAqui(), sincronizarAqui()]);
 
     expect([um, dois]).toEqual(['atualizado', 'atualizado']);
-    expect(servidor.pedidos.map((p) => p.acao)).toEqual(['puxar', 'enviar', 'puxar']);
+    expect(servidor.pedidos.map((p) => p.acao).filter((acao) => acao !== 'espelharTarefas')).toEqual(['puxar', 'enviar', 'puxar']);
   });
 });
 

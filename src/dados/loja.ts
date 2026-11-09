@@ -6,23 +6,26 @@ import type {
   Colecao,
   Colecoes,
   Config,
+  ControleDaFila,
   EventoPendente,
   Mudanca,
   Palavra,
   ParaSalvar,
   Pendente,
   PendenteAgenda,
+  PendenteEspelho,
   PendenteRegistro,
   Registro,
   Remoto,
   Sala,
+  Tarefa,
 } from './tipos';
 
 // Banco próprio, separado de `central-conexao`: a exportação dos dados nunca
 // leva o código do aparelho. O id do aparelho mora em `local`, fora das coleções.
 const BANCO = 'central-dados';
-// 1: coleções, pendentes, local. 2: avisos (Tarefa 5).
-const VERSAO = 2;
+// 1: coleções, pendentes, local. 2: avisos (Tarefa 5). 3: eventosFeitos (feito espelhado).
+const VERSAO = 3;
 const PENDENTES = 'pendentes';
 const AVISOS = 'avisos';
 const LOCAL = 'local';
@@ -172,6 +175,7 @@ export async function salvar<C extends Colecao>(
     const novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
     await loja.put(novo);
     await enfileirar(tx, colecao, novo.id);
+    if (colecao === 'tarefas') await espelharSeMudou(tx, atual as Tarefa | undefined, novo as Tarefa);
     await tx.done;
     return novo;
   });
@@ -190,6 +194,103 @@ function carimbo(atual: Registro | undefined): number {
 function enfileirar(tx: Escrita, colecao: Colecao, id: string) {
   const entrada: Omit<PendenteRegistro, 'seq'> = { tipo: 'registro', colecao, id };
   return tx.objectStore(PENDENTES).add(entrada);
+}
+
+// ---- Espelho no Google (feito espelhado) ----
+
+/**
+ * O que a tarefa espelho no Google Tarefas mostra. `null`: a tarefa não é
+ * espelhada (não existe, ou é compromisso antigo com hora, que vai para o
+ * Google Agenda pela migração).
+ */
+export function espelhoDaTarefa(tarefa: Tarefa | undefined): string | null {
+  if (!tarefa || tarefa.inicio) return null;
+  return JSON.stringify([String(tarefa.titulo ?? ''), tarefa.data ?? null, !!tarefa.feito, !!tarefa.apagado]);
+}
+
+/**
+ * Na mesma escrita da tarefa: se o que a espelho mostra mudou, entra um
+ * `espelharTarefa` na fila. Mudar só a duração, a sala ou o id da espelho não
+ * mexe no Google; apagar o que nunca foi espelhado também não.
+ */
+async function espelharSeMudou(tx: Escrita, antes: Tarefa | undefined, depois: Tarefa) {
+  const de = espelhoDaTarefa(antes);
+  const para = espelhoDaTarefa(depois);
+  if (para === null || para === de || (de === null && depois.apagado)) return;
+  await tx.objectStore(PENDENTES).add(entradaDeEspelho({ tipo: 'espelho', acao: 'espelharTarefa', tarefaId: depois.id }));
+}
+
+type AcaoDeEspelho =
+  | Omit<Extract<PendenteEspelho, { acao: 'espelharTarefa' }>, 'seq' | 'criadoEm' | 'tentativas'>
+  | Omit<Extract<PendenteEspelho, { acao: 'marcarEventoFeito' }>, 'seq' | 'criadoEm' | 'tentativas'>;
+
+function entradaDeEspelho(acao: AcaoDeEspelho): Omit<PendenteEspelho, 'seq'> {
+  return { ...acao, criadoEm: Date.now(), tentativas: 0 };
+}
+
+/**
+ * Põe o "✓ " de um compromisso na fila. Um pedido anterior do mesmo evento
+ * que ainda não saiu é trocado por este: vale o último toque.
+ */
+export async function enfileirarMarcaDeFeito(id: string, feito: boolean): Promise<number> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const todas: Pendente[] = await fila.getAll();
+    for (const p of todas) {
+      if (p.tipo === 'espelho' && p.acao === 'marcarEventoFeito' && p.id === id) await fila.delete(p.seq);
+    }
+    const seq = (await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'marcarEventoFeito', id, feito }))) as number;
+    await tx.done;
+    return seq;
+  });
+}
+
+/**
+ * O script respondeu o id da espelho: fica na tarefa (sincroniza), relida na
+ * hora de gravar. Não grava se a tarefa sumiu, foi apagada ou já tem esse id.
+ */
+export async function guardarIdDoEspelho(tarefaId: string, googleId: string): Promise<boolean> {
+  const gravou = await comBanco(async (banco) => {
+    const tx = escrever(banco, ['tarefas', PENDENTES, LOCAL]);
+    const loja = tx.objectStore('tarefas');
+    const atual: Tarefa | undefined = await loja.get(tarefaId);
+    if (!atual || atual.apagado || atual.googleTarefaId === googleId) {
+      await tx.done;
+      return false;
+    }
+    const aparelho = await aparelhoNa(tx);
+    await loja.put({ ...atual, googleTarefaId: googleId, atualizadoEm: carimbo(atual), aparelho });
+    await enfileirar(tx, 'tarefas', tarefaId);
+    await tx.done;
+    return true;
+  });
+  if (gravou) notificar({ colecao: 'tarefas', id: tarefaId });
+  return gravou;
+}
+
+/**
+ * Tarefas abertas que ainda não têm espelho (criadas antes do espelho, ou em
+ * outro aparelho com versão antiga) entram na fila, sem repetir as que já
+ * estão lá. Concluídas antigas não vão: o Google não precisa do histórico.
+ * Devolve quantas entraram.
+ */
+export async function enfileirarEspelhosQueFaltam(): Promise<number> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, ['tarefas', PENDENTES]);
+    const tarefas: Tarefa[] = await tx.objectStore('tarefas').getAll();
+    const fila = tx.objectStore(PENDENTES);
+    const todas: Pendente[] = await fila.getAll();
+    const naFila = new Set(todas.flatMap((p) => (p.tipo === 'espelho' && p.acao === 'espelharTarefa' ? [p.tarefaId] : [])));
+    let quantas = 0;
+    for (const tarefa of tarefas) {
+      if (tarefa.apagado || tarefa.feito || tarefa.googleTarefaId || naFila.has(tarefa.id) || espelhoDaTarefa(tarefa) === null) continue;
+      await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'espelharTarefa', tarefaId: tarefa.id }));
+      quantas++;
+    }
+    await tx.done;
+    return quantas;
+  });
 }
 
 /** Registros da coleção. Lápides (`apagado`) só aparecem com `comApagados`. */
@@ -216,8 +317,10 @@ export async function apagar<C extends Colecao>(colecao: C, id: string): Promise
       return undefined;
     }
     const aparelho = await aparelhoNa(tx);
-    await loja.put({ ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho });
+    const lapide = { ...atual, apagado: true, atualizadoEm: carimbo(atual), aparelho };
+    await loja.put(lapide);
     await enfileirar(tx, colecao, id);
+    if (colecao === 'tarefas') await espelharSeMudou(tx, atual as Tarefa, lapide as Tarefa);
     await tx.done;
     return atual;
   });
@@ -249,8 +352,8 @@ export type AcaoDeAgenda =
   | Omit<Extract<PendenteAgenda, { acao: 'criarEvento' }>, 'seq' | 'criadoEm' | 'tentativas'>
   | Omit<Extract<PendenteAgenda, { acao: 'removerEvento' }>, 'seq' | 'criadoEm' | 'tentativas'>;
 
-/** A sincronia parou de tentar esta ação: muitas recusas ou muito tempo na fila. */
-export function agendaEsgotada(acao: PendenteAgenda, agora = Date.now()): boolean {
+/** A sincronia parou de tentar esta ação (de agenda ou de espelho): muitas recusas ou muito tempo na fila. */
+export function agendaEsgotada(acao: ControleDaFila, agora = Date.now()): boolean {
   if ((acao.tentativas ?? 0) >= TENTATIVAS_NO_MAXIMO) return true;
   return acao.criadoEm !== undefined && agora - acao.criadoEm > DIAS_NA_FILA_NO_MAXIMO * 24 * 60 * 60 * 1000;
 }
@@ -286,7 +389,7 @@ export async function registrarTentativa(seq: number): Promise<void> {
     const tx = escrever(banco, [PENDENTES]);
     const fila = tx.objectStore(PENDENTES);
     const atual: Pendente | undefined = await fila.get(seq);
-    if (atual?.tipo === 'agenda') await fila.put({ ...atual, tentativas: (atual.tentativas ?? 0) + 1 });
+    if (atual?.tipo === 'agenda' || atual?.tipo === 'espelho') await fila.put({ ...atual, tentativas: (atual.tentativas ?? 0) + 1 });
     await tx.done;
   });
 }
@@ -299,7 +402,9 @@ export async function reiniciarAgendaParada(): Promise<void> {
     const agora = Date.now();
     const todas: Pendente[] = await fila.getAll();
     for (const p of todas) {
-      if (p.tipo === 'agenda' && agendaEsgotada(p, agora)) await fila.put({ ...p, criadoEm: agora, tentativas: 0 });
+      if ((p.tipo === 'agenda' || p.tipo === 'espelho') && agendaEsgotada(p, agora)) {
+        await fila.put({ ...p, criadoEm: agora, tentativas: 0 });
+      }
     }
     await tx.done;
   });
@@ -554,8 +659,10 @@ function canonico(valor: unknown): string {
  * própria, como a virada do dia: nada se perdeu, então não há o que avisar.
  */
 function mesmoConteudo(a: Registro, b: Registro): boolean {
-  const { atualizadoEm: _horaA, aparelho: _aparelhoA, ...restoA } = a;
-  const { atualizadoEm: _horaB, aparelho: _aparelhoB, ...restoB } = b;
+  // O id da espelho no Google Tarefas não é coisa do dono: se só ele difere,
+  // nada se perdeu (a próxima mudança da tarefa acha a espelho pelas notas).
+  const { atualizadoEm: _horaA, aparelho: _aparelhoA, googleTarefaId: _espelhoA, ...restoA } = a as Registro & { googleTarefaId?: string };
+  const { atualizadoEm: _horaB, aparelho: _aparelhoB, googleTarefaId: _espelhoB, ...restoB } = b as Registro & { googleTarefaId?: string };
   return canonico(restoA) === canonico(restoB);
 }
 

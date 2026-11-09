@@ -7,6 +7,7 @@ import {
   PedidoInvalido,
   dataValida,
   lerId,
+  lerMarcaDeFeito,
   lerNovoEvento,
   lerPeriodo,
   lerTrocaDeSala,
@@ -16,7 +17,10 @@ import {
   type NovoEvento,
   type RespostaEventos,
 } from '../../script/agenda';
+import { lerLote, type ItemDoEspelho, type ResultadoDoEspelho } from '../../script/tarefas-google';
 import { ErroConexao, ErroScript, chamar as chamarOScript } from '../conexao/cliente';
+
+export type { ItemDoEspelho, ResultadoDoEspelho };
 
 export type { Evento, NovoEvento, RespostaEventos };
 
@@ -74,7 +78,10 @@ export function eventoValido(valor: unknown): valor is Evento {
     typeof e.livre === 'boolean' &&
     typeof e.recusado === 'boolean' &&
     salaValida(e.salaId) &&
-    (e.link === null || linkValido(e.link))
+    (e.link === null || linkValido(e.link)) &&
+    // Script antigo não manda: ausente vale false.
+    (e.feito === undefined || typeof e.feito === 'boolean') &&
+    (e.somenteLeitura === undefined || typeof e.somenteLeitura === 'boolean')
   );
 }
 
@@ -136,6 +143,47 @@ export function criarEvento(novo: NovoEvento, opcoes: OpcoesDaAgenda = {}): Prom
 /** Desfaz a criação: só apaga evento criado pelo app. `removido: false` se já não existia. */
 export function removerEvento(id: string, opcoes: OpcoesDaAgenda = {}): Promise<{ removido: boolean }> {
   return pedir('removerEvento', () => ({ id: lerId({ id }) }), remocao, opcoes);
+}
+
+const marcaDeFeito = (valor: unknown): valor is { feito: boolean; gravado: boolean } =>
+  typeof valor === 'object' &&
+  valor !== null &&
+  typeof (valor as { feito?: unknown }).feito === 'boolean' &&
+  typeof (valor as { gravado?: unknown }).gravado === 'boolean';
+
+/**
+ * Põe (ou tira) o "✓ " no título de um compromisso da agenda principal.
+ * `gravado: false`: o evento não é do dono (convite, outra agenda) ou sumiu;
+ * o feito fica só na Central, sem erro.
+ */
+export function marcarEventoFeito(
+  id: string,
+  feito: boolean,
+  opcoes: OpcoesDaAgenda = {},
+): Promise<{ feito: boolean; gravado: boolean }> {
+  return pedir('marcarEventoFeito', () => lerMarcaDeFeito({ id, feito }), marcaDeFeito, opcoes);
+}
+
+const resultadosDoEspelho = (valor: unknown): valor is { resultados: ResultadoDoEspelho[] } =>
+  typeof valor === 'object' &&
+  valor !== null &&
+  Array.isArray((valor as { resultados?: unknown }).resultados) &&
+  (valor as { resultados: unknown[] }).resultados.every(
+    (r) =>
+      typeof r === 'object' &&
+      r !== null &&
+      typeof (r as ResultadoDoEspelho).id === 'string' &&
+      typeof (r as ResultadoDoEspelho).ok === 'boolean' &&
+      ((r as ResultadoDoEspelho).googleId === null || typeof (r as ResultadoDoEspelho).googleId === 'string'),
+  );
+
+/**
+ * Espelha tarefas no Google Tarefas (lista "Central"), até LOTE_NO_MAXIMO por
+ * pedido. Usa o mesmo cliente e os mesmos motivos de falha da agenda
+ * (`ErroAgenda`): a fila trata os dois do mesmo jeito.
+ */
+export function espelharTarefas(itens: ItemDoEspelho[], opcoes: OpcoesDaAgenda = {}): Promise<{ resultados: ResultadoDoEspelho[] }> {
+  return pedir('espelharTarefas', () => ({ tarefas: lerLote({ tarefas: itens }) }), resultadosDoEspelho, opcoes);
 }
 
 /** Troca a sala de um evento da agenda principal; null tira a sala. */

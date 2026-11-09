@@ -12,13 +12,17 @@ import {
   lerDesde,
   listar,
   listarAvisos,
-  listarPendentes,
+  listarPendentes as listarTodosOsPendentes,
   removerPendentes,
   salvar,
   salvarDesde,
   semear,
 } from '../../src/dados/loja';
 import type { Colecao, Mudanca, ParaSalvar, Tarefa } from '../../src/dados/tipos';
+
+/** A fila sem o espelho no Google (que tem testes próprios em tests/dados/espelho.test.ts). */
+const listarPendentes = async () => (await listarTodosOsPendentes()).filter((p) => p.tipo !== 'espelho');
+
 
 // Relógio fixo: quinta, 2026-11-05, 12:20 em Lisboa (WET = UTC em novembro).
 const AGORA = new Date('2026-11-05T12:20:00Z').getTime();

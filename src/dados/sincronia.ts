@@ -3,13 +3,16 @@
 // antes de o servidor confirmar.
 import { TAMANHO_MAXIMO_DO_CORPO } from '../../script/dados';
 import { ErroConexao, ErroScript, chamar as chamarScript } from '../conexao/cliente';
-import { ErroAgenda, criarEvento, removerEvento } from './agenda';
+import { dataValida } from '../../script/agenda';
+import { LOTE_NO_MAXIMO } from '../../script/tarefas-google';
+import { ErroAgenda, criarEvento, espelharTarefas, marcarEventoFeito, removerEvento, type ItemDoEspelho } from './agenda';
 import { marcarEventosObsoletos } from './eventos';
 import {
   assinar as assinarLoja,
   concluirEnvio,
   enfileirarAgenda,
   gravarDoServidor,
+  guardarIdDoEspelho,
   lerDesde,
   agendaEsgotada,
   concluirMigracao,
@@ -22,7 +25,16 @@ import {
   salvarDesde,
   salvarRelogioDoServidor,
 } from './loja';
-import type { Colecao, Mudanca, PendenteAgenda, PendenteRegistro, Registro } from './tipos';
+import type {
+  Colecao,
+  Mudanca,
+  PendenteAgenda,
+  PendenteEspelharTarefa,
+  PendenteEspelho,
+  PendenteRegistro,
+  Registro,
+  Tarefa,
+} from './tipos';
 
 export type EstadoSync = 'atualizado' | 'atualizando' | 'sem-internet' | 'por-enviar' | 'erro-codigo';
 
@@ -264,9 +276,101 @@ async function removerEventoCriadoSemQuerer(id: string, chamar: Chamar) {
   }
 }
 
+/** Recusa de uma ação de espelho: sem internet para a rodada; pedido inválido sai; o resto conta tentativa. */
+async function tratarFalhaDoEspelho(erro: unknown, seqs: readonly number[]) {
+  if (!(erro instanceof ErroAgenda)) throw erro;
+  if (erro.falha === 'sem-internet') throw new ErroConexao();
+  if (erro.falha === 'invalido') await removerPendentes(seqs);
+  else for (const seq of seqs) await registrarTentativa(seq);
+}
+
+/** Uma tarefa como a espelho a recebe, com o id da espelho se já se sabe. */
+function itemDoEspelho(tarefa: Tarefa): ItemDoEspelho {
+  const item: ItemDoEspelho = { id: tarefa.id, titulo: String(tarefa.titulo ?? '').slice(0, 2000), feito: !!tarefa.feito, apagado: !!tarefa.apagado };
+  // Dia que não existe nem sai: o script recusaria o lote inteiro.
+  if (dataValida(tarefa.data)) item.data = tarefa.data;
+  if (typeof tarefa.googleTarefaId === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(tarefa.googleTarefaId)) {
+    item.googleId = tarefa.googleTarefaId;
+  }
+  return item;
+}
+
+/**
+ * O espelho no Google (feito espelhado), depois dos registros e da agenda:
+ * - `marcarEventoFeito`, na ordem; `gravado: false` (convite, outra agenda)
+ *   só tira da fila: o feito já está na Central;
+ * - `espelharTarefa`, uma por tarefa, com a versão atual dela, em lotes. Só
+ *   saem da fila as entradas lidas antes do envio: mudança feita durante o
+ *   envio vai na próxima rodada. O id da espelho que voltar fica na tarefa.
+ * Falhas como na agenda: sem internet para; o resto conta tentativa e fica.
+ * Devolve `true` se gravou registros (o id da espelho): a rodada envia de novo.
+ */
+async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
+  const agora = Date.now();
+  const espelhos = (await listarPendentes()).filter(
+    (p): p is PendenteEspelho => p.tipo === 'espelho' && !agendaEsgotada(p, agora),
+  );
+  let marcou = false;
+  for (const acao of espelhos) {
+    if (acao.acao !== 'marcarEventoFeito' || !(await lerPendente(acao.seq))) continue;
+    try {
+      const { gravado } = await marcarEventoFeito(acao.id, acao.feito, { chamar });
+      if (gravado) marcou = true;
+      await retirarPendente(acao.seq);
+    } catch (erro) {
+      await tratarFalhaDoEspelho(erro, [acao.seq]);
+    }
+  }
+  if (marcou) marcarEventosObsoletos();
+
+  const porTarefa = new Map<string, number[]>();
+  for (const acao of espelhos.filter((p): p is PendenteEspelharTarefa => p.acao === 'espelharTarefa')) {
+    porTarefa.set(acao.tarefaId, [...(porTarefa.get(acao.tarefaId) ?? []), acao.seq]);
+  }
+  const ids = [...porTarefa.keys()];
+  const registros = (await lerRegistros(ids.map((id) => ({ colecao: 'tarefas' as const, id })))) as (Tarefa | undefined)[];
+  const grupos: { tarefa: Tarefa; seqs: number[] }[] = [];
+  const semTarefa: number[] = [];
+  ids.forEach((id, i) => {
+    const tarefa = registros[i];
+    if (tarefa) grupos.push({ tarefa, seqs: porTarefa.get(id)! });
+    else semTarefa.push(...porTarefa.get(id)!);
+  });
+  await removerPendentes(semTarefa);
+
+  let gravou = false;
+  for (let i = 0; i < grupos.length; i += LOTE_NO_MAXIMO) {
+    const lote = grupos.slice(i, i + LOTE_NO_MAXIMO);
+    let resultados;
+    try {
+      ({ resultados } = await espelharTarefas(lote.map(({ tarefa }) => itemDoEspelho(tarefa)), { chamar }));
+    } catch (erro) {
+      await tratarFalhaDoEspelho(erro, lote.flatMap(({ seqs }) => seqs));
+      continue;
+    }
+    const porId = new Map(resultados.map((r) => [r.id, r]));
+    for (const { tarefa, seqs } of lote) {
+      const resultado = porId.get(tarefa.id);
+      if (!resultado?.ok) {
+        for (const seq of seqs) await registrarTentativa(seq);
+        continue;
+      }
+      await removerPendentes(seqs);
+      if (resultado.googleId && !tarefa.apagado && resultado.googleId !== tarefa.googleTarefaId) {
+        if (await guardarIdDoEspelho(tarefa.id, resultado.googleId)) gravou = true;
+      }
+    }
+  }
+  return gravou;
+}
+
+/**
+ * Há o que enviar? O espelho no Google não conta: os dados já estão na fila
+ * de registros (ou no Drive), e o Google só copia.
+ */
 async function temPendentes(): Promise<boolean> {
   try {
-    return (await listarPendentes()).length > 0;
+    return (await listarPendentes()).some((p) => p.tipo !== 'espelho');
   } catch {
     return true;
   }
@@ -294,6 +398,7 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
     await enviar(chamar, esperar);
     // A migração apaga tarefas antigas: esses registros saem já nesta rodada.
     if (await enviarAgenda(chamar)) await enviar(chamar, esperar);
+    if (await enviarEspelhos(chamar)) await enviar(chamar, esperar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';
   } catch (erro) {
     final = await estadoDoErro(erro);

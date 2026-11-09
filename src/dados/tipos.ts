@@ -44,6 +44,11 @@ export type Tarefa = Base & {
   marcar: boolean;
   emailId?: string;
   adiadaAte?: string;
+  /**
+   * Id da tarefa espelho no Google Tarefas (lista "Central"), quando o script
+   * já respondeu. Sem ele, o script acha a espelho pelas notas: nada duplica.
+   */
+  googleTarefaId?: string;
 };
 
 export type Palavra = Base & { termo: string; salaId: string };
@@ -77,6 +82,15 @@ export type Rascunho = Base & { texto: string; salaId?: string | null };
  */
 export type Config = Base & { fimDoDia: string; diaFechado?: string };
 
+/**
+ * "Feito" de um compromisso do Google Agenda, marcado na Central. O id é
+ * fixo por agenda e evento (`idDoFeito`): os dois aparelhos gravam o mesmo
+ * registro. Vale para todo compromisso; nos que são do dono (agenda principal,
+ * organizados por ele) o script também grava o "✓ " no Google. `data`: o dia
+ * (`AAAA-MM-DD`) em que foi marcado, para limpar os antigos um dia.
+ */
+export type EventoFeito = Base & { eventoId: string; agendaId: string; data: string; feito: boolean };
+
 export type Colecoes = {
   salas: Sala;
   pessoas: Pessoa;
@@ -87,6 +101,7 @@ export type Colecoes = {
   estadosEmail: EstadoEmail;
   rascunhos: Rascunho;
   config: Config;
+  eventosFeitos: EventoFeito;
 };
 
 export type Colecao = keyof Colecoes;
@@ -146,7 +161,26 @@ export type PendenteCriarEvento = ControleDaFila & {
 export type PendenteRemoverEvento = ControleDaFila & { seq: number; tipo: 'agenda'; acao: 'removerEvento'; id: string };
 export type PendenteAgenda = PendenteCriarEvento | PendenteRemoverEvento;
 
-export type Pendente = PendenteRegistro | PendenteAgenda;
+/**
+ * Espelho no Google (spec do feito espelhado): o Google só copia o que já está
+ * na Central, então estas entradas não contam como "por enviar" (os dados já
+ * estão guardados no Drive pela fila de registros). Mesmas tentativas e
+ * limite das ações de agenda.
+ * - `espelharTarefa`: a tarefa mudou (título, dia, feita, apagada). Ao enviar,
+ *   vai a versão atual da tarefa, não a do momento da escrita.
+ * - `marcarEventoFeito`: o "✓ " no título do compromisso, na agenda principal.
+ */
+export type PendenteEspelharTarefa = ControleDaFila & { seq: number; tipo: 'espelho'; acao: 'espelharTarefa'; tarefaId: string };
+export type PendenteMarcarEventoFeito = ControleDaFila & {
+  seq: number;
+  tipo: 'espelho';
+  acao: 'marcarEventoFeito';
+  id: string;
+  feito: boolean;
+};
+export type PendenteEspelho = PendenteEspelharTarefa | PendenteMarcarEventoFeito;
+
+export type Pendente = PendenteRegistro | PendenteAgenda | PendenteEspelho;
 
 /** `remota`: a escrita veio de outro aparelho, pela sincronia. */
 export type Mudanca = { colecao: Colecao; id: string; remota?: true };

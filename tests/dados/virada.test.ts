@@ -1,10 +1,14 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes, salvar, salvarRelogioDoServidor } from '../../src/dados/loja';
+import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes as listarTodosOsPendentes, salvar, salvarRelogioDoServidor } from '../../src/dados/loja';
 import { sincronizar } from '../../src/dados/sincronia';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { iniciarVirada, virarDia } from '../../src/dados/virada';
 import { servidorDeTeste } from '../apoio/servidor';
+
+/** A fila sem o espelho no Google (que tem testes próprios em tests/dados/espelho.test.ts). */
+const listarPendentes = async () => (await listarTodosOsPendentes()).filter((p) => p.tipo !== 'espelho');
+
 
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa (WET = UTC em novembro).
 const AGORA = Date.parse('2026-11-05T12:20:00Z');
