@@ -170,7 +170,19 @@ for (const [nome, janela] of TELAS) {
       expect(script.pedidos).toContain('criarEvento');
       const criado = [...script.agenda.agendas.values()].flatMap((a) => [...a.eventos.values()]).find((e) => e.summary === 'Reunião com a Marina');
       expect(criado).toBeTruthy();
-      await expect(principal.getByRole('region', { name: /Agenda/ }).getByText('Reunião com a Marina').first()).toBeVisible({ timeout: 15_000 });
+      const agendaDeHoje = principal.getByRole('region', { name: 'Agenda de hoje' });
+      await expect(agendaDeHoje.getByText('Reunião com a Marina').first()).toBeVisible({ timeout: 15_000 });
+
+      // A tarefa concluída foi espelhada no Google Tarefas (lista Central), como feita.
+      await expect
+        .poll(() => script.tarefasGoogle.vivas().map((t) => [t.title, t.status]), { timeout: 15_000 })
+        .toContainEqual(['Marcar reunião com a Marina', 'completed']);
+
+      // Compromisso feito: a caixa marca na Central e o Google Agenda ganha "✓ " no título.
+      const reuniao = agendaDeHoje.getByRole('checkbox', { name: 'Reunião com a Marina' });
+      await reuniao.click();
+      await expect(reuniao).toHaveAttribute('aria-checked', 'true');
+      await expect.poll(() => criado?.summary, { timeout: 15_000 }).toBe('✓ Reunião com a Marina');
 
       // A página da Marina: pendências, e-mails e documentos.
       await page.goto('/central-app/#/salas');
@@ -178,7 +190,13 @@ for (const [nome, janela] of TELAS) {
       await expect(page.getByRole('heading', { level: 1, name: 'Marina' })).toBeVisible();
       await principal.getByLabel('Nova tarefa com Marina').fill('Revisar o capítulo 2');
       await principal.getByRole('region', { name: 'Pendências' }).getByRole('button', { name: 'Adicionar' }).click();
-      await expect(principal.getByRole('region', { name: 'Pendências' }).getByRole('checkbox', { name: 'Revisar o capítulo 2' })).toBeVisible();
+      const pendencia = principal.getByRole('region', { name: 'Pendências' }).getByRole('checkbox', { name: 'Revisar o capítulo 2' });
+      await expect(pendencia).toBeVisible();
+      await pendencia.click();
+      await expect(pendencia).toHaveAttribute('aria-checked', 'true');
+      await expect
+        .poll(() => script.tarefasGoogle.vivas().map((t) => [t.title, t.status]), { timeout: 15_000 })
+        .toContainEqual(['Revisar o capítulo 2', 'completed']);
       await expect(principal.getByRole('region', { name: 'E-mails' }).getByText('Capítulo 2 revisado')).toBeVisible({ timeout: 15_000 });
       await expect(principal.getByRole('region', { name: 'Documentos' })).toBeVisible();
       expect(await pequenos(page)).toEqual([]);
@@ -337,6 +355,10 @@ test.describe('offline: o app guardado no aparelho', () => {
     expect(guardado.some((u) => /\/central-app\/index\.html(\?|$)/.test(u))).toBe(true);
     expect(guardado.some((u) => /\/assets\/index-.*\.js$/.test(u))).toBe(true);
     expect(guardado.filter((u) => /litertlm|script\.google|teste-/.test(u))).toEqual([]);
+
+    // O próprio service worker não tem regra de cache de rede: só a lista de arquivos do app.
+    const codigoDoSw = await (await page.request.get('/central-app/sw.js')).text();
+    expect(codigoDoSw).not.toMatch(/script\.google|litertlm|runtimeCaching|StaleWhileRevalidate|NetworkFirst|CacheFirst/);
 
     // O wasm da IA continua indo à rede (sem internet ele não vem do cache do app).
     await context.setOffline(true);
