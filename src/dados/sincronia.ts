@@ -15,6 +15,7 @@ import {
   type ItemDoEspelho,
 } from './agenda';
 import { marcarEventosObsoletos } from './eventos';
+import { concluirMarcaDeTarefa } from './eventos-feitos';
 import {
   assinar as assinarLoja,
   concluirEnvio,
@@ -316,23 +317,32 @@ function itemDoEspelho(tarefa: Tarefa, googleId: string | undefined): ItemDoEspe
  *   Tarefa que sumiu ou deixou de ser espelhável sai da fila sem chamada.
  * Falhas como na agenda: sem internet para; o resto conta tentativa e fica.
  */
-async function enviarEspelhos(chamar: Chamar): Promise<void> {
+async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
   const agora = Date.now();
   const espelhos = (await listarPendentes()).filter(
     (p): p is PendenteEspelho => p.tipo === 'espelho' && !agendaEsgotada(p, agora),
   );
   let marcou = false;
+  let registrosMudaram = false;
   for (const acao of espelhos) {
     if (acao.acao === 'espelharTarefa' || !(await lerPendente(acao.seq))) continue;
     try {
       const { gravado } =
         acao.acao === 'marcarTarefaGoogle'
-          ? await marcarTarefaGoogle(acao.taskId, acao.feito, { chamar })
+          ? await marcarTarefaGoogle(acao.taskId, acao.feito, acao.dia, { chamar })
           : await marcarEventoFeito(acao.id, acao.feito, { chamar });
       if (gravado) marcou = true;
       await retirarPendente(acao.seq);
+      // O registro do bloco deixa de estar pendente; não gravado, fica só na Central.
+      if (acao.acao === 'marcarTarefaGoogle' && acao.feitoId && (await concluirMarcaDeTarefa(acao.feitoId, acao.feito, gravado))) {
+        registrosMudaram = true;
+      }
     } catch (erro) {
       await tratarFalhaDoEspelho(erro, [acao.seq]);
+      // Pedido recusado como inválido sai da fila: o feito fica só na Central.
+      if (acao.acao === 'marcarTarefaGoogle' && acao.feitoId && erro instanceof ErroAgenda && erro.falha === 'invalido') {
+        if (await concluirMarcaDeTarefa(acao.feitoId, acao.feito, false)) registrosMudaram = true;
+      }
     }
   }
   if (marcou) marcarEventosObsoletos();
@@ -375,6 +385,7 @@ async function enviarEspelhos(chamar: Chamar): Promise<void> {
       else if (resultado.googleId !== googleId) await guardarIdDoEspelho(tarefa.id, resultado.googleId);
     }
   }
+  return registrosMudaram;
 }
 
 /**
@@ -411,7 +422,8 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
     await enviar(chamar, esperar);
     // A migração apaga tarefas antigas: esses registros saem já nesta rodada.
     if (await enviarAgenda(chamar)) await enviar(chamar, esperar);
-    await enviarEspelhos(chamar);
+    // O resultado dos blocos do Google Tarefas muda registros: saem já nesta rodada.
+    if (await enviarEspelhos(chamar)) await enviar(chamar, esperar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';
   } catch (erro) {
     final = await estadoDoErro(erro);

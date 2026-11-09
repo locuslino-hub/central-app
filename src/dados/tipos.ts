@@ -84,7 +84,23 @@ export type Config = Base & { fimDoDia: string; diaFechado?: string };
  * organizados por ele) o script também grava o "✓ " no Google. `data`: o dia
  * (`AAAA-MM-DD`) em que foi marcado, para limpar os antigos um dia.
  */
-export type EventoFeito = Base & { eventoId: string; agendaId: string; data: string; feito: boolean };
+export type EventoFeito = Base & {
+  eventoId: string;
+  agendaId: string;
+  data: string;
+  feito: boolean;
+  /**
+   * Bloco do Google Tarefas: o feito ainda está a caminho do Google (há um
+   * `marcarTarefaGoogle` na fila). Enquanto isso, vale o da Central.
+   */
+  pendenteNoGoogle?: boolean;
+  /**
+   * Bloco do Google Tarefas cujo feito não foi gravado lá (tarefa repetida,
+   * não achada, sem permissão...): vale o da Central, e as leituras do
+   * Google não o apagam.
+   */
+  soNaCentral?: boolean;
+};
 
 /**
  * Uma cor do Google ligada a uma sala (spec dos blocos e cores): `chave` como
@@ -189,6 +205,10 @@ export type PendenteMarcarTarefaGoogle = ControleDaFila & {
   acao: 'marcarTarefaGoogle';
   taskId: string;
   feito: boolean;
+  /** O dia do bloco (AAAA-MM-DD): o script procura a tarefa primeiro nele. */
+  dia?: string;
+  /** O registro de `eventosFeitos` do bloco, para marcar o resultado do envio. */
+  feitoId?: string;
 };
 export type PendenteEspelho = PendenteEspelharTarefa | PendenteMarcarEventoFeito | PendenteMarcarTarefaGoogle;
 

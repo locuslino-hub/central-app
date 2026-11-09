@@ -3,9 +3,11 @@
 // registro sincroniza pela coleção `coresDasSalas`. Na hora de mostrar, a sala
 // de um compromisso segue esta ordem:
 //   1. a sala gravada pela Central no evento (centralSala);
-//   2. a sala ligada à cor do evento;
+//   2. a sala ligada à cor própria do evento (etiqueta `label:` ou `cor:`);
 //   3. a adivinhada pelo título (mesmas regras das tarefas do chat);
-//   4. nenhuma (neutro).
+//   4. a sala ligada à cor da agenda (`agenda:`), que é a de quase todos os
+//      eventos dela e por isso vale só depois do título;
+//   5. nenhuma (neutro).
 import type { Evento } from './agenda';
 import { resumo } from './eventos-feitos';
 import { salvar } from './loja';
@@ -31,8 +33,10 @@ export function salaDoEvento(
 ): string | null {
   if (evento.salaId !== null) return evento.salaId;
   const daCor = evento.cor ? cores.get(evento.cor.chave) : undefined;
-  if (daCor !== undefined) return daCor;
-  return adivinhar?.(evento.titulo) ?? null;
+  // A cor da agenda é de quase todos os eventos dela: vale depois do título.
+  const daAgenda = evento.cor?.chave.startsWith('agenda:') === true;
+  if (daCor !== undefined && !daAgenda) return daCor;
+  return adivinhar?.(evento.titulo) ?? daCor ?? null;
 }
 
 /** Liga a cor a uma sala, ou a deixa sem sala (null). Um registro por cor. */

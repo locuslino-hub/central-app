@@ -17,7 +17,7 @@ const HORA_VALIDA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
  */
 export const CHAVE_DE_COR = /^(?:label:[A-Za-z0-9_-]{1,64}|cor:(?:[1-9]|1[01])|agenda:[0-9a-f]{6})$/;
 
-type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?' | 'booleano' | 'chaveDeCor';
+type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?' | 'booleano' | 'booleano?' | 'chaveDeCor';
 
 /** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
 export const ESQUEMAS = {
@@ -41,7 +41,14 @@ export const ESQUEMAS = {
   estadosEmail: { adiadaAte: 'texto?' },
   rascunhos: { texto: 'texto', salaId: 'textoOuNulo?' },
   config: { fimDoDia: 'texto' },
-  eventosFeitos: { eventoId: 'texto', agendaId: 'texto', data: 'texto', feito: 'booleano' },
+  eventosFeitos: {
+    eventoId: 'texto',
+    agendaId: 'texto',
+    data: 'texto',
+    feito: 'booleano',
+    pendenteNoGoogle: 'booleano?',
+    soNaCentral: 'booleano?',
+  },
   /** Cor do Google -> sala (null: sem sala ligada; vale a adivinhação pelo título). */
   coresDasSalas: { chave: 'chaveDeCor', salaId: 'textoOuNulo' },
 } as const satisfies Record<string, Record<string, Tipo>>;
@@ -75,6 +82,8 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
     case 'booleano':
       return typeof valor === 'boolean';
+    case 'booleano?':
+      return valor === undefined || typeof valor === 'boolean';
     case 'chaveDeCor':
       return typeof valor === 'string' && CHAVE_DE_COR.test(valor);
   }

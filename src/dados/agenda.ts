@@ -95,6 +95,7 @@ export function eventoValido(valor: unknown): valor is Evento {
     (e.tarefaGoogleId === undefined || (typeof e.tarefaGoogleId === 'string' && ID_DE_TAREFA.test(e.tarefaGoogleId))) &&
     (e.tarefaAtualizadaEm === undefined ||
       (typeof e.tarefaAtualizadaEm === 'number' && Number.isFinite(e.tarefaAtualizadaEm) && e.tarefaAtualizadaEm >= 0)) &&
+    (e.tarefaRepetida === undefined || typeof e.tarefaRepetida === 'boolean') &&
     (e.cor === undefined || corValida(e.cor))
   );
 }
@@ -191,12 +192,13 @@ export function marcarEventoFeito(
 export function marcarTarefaGoogle(
   taskId: string,
   feito: boolean,
+  dia: string | undefined,
   opcoes: OpcoesDaAgenda = {},
 ): Promise<{ feito: boolean; gravado: boolean }> {
-  return pedir('marcarTarefaGoogle', () => lerMarcaDeTarefa({ taskId, feito }), marcaDeFeito, opcoes);
+  return pedir('marcarTarefaGoogle', () => lerMarcaDeTarefa({ taskId, feito, ...(dia !== undefined ? { dia } : {}) }), marcaDeFeito, opcoes);
 }
 
-const resultadosDoEspelho =(valor: unknown): valor is { resultados: ResultadoDoEspelho[] } =>
+const resultadosDoEspelho = (valor: unknown): valor is { resultados: ResultadoDoEspelho[] } =>
   typeof valor === 'object' &&
   valor !== null &&
   Array.isArray((valor as { resultados?: unknown }).resultados) &&

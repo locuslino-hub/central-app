@@ -260,7 +260,11 @@ export async function enfileirarMarcaDeFeito(id: string, feito: boolean): Promis
  * tarefa lá). Como no "✓ ": um pedido anterior da mesma tarefa que ainda não
  * saiu é trocado por este.
  */
-export async function enfileirarMarcaDeTarefa(taskId: string, feito: boolean): Promise<number> {
+export async function enfileirarMarcaDeTarefa(
+  taskId: string,
+  feito: boolean,
+  extra: { dia?: string; feitoId?: string } = {},
+): Promise<number> {
   return comBanco(async (banco) => {
     const tx = escrever(banco, [PENDENTES]);
     const fila = tx.objectStore(PENDENTES);
@@ -268,7 +272,7 @@ export async function enfileirarMarcaDeTarefa(taskId: string, feito: boolean): P
     for (const p of todas) {
       if (p.tipo === 'espelho' && p.acao === 'marcarTarefaGoogle' && p.taskId === taskId) await fila.delete(p.seq);
     }
-    const seq = (await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'marcarTarefaGoogle', taskId, feito }))) as number;
+    const seq = (await fila.add(entradaDeEspelho({ tipo: 'espelho', acao: 'marcarTarefaGoogle', taskId, feito, ...extra }))) as number;
     await tx.done;
     return seq;
   });

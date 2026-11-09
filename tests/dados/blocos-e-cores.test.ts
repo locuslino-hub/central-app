@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ID_VALIDO } from '../../script/colecoes';
 import { eventoValido, listarEventos, type Evento } from '../../src/dados/agenda';
 import { coresVistas, idDaCor, ligarCor, mapaDeCores, nomeDaCor, salaDoEvento } from '../../src/dados/cores';
-import { aplicarFeitos, idDoFeito, marcarCompromissoFeito } from '../../src/dados/eventos-feitos';
+import { aplicarFeitos, concluirMarcaDeTarefa, idDoFeito, marcarCompromissoFeito } from '../../src/dados/eventos-feitos';
 import { listar, listarPendentes } from '../../src/dados/loja';
 import { sincronizar } from '../../src/dados/sincronia';
 import type { CorDaSala, EventoFeito, PendenteEspelho } from '../../src/dados/tipos';
@@ -61,11 +61,16 @@ describe('o evento que chega do script', () => {
 });
 
 describe('✓ num bloco do Google Tarefas', () => {
-  function comBloco() {
+  function comBloco({ comTarefasGoogle = true } = {}) {
     const agenda = agendasDoDono();
-    const servidor = servidorDeTeste({ comTarefasGoogle: true, agenda });
+    const servidor = servidorDeTeste({ comTarefasGoogle, agenda });
     const lista = servidor.tarefasGoogle.lista('Tese');
-    const tarefa = servidor.tarefasGoogle.tarefa(lista, { id: 'api1', idDaWeb: 'web1', title: 'Revisar capítulo da Aurora' });
+    const tarefa = servidor.tarefasGoogle.tarefa(lista, {
+      id: 'api1',
+      idDaWeb: 'web1',
+      title: 'Revisar capítulo da Aurora',
+      due: '2026-11-09T00:00:00.000Z',
+    });
     agenda.evento(PRINCIPAL, {
       id: 'bloco1',
       summary: 'Revisar capítulo da Aurora',
@@ -76,23 +81,31 @@ describe('✓ num bloco do Google Tarefas', () => {
     });
     return { agenda, servidor, tarefa, sincronizar: () => sincronizar({ chamar: servidor.chamar, esperar: semEspera }) };
   }
+  const registroDoBloco = async () => (await listar('eventosFeitos'))[0];
 
-  it('entra na fila como marcarTarefaGoogle (nunca marcarEventoFeito) e conclui a tarefa; o título não muda', async () => {
+  it('entra na fila como marcarTarefaGoogle com o dia do bloco e conclui a tarefa; o título não muda', async () => {
     const { agenda, servidor, tarefa, sincronizar } = comBloco();
-    await marcarCompromissoFeito(evento({ tarefaGoogleId: 'web1', somenteLeitura: true }), true, '2026-11-09');
-    expect(await espelhos()).toMatchObject([{ acao: 'marcarTarefaGoogle', taskId: 'web1', feito: true }]);
-    expect(await listar('eventosFeitos')).toMatchObject([{ eventoId: 'bloco1', feito: true }]);
+    await marcarCompromissoFeito(evento({ tarefaGoogleId: 'web1' }), true, '2026-11-09');
+    expect(await espelhos()).toMatchObject([
+      { acao: 'marcarTarefaGoogle', taskId: 'web1', feito: true, dia: '2026-11-09', feitoId: idDoFeito('primary', 'bloco1') },
+    ]);
+    expect(await registroDoBloco()).toMatchObject({ eventoId: 'bloco1', feito: true, pendenteNoGoogle: true });
 
     expect(await sincronizar()).toBe('atualizado');
     expect(tarefa.status).toBe('completed');
     expect(servidor.de('marcarEventoFeito')).toEqual([]);
+    expect(servidor.de('marcarTarefaGoogle')[0].dados).toMatchObject({ taskId: 'web1', feito: true, dia: '2026-11-09' });
     expect(agenda.agendas.get(PRINCIPAL)!.eventos.get('bloco1')!.summary).toBe('Revisar capítulo da Aurora');
     expect(await listarPendentes()).toEqual([]);
+    // Entregue: o registro deixa de estar pendente.
+    const registro = await registroDoBloco();
+    expect(registro.pendenteNoGoogle).toBeUndefined();
+    expect(registro.soNaCentral).toBeUndefined();
   });
 
   it('marcar e desmarcar antes de sincronizar: vale o último toque, num pedido só', async () => {
     const { servidor, tarefa, sincronizar } = comBloco();
-    const bloco = evento({ tarefaGoogleId: 'web1', somenteLeitura: true });
+    const bloco = evento({ tarefaGoogleId: 'web1' });
     await marcarCompromissoFeito(bloco, true, '2026-11-09');
     await marcarCompromissoFeito(bloco, false, '2026-11-09');
     expect(await espelhos()).toMatchObject([{ acao: 'marcarTarefaGoogle', feito: false }]);
@@ -101,47 +114,76 @@ describe('✓ num bloco do Google Tarefas', () => {
     expect(tarefa.status).toBe('needsAction');
   });
 
-  it('script sem o Google Tarefas: sai da fila sem erro e o feito fica na Central', async () => {
-    const agenda = agendasDoDono();
-    const servidor = servidorDeTeste({ agenda });
-    await marcarCompromissoFeito(evento({ tarefaGoogleId: 'web1', somenteLeitura: true }), true, '2026-11-09');
-    expect(await sincronizar({ chamar: servidor.chamar, esperar: semEspera })).toBe('atualizado');
+  it('o Google não gravou (script sem o Google Tarefas): sai da fila, o ✓ fica e o registro fica "só na Central"', async () => {
+    const { sincronizar } = comBloco({ comTarefasGoogle: false });
+    await marcarCompromissoFeito(evento({ tarefaGoogleId: 'web1' }), true, '2026-11-09');
+    expect(await sincronizar()).toBe('atualizado');
     expect(await listarPendentes()).toEqual([]);
-    expect(await listar('eventosFeitos')).toMatchObject([{ feito: true }]);
+    expect(await registroDoBloco()).toMatchObject({ feito: true, soNaCentral: true });
+    expect((await registroDoBloco()).pendenteNoGoogle).toBeUndefined();
+  });
+
+  it('bloco somente leitura ou de tarefa repetida: o ✓ fica só na Central, sem pedido ao Google', async () => {
+    await marcarCompromissoFeito(evento({ id: 'b1', tarefaGoogleId: 'web1', somenteLeitura: true }), true, '2026-11-09');
+    await marcarCompromissoFeito(evento({ id: 'b2', tarefaGoogleId: 'web2', tarefaRepetida: true }), true, '2026-11-09');
+    expect(await espelhos()).toEqual([]);
+    const registros = await listar('eventosFeitos');
+    expect(registros).toHaveLength(2);
+    for (const r of registros) expect(r).toMatchObject({ feito: true, soNaCentral: true });
+  });
+
+  it('tocar de novo depois de "só na Central" tira a marca e tenta o Google de novo', async () => {
+    const { sincronizar } = comBloco({ comTarefasGoogle: false });
+    const bloco = evento({ tarefaGoogleId: 'web1' });
+    await marcarCompromissoFeito(bloco, true, '2026-11-09');
+    await sincronizar();
+    await marcarCompromissoFeito(bloco, false, '2026-11-09');
+    expect(await registroDoBloco()).toMatchObject({ feito: false, pendenteNoGoogle: true });
+    expect((await registroDoBloco()).soNaCentral).toBeUndefined();
+  });
+
+  it('resposta que chega depois de um toque novo não mexe no registro do toque novo', async () => {
+    const id = idDoFeito('primary', 'bloco1');
+    await marcarCompromissoFeito(evento({ tarefaGoogleId: 'web1' }), false, '2026-11-09');
+    await concluirMarcaDeTarefa(id, true, false);
+    expect(await registroDoBloco()).toMatchObject({ feito: false, pendenteNoGoogle: true });
   });
 });
 
 describe('qual feito vale num bloco: a regra de conflito', () => {
-  const registro = (feito: boolean, atualizadoEm: number): EventoFeito => ({
+  const registro = (feito: boolean, marcas: Partial<EventoFeito> = {}): EventoFeito => ({
     id: idDoFeito('primary', 'bloco1'),
     eventoId: 'bloco1',
     agendaId: 'primary',
     data: '2026-11-09',
     feito,
-    atualizadoEm,
+    // Hora da Central sempre "depois" do Google: a regra não compara relógios.
+    atualizadoEm: AGORA + 3_600_000,
     aparelho: 'notebook',
+    ...marcas,
+  });
+  const lido = (extra: Partial<Evento> = {}) => [evento({ tarefaGoogleId: 'web1', tarefaAtualizadaEm: AGORA, ...extra })];
+
+  it('com o toque da Central entregue e o estado lido no Google Tarefas: vale o do Google', () => {
+    expect(aplicarFeitos(lido({ feito: true }), [registro(false)])[0].feito).toBe(true);
+    expect(aplicarFeitos(lido(), [registro(true)])[0].feito).toBeUndefined();
   });
 
-  it('feito no Google depois do toque na Central: vale o do Google', () => {
-    const doGoogle = [evento({ tarefaGoogleId: 'web1', feito: true, tarefaAtualizadaEm: AGORA })];
-    expect(aplicarFeitos(doGoogle, [registro(false, AGORA - 60_000)])[0].feito).toBe(true);
-    // Reaberto no Google depois: também vale o do Google.
-    const reaberto = [evento({ tarefaGoogleId: 'web1', tarefaAtualizadaEm: AGORA })];
-    expect(aplicarFeitos(reaberto, [registro(true, AGORA - 60_000)])[0].feito).toBeUndefined();
+  it('com o toque da Central ainda na fila: vale a Central', () => {
+    expect(aplicarFeitos(lido(), [registro(true, { pendenteNoGoogle: true })])[0].feito).toBe(true);
   });
 
-  it('toque na Central mais recente que a última mudança no Google: vale o da Central', () => {
-    const doGoogle = [evento({ tarefaGoogleId: 'web1', tarefaAtualizadaEm: AGORA - 60_000 })];
-    expect(aplicarFeitos(doGoogle, [registro(true, AGORA)])[0].feito).toBe(true);
+  it('não gravado no Google ("só na Central"): vale a Central, e a leitura do Google não apaga', () => {
+    expect(aplicarFeitos(lido(), [registro(true, { soNaCentral: true })])[0].feito).toBe(true);
   });
 
-  it('mesma hora: vale a Central; bloco sem estado lido do Google: vale a Central', () => {
-    expect(aplicarFeitos([evento({ tarefaGoogleId: 'web1', tarefaAtualizadaEm: AGORA })], [registro(true, AGORA)])[0].feito).toBe(true);
-    expect(aplicarFeitos([evento({ tarefaGoogleId: 'web1', feito: true })], [registro(false, AGORA - 1e9)])[0].feito).toBeUndefined();
+  it('sem o estado lido no Google Tarefas, ou tarefa repetida: vale a Central', () => {
+    expect(aplicarFeitos([evento({ tarefaGoogleId: 'web1', feito: true })], [registro(false)])[0].feito).toBeUndefined();
+    expect(aplicarFeitos(lido({ tarefaRepetida: true }), [registro(true)])[0].feito).toBe(true);
   });
 
   it('compromisso comum continua como antes: a Central vale sobre o "✓ " do Google', () => {
-    expect(aplicarFeitos([evento({ feito: true, tarefaAtualizadaEm: undefined })], [registro(false, 1)])[0].feito).toBeUndefined();
+    expect(aplicarFeitos([evento({ feito: true })], [registro(false)])[0].feito).toBeUndefined();
   });
 });
 
@@ -161,7 +203,7 @@ describe('sala pela cor do Google', () => {
     expect(idDaCor('agenda:9fc6e7')).toMatch(ID_VALIDO);
   });
 
-  it('ordem: sala gravada pela Central -> cor ligada -> adivinhação pelo título -> neutro', () => {
+  it('ordem: sala gravada pela Central -> cor própria ligada -> adivinhação pelo título -> neutro', () => {
     const cores = mapaDeCores([cor('cor:9', 'sala-doutoramento'), cor('cor:2', null), cor('cor:3', 'sala-mba', true)]);
     const adivinhar = (titulo: string) => (/aula/i.test(titulo) ? 'sala-aulas' : null);
     const azul = { chave: 'cor:9', hex: '#3f51b5' };
@@ -172,6 +214,15 @@ describe('sala pela cor do Google', () => {
     expect(salaDoEvento(evento({ cor: { chave: 'cor:3', hex: '#8e24aa' }, titulo: 'Aula' }), cores, adivinhar)).toBe('sala-aulas');
     expect(salaDoEvento(evento({ titulo: 'Dentista' }), cores, adivinhar)).toBeNull();
     expect(salaDoEvento(evento({ titulo: 'Aula' }), cores)).toBeNull();
+  });
+
+  it('a cor da agenda (de quase todos os eventos dela) vale só depois do título', () => {
+    const cores = mapaDeCores([cor('agenda:9fc6e7', 'sala-pessoal'), cor('label:etq1', 'sala-mba')]);
+    const adivinhar = (titulo: string) => (/aula/i.test(titulo) ? 'sala-aulas' : null);
+    const daAgenda = { chave: 'agenda:9fc6e7', hex: '#9fc6e7' };
+    expect(salaDoEvento(evento({ cor: daAgenda, titulo: 'Aula' }), cores, adivinhar)).toBe('sala-aulas');
+    expect(salaDoEvento(evento({ cor: daAgenda, titulo: 'Dentista' }), cores, adivinhar)).toBe('sala-pessoal');
+    expect(salaDoEvento(evento({ cor: { chave: 'label:etq1', hex: '#0b8043' }, titulo: 'Aula' }), cores, adivinhar)).toBe('sala-mba');
   });
 
   it('ligar uma cor grava um registro sincronizado; "Sem sala" grava null no mesmo registro', async () => {

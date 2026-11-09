@@ -32,16 +32,26 @@ export function gravavelNoGoogle(evento: Pick<Evento, 'agendaId' | 'somenteLeitu
   return evento.agendaId === 'primary' && evento.somenteLeitura !== true;
 }
 
+
+/** Bloco do Google Tarefas cujo feito pode ir ao Google: do dono, gravável e não repetido. */
+function blocoGravavel(evento: Pick<Evento, 'tarefaGoogleId' | 'somenteLeitura' | 'tarefaRepetida'>): boolean {
+  return evento.tarefaGoogleId !== undefined && evento.somenteLeitura !== true && evento.tarefaRepetida !== true;
+}
+
 /**
  * Os eventos com o feito que vale. Regra de conflito:
  * - sem registro na Central, vale o do Google ("✓ " no título; num bloco do
  *   Google Tarefas, o estado da tarefa);
  * - compromisso comum: o registro da Central vale (é o último toque do dono;
  *   o Google só espelha);
- * - bloco do Google Tarefas com o estado lido lá (`tarefaAtualizadaEm`): vale
- *   o mais recente. O Google vence só se a tarefa mudou depois do último toque
- *   na Central (empate fica com a Central). Assim um ✓ dado no Google aparece
- *   na Central, e um ✓ dado na Central não é desfeito por uma leitura antiga.
+ * - bloco do Google Tarefas: vale a Central enquanto o toque dela ainda está a
+ *   caminho do Google (`pendenteNoGoogle`: há um `marcarTarefaGoogle` na
+ *   fila), ou se o Google não o aceitou (`soNaCentral`). Sem nada disso e com
+ *   o estado lido no Google Tarefas (`tarefaAtualizadaEm`), vale o do Google:
+ *   um ✓ dado ou tirado lá aparece na Central. Sem o estado lido, a Central;
+ * - bloco de tarefa repetida: a Central (o Google tem um estado só para todas
+ *   as ocorrências).
+ * Não compara relógios: só o que já foi (ou não) entregue ao Google.
  * Devolve a mesma lista se nada muda.
  */
 export function aplicarFeitos(eventos: Evento[], registros: readonly EventoFeito[] | undefined): Evento[] {
@@ -51,7 +61,9 @@ export function aplicarFeitos(eventos: Evento[], registros: readonly EventoFeito
   const lista = eventos.map((evento) => {
     const registro = porId.get(idDoFeito(evento.agendaId, evento.id));
     if (!registro || registro.eventoId !== evento.id || !!evento.feito === registro.feito) return evento;
-    if (evento.tarefaAtualizadaEm !== undefined && evento.tarefaAtualizadaEm > registro.atualizadoEm) return evento;
+    const valeOGoogle =
+      blocoGravavel(evento) && evento.tarefaAtualizadaEm !== undefined && !registro.pendenteNoGoogle && !registro.soNaCentral;
+    if (valeOGoogle) return evento;
     mudou = true;
     const { feito: _feito, ...resto } = evento;
     return registro.feito ? { ...resto, feito: true } : resto;
@@ -59,23 +71,49 @@ export function aplicarFeitos(eventos: Evento[], registros: readonly EventoFeito
   return mudou ? lista : eventos;
 }
 
+/** O registro sem as marcas do caminho até o Google (são postas de novo a cada toque). */
+function semMarcas(registro: EventoFeito | undefined): Partial<EventoFeito> {
+  if (!registro || registro.apagado) return {};
+  const { pendenteNoGoogle: _pendente, soNaCentral: _so, ...resto } = registro;
+  return resto;
+}
+
 /**
  * Marca (ou desmarca) o compromisso como feito em `dia` (`AAAA-MM-DD`). O
- * registro relido na hora de gravar só muda o `feito` e o dia.
+ * registro relido na hora de gravar só muda o `feito`, o dia e as marcas.
+ * Bloco do Google Tarefas: o feito vai à tarefa pela fila (o título do bloco
+ * nunca muda), com o registro marcado como pendente; bloco que não pode ir ao
+ * Google (somente leitura, tarefa repetida) fica marcado como só na Central.
  */
 export async function marcarCompromissoFeito(evento: Evento, feito: boolean, dia: string): Promise<EventoFeito> {
   const id = idDoFeito(evento.agendaId, evento.id);
   const [atual] = (await lerRegistros([{ colecao: 'eventosFeitos', id }])) as (EventoFeito | undefined)[];
+  const bloco = evento.tarefaGoogleId !== undefined;
+  const vaiAoGoogle = bloco && blocoGravavel(evento);
   const salvo = await salvar('eventosFeitos', {
-    ...(atual && !atual.apagado ? atual : {}),
+    ...semMarcas(atual),
     id,
     eventoId: evento.id,
     agendaId: evento.agendaId,
     data: dia,
     feito,
+    ...(vaiAoGoogle ? { pendenteNoGoogle: true } : {}),
+    ...(bloco && !vaiAoGoogle ? { soNaCentral: true } : {}),
   });
-  // Bloco do Google Tarefas: o feito vai à tarefa (o título do bloco nunca muda).
-  if (evento.tarefaGoogleId !== undefined) await enfileirarMarcaDeTarefa(evento.tarefaGoogleId, feito);
-  else if (gravavelNoGoogle(evento)) await enfileirarMarcaDeFeito(evento.id, feito);
+  if (vaiAoGoogle) await enfileirarMarcaDeTarefa(evento.tarefaGoogleId!, feito, { dia: evento.inicio.slice(0, 10), feitoId: id });
+  else if (!bloco && gravavelNoGoogle(evento)) await enfileirarMarcaDeFeito(evento.id, feito);
   return salvo;
+}
+
+/**
+ * O envio de um `marcarTarefaGoogle` terminou: o registro deixa de estar
+ * pendente e, se o Google não gravou, fica só na Central. Se o dono já tocou
+ * de novo (o feito do registro não é o enviado), nada muda: o toque novo tem
+ * o próprio pedido na fila.
+ */
+export async function concluirMarcaDeTarefa(feitoId: string, feito: boolean, gravado: boolean): Promise<boolean> {
+  const [atual] = (await lerRegistros([{ colecao: 'eventosFeitos', id: feitoId }])) as (EventoFeito | undefined)[];
+  if (!atual || atual.apagado || atual.feito !== feito || !atual.pendenteNoGoogle) return false;
+  await salvar('eventosFeitos', { ...(semMarcas(atual) as EventoFeito), ...(gravado ? {} : { soNaCentral: true }) });
+  return true;
 }
