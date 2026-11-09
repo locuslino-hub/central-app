@@ -1,6 +1,8 @@
 import { copyFileSync, createReadStream, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import preact from '@preact/preset-vite';
@@ -44,6 +46,13 @@ function wasmDaIA(): Plugin {
   };
 }
 
+/** Onde o build grava o app (o `outDir` padrão, ao lado deste arquivo). */
+const PASTA_DO_BUILD = resolve(dirname(fileURLToPath(import.meta.url)), 'dist');
+
+/** `sha384-…` do arquivo já gravado no build, no formato do atributo `integrity`. */
+const integridade = (arquivo: string) =>
+  `sha384-${createHash('sha384').update(readFileSync(join(PASTA_DO_BUILD, arquivo))).digest('base64')}`;
+
 export default defineConfig({
   base: '/central-app/',
   plugins: [
@@ -63,8 +72,18 @@ export default defineConfig({
         globPatterns: ['index.html', 'assets/**/*.{js,css,woff,woff2}', 'icones/*.{png,svg}', 'manifest.webmanifest'],
         globIgnores: ['litertlm/**', 'teste-*.html'],
         maximumFileSizeToCacheInBytes: 2 * 1024 * 1024, // o que passar disso é de IA, não do app
+        // O index.html é o único guardado sem hash no nome: leva a integridade. Se o CDN ainda entrega o HTML
+        // velho quando o service worker novo instala, a instalação falha (e tenta de novo na próxima conferência)
+        // em vez de guardar um HTML que pede arquivos que não existem mais.
+        manifestTransforms: [
+          async (entradas) => ({
+            manifest: entradas.map((e) => (e.url === 'index.html' ? { ...e, integrity: integridade(e.url) } : e)),
+            warnings: [],
+          }),
+        ],
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/\/teste-[^/]*\.html$/],
+        // O teste é feito com caminho e busca (`?…`): a página de teste nunca vira o app.
+        navigateFallbackDenylist: [/\/teste-[^/]*\.html(\?|$)/],
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,

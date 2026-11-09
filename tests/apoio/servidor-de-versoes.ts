@@ -1,6 +1,8 @@
 // Servidor de arquivos do app construído (`dist/`) em que o teste escolhe qual
 // versão está no ar. A versão 2 muda o HTML (uma marca no <head>) e o service
-// worker (o carimbo do index.html), como acontece quando o app é publicado de novo.
+// worker (o carimbo e a integridade do index.html), como acontece quando o app é
+// publicado de novo.
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -22,6 +24,8 @@ export const MARCA_DA_VERSAO = 'versao-do-app';
 
 export async function servidorDeVersoes(pasta = 'dist') {
   let versao = 1;
+  const html2 = async () =>
+    (await readFile(join(pasta, 'index.html'), 'utf8')).replace('<head>', `<head><meta name="${MARCA_DA_VERSAO}" content="2" />`);
   const servidor: Server = createServer((pedido, resposta) => {
     void (async () => {
       const caminho = decodeURIComponent((pedido.url ?? '/').split('?')[0]);
@@ -31,11 +35,15 @@ export async function servidorDeVersoes(pasta = 'dist') {
       if (!arquivo.startsWith(normalize(pasta))) return resposta.writeHead(403).end();
       try {
         let corpo: Buffer | string = await readFile(arquivo);
-        if (versao === 2 && relativo === 'index.html') {
-          corpo = corpo.toString('utf8').replace('<head>', `<head><meta name="${MARCA_DA_VERSAO}" content="2" />`);
-        }
+        if (versao === 2 && relativo === 'index.html') corpo = await html2();
         if (versao === 2 && relativo === 'sw.js') {
-          corpo = corpo.toString('utf8').replace(/(url:"index\.html",revision:")([0-9a-f]+)"/, '$1v2-$2"');
+          const integridade = `sha384-${createHash('sha384').update(await html2()).digest('base64')}`;
+          const antes = corpo.toString('utf8');
+          corpo = antes.replace(
+            /(url:"index\.html",revision:")([0-9a-f]+)",integrity:"[^"]+"/,
+            `$1v2-$2",integrity:"${integridade}"`,
+          );
+          if (corpo === antes) throw new Error('sw.js sem a entrada do index.html com integridade');
         }
         resposta.writeHead(200, { 'content-type': TIPOS[extname(arquivo)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
         resposta.end(corpo);
