@@ -1,6 +1,6 @@
 // Instruções da IA local (Tarefa 21) e leitura da resposta dela.
 //
-// O texto é o `SISTEMA` aprovado em `public/teste-ia.html`, com três trocas:
+// O texto é o `SISTEMA` aprovado em `tests/manual/teste-ia.html`, com três trocas:
 // o dia de hoje vem do relógio, e as salas e as pessoas vêm da loja (o que o
 // dono cadastrou), nunca do código. A IA só sugere título, sala e divisão de
 // frases longas; data, hora e tipo continuam com as regras (src/chat/regras.ts).

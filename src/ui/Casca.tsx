@@ -6,6 +6,7 @@ import { EstadoDaSincronia } from './EstadoSync';
 import { useHoje, useRota, useTela } from './hooks';
 import { Icone } from './icones';
 import { Atalhos, MenuLateral } from './Menu';
+import { NovaVersao } from './NovaVersao';
 import { PainelDireito } from './PainelDireito';
 import { Vista } from './Vista';
 
@@ -48,6 +49,7 @@ export function Casca() {
               <span>Voltar</span>
             </a>
           )}
+          <NovaVersao />
           <EstadoDaSincronia />
         </div>
         <Vista rota={rota} />

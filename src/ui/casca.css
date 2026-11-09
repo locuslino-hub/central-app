@@ -220,6 +220,21 @@
 .sync a {
   height: 100%;
 }
+/* Aviso de versão nova do app (src/pwa.ts). */
+.nova-versao {
+  padding-right: 0;
+}
+.nova-versao button {
+  min-width: var(--toque);
+  min-height: var(--toque);
+  padding: 0 16px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--coral);
+  color: var(--coral-t);
+  font: 600 0.9rem var(--ui);
+  cursor: pointer;
+}
 /* O formato do ponto muda com o estado, para não depender só da cor. */
 .ponto {
   flex: none;

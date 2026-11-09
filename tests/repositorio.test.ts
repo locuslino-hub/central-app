@@ -23,7 +23,7 @@ function arquivosEm(pasta: string): string[] {
   });
 }
 
-describe('módulos de CDN em public/', () => {
+describe('módulos de CDN (public/ e tests/manual/)', () => {
   it.each([
     ['sem versão', `import {A} from 'https://cdn.jsdelivr.net/npm/@escopo/pacote/+esm';`],
     ['com latest', `import {A} from 'https://cdn.jsdelivr.net/npm/pacote@latest/+esm';`],
@@ -46,11 +46,19 @@ describe('módulos de CDN em public/', () => {
   });
 
   it('a verificação enxerga a importação real da página de teste', () => {
-    expect(modulosExternos(readFileSync('public/teste-ia.html', 'utf8'))).not.toEqual([]);
+    expect(modulosExternos(readFileSync('tests/manual/teste-ia.html', 'utf8'))).not.toEqual([]);
   });
 
-  it('nenhum arquivo importa módulo sem versão exata', () => {
+  // R18: a página de teste de IA importa de CDN; por isso fica fora de public/, que vai ao ar.
+  it('nada em public/ (o que é publicado) importa código de fora', () => {
     const problemas = arquivosEm('public').flatMap((arquivo) =>
+      modulosExternos(readFileSync(arquivo, 'utf8')).map((url) => `${arquivo}: ${url}`),
+    );
+    expect(problemas).toEqual([]);
+  });
+
+  it('as páginas manuais só importam módulo com versão exata', () => {
+    const problemas = arquivosEm('tests/manual').flatMap((arquivo) =>
       semVersaoExata(readFileSync(arquivo, 'utf8')).map((url) => `${arquivo}: ${url}`),
     );
     expect(problemas).toEqual([]);

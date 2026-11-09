@@ -1,5 +1,5 @@
 // "Mais": o que não cabe na barra (celular) nem no trilho (tablet).
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { hrefDe, type IdDaRota } from '../rotas';
 import { Icone, type NomeDoIcone } from './icones';
 
@@ -69,9 +69,21 @@ const FOCAVEIS = 'a[href], button:not([disabled])';
 export function FolhaMais({ rotulo, rotaAtual, aoFechar }: FolhaProps) {
   const folha = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Efeito de layout (roda antes da pintura): `useEffect` do Preact roda depois dela, e um Esc
+  // apertado no intervalo entre a folha aparecer e o foco entrar nela se perdia.
+  useLayoutEffect(() => {
     folha.current?.querySelector<HTMLElement>(FOCAVEIS)?.focus();
   }, []);
+
+  // Esc fecha mesmo que o foco esteja fora da folha. Dentro dela, `aoTeclar` trata e
+  // interrompe a tecla: não fecha duas vezes.
+  useLayoutEffect(() => {
+    const aoApertar = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape') aoFechar(true);
+    };
+    document.addEventListener('keydown', aoApertar);
+    return () => document.removeEventListener('keydown', aoApertar);
+  }, [aoFechar]);
 
   function aoTeclar(evento: KeyboardEvent) {
     if (evento.key === 'Escape') {
