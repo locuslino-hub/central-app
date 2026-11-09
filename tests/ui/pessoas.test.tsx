@@ -118,11 +118,11 @@ describe('cadastro de pessoas', () => {
   });
 
   it('nome repetido (sem ligar para maiúscula ou acento) não cadastra de novo e diz onde está', async () => {
-    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes' });
+    await salvar('pessoas', { nome: 'Aurora', salaId: 'sala-orientacoes' });
     await pronta();
-    preencher('marina', 'sala-casa');
+    preencher('ÁURORA', 'sala-casa');
     cadastrar();
-    expect((await screen.findByRole('alert')).textContent).toBe('Marina já está cadastrada em Orientações.');
+    expect((await screen.findByRole('alert')).textContent).toBe('Aurora já está cadastrada em Orientações.');
     expect(await listar('pessoas')).toHaveLength(1);
   });
 
