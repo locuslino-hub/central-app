@@ -20,6 +20,7 @@ export type IdDaRota =
   | 'sem-prazo'
   | 'chat'
   | 'conectar'
+  | 'ia'
   | 'nao-encontrada';
 
 /**
@@ -89,6 +90,7 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
   'sem-prazo': { caminho: 'sem-prazo', titulo: fixo('Sem prazo') },
   chat: { caminho: 'chat', titulo: fixo('Chat') },
   conectar: { caminho: 'conectar', titulo: fixo('Conectar aparelho'), voltarPara: '#/' },
+  ia: { caminho: 'ia', titulo: fixo('IA local'), voltarPara: '#/' },
 };
 
 const NAO_ENCONTRADA: RotaAtual = { id: 'nao-encontrada', titulo: 'Página não encontrada' };

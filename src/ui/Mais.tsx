@@ -25,7 +25,13 @@ export const GRUPOS_DO_MAIS: { titulo: string; destinos: Destino[] }[] = [
       { id: 'sem-prazo', icone: 'sem-prazo' },
     ],
   },
-  { titulo: 'Aparelho', destinos: [{ id: 'conectar', icone: 'conectar' }] },
+  {
+    titulo: 'Aparelho',
+    destinos: [
+      { id: 'conectar', icone: 'conectar' },
+      { id: 'ia', icone: 'chat' },
+    ],
+  },
 ];
 
 export const ROTAS_DO_MAIS = new Set<IdDaRota>(GRUPOS_DO_MAIS.flatMap((g) => g.destinos.map((d) => d.id)));

@@ -172,7 +172,7 @@ describe('celular (390 px): barra inferior com Mais', () => {
     expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('o Mais leva a Esta semana, mês, ano, Agora, Quadro, Atividades e Sem prazo', async () => {
+  it('o Mais leva a Esta semana, mês, ano, Agora, Quadro, Atividades e Sem prazo, e Conectar e IA local', async () => {
     await mostrar('#/', 390);
     const botao = screen.getByRole('button', { name: 'Mais' });
     expect(botao.getAttribute('aria-expanded')).toBe('false');
@@ -190,6 +190,7 @@ describe('celular (390 px): barra inferior com Mais', () => {
       ['Atividades', '#/atividades'],
       ['Sem prazo', '#/sem-prazo'],
       ['Conectar aparelho', '#/conectar'],
+      ['IA local', '#/ia'],
     ]);
   });
 

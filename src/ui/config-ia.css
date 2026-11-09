@@ -1,0 +1,16 @@
+/* IA local (Tarefa 21). */
+.config-ia .acoes-config-ia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.config-ia .acoes-config-ia p {
+  flex-basis: 100%;
+  margin: 0 0 4px;
+}
+.progresso-ia {
+  width: min(100%, 34rem);
+  height: 12px;
+  accent-color: var(--acao);
+}

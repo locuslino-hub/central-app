@@ -47,6 +47,8 @@ function rotuloDe(id: IdComHref, hoje: Date): string {
       return 'Sem prazo';
     case 'conectar':
       return 'Conectar aparelho';
+    case 'ia':
+      return 'IA local';
     default:
       return id;
   }
@@ -110,6 +112,7 @@ export function MenuLateral({ rota, hoje }: Props) {
       </div>
       <div class="rodape-do-menu">
         <Item rota={rota} id="conectar" icone="conectar" rotulo="Conectar aparelho" />
+        <Item rota={rota} id="ia" icone="chat" rotulo="IA local" />
       </div>
     </nav>
   );

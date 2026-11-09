@@ -1,5 +1,5 @@
 // A página de cada rota. Painel do dia, Agora, Semana, Mês, Ano, Caixa, Sem prazo, Atividades, Salas
-// (com o cadastro de pessoas), cada sala, cada pessoa, Conectar e Chat existem; as demais mostram o título
+// (com o cadastro de pessoas), cada sala, cada pessoa, Conectar, IA local e Chat existem; as demais mostram o título
 // e dizem que ainda não estão prontas, até a tarefa delas chegar.
 import type { RotaAtual } from '../rotas';
 import { AgoraPagina } from './Agora';
@@ -8,6 +8,7 @@ import { Atividades } from './Atividades';
 import { Caixa } from './Caixa';
 import { Chat } from './Chat';
 import { Conectar } from './Conectar';
+import { ConfigIA } from './ConfigIA';
 import { useTituloDaAba } from './hooks';
 import { Mes } from './Mes';
 import { Painel } from './Painel';
@@ -31,6 +32,11 @@ const AindaNaoPronta = () => (
     </p>
   </section>
 );
+
+function ConfigIANaCasca({ titulo }: { titulo: string }) {
+  useTituloDaAba(titulo);
+  return <ConfigIA />;
+}
 
 function ConectarNaCasca({ titulo }: { titulo: string }) {
   useTituloDaAba(titulo);
@@ -95,6 +101,8 @@ export function Vista({ rota }: { rota: RotaAtual }) {
       return <Salas titulo={rota.titulo} />;
     case 'conectar':
       return <ConectarNaCasca titulo={rota.titulo} />;
+    case 'ia':
+      return <ConfigIANaCasca titulo={rota.titulo} />;
     case 'chat':
       return (
         <Pagina titulo={rota.titulo}>

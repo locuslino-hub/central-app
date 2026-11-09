@@ -129,7 +129,7 @@ function capitalizar(t: string): string {
 }
 
 /** O nome da pessoa conhecida tem de aparecer no título (falha vista no teste da IA). */
-function garantirNome(titulo: string, nome: string): string {
+export function garantirNome(titulo: string, nome: string): string {
   const nt = normalizar(titulo);
   const partes = normalizar(nome).split(/[^a-z0-9]+/).filter((x) => x.length >= 2 && !TITULOS_DE_NOME.has(x));
   const tem = partes.length
