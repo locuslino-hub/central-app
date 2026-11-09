@@ -286,3 +286,91 @@
     transition: none;
   }
 }
+
+/* ---- Documentos ---- */
+
+.documentos-lista {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.documento {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--toque);
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--r-m);
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+}
+.documento-icone {
+  display: inline-flex;
+  flex: none;
+  color: var(--acao2);
+}
+.documento-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.documento-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--toque);
+  overflow-wrap: anywhere;
+  color: var(--tinta);
+  font-weight: 600;
+  text-decoration: none;
+}
+a.documento-link:hover {
+  text-decoration: underline;
+}
+a.documento-link:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.documento-tipo {
+  margin-top: -6px;
+  color: var(--tinta3);
+  font-size: 0.85rem;
+}
+.documento-aviso {
+  color: var(--tinta3);
+  font-size: 0.85rem;
+}
+.documento-arquivar {
+  flex: none;
+}
+.documentos-guardado {
+  margin: 0 0 8px;
+  color: var(--tinta3);
+  font-size: 0.93rem;
+}
+.documento-form {
+  display: grid;
+  gap: 12px;
+  max-width: 34rem;
+}
+.documento-campo {
+  display: grid;
+  gap: 4px;
+}
+.documento-campo .campo {
+  width: 100%;
+  font-size: 16px; /* 16 px ou mais: o celular não aproxima a tela ao tocar */
+}
+.documento-campo .campo:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.documento-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

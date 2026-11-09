@@ -211,9 +211,9 @@ describe('página da sala', () => {
     expect(pessoas.getByRole('link', { name: 'Cadastrar pessoa' }).getAttribute('href')).toBe('#/salas');
   });
 
-  it('Documentos: a caixa ainda vazia, sem prometer o que não existe', async () => {
+  it('Documentos: sala sem documentos mostra a caixa vazia', async () => {
     await scriptDeTeste();
-    mostrar('#/sala/sala-mba');
+    mostrar('#/sala/sala-aulas');
     const documentos = await secao('Documentos');
     expect(await documentos.findByText('Nenhum documento ainda.')).toBeTruthy();
   });
