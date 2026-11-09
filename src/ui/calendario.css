@@ -480,7 +480,7 @@
   font-size: 0.7rem;
   font-weight: 600;
 }
-.mes-titulo {
+.mes-titulos {
   display: none;
 }
 .cal-legenda {
@@ -504,10 +504,20 @@
   }
 }
 
-/* Página larga: cabem os títulos dos dois primeiros eventos. */
+/* Página larga: cabem os títulos (dois eventos; no computador, quantos couberem). */
 @container mes (min-width: 36rem) {
   .mes-dia {
     min-height: 92px;
+  }
+  .mes-titulos {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-start;
+    align-self: stretch;
+    min-width: 0;
+    font-size: 0.74rem;
+    line-height: 1.45;
   }
   .mes-titulo {
     display: block;
@@ -531,6 +541,59 @@
     background: #fff;
     color: var(--pinho2);
   }
+  /* Tarefa: contorno, como o anel; evento: fundo cheio, como o ponto. */
+  .mes-titulo[data-tipo='tarefa'],
+  .mes-dia[data-passado='true'] .mes-titulo[data-tipo='tarefa'],
+  .mes-dia[data-fora='true'] .mes-titulo[data-tipo='tarefa'] {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--campo);
+  }
+  .mes-dia[data-hoje='true'] .mes-titulo[data-tipo='tarefa'] {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7);
+    color: #fff;
+  }
+}
+
+/*
+ * Computador: o mês ocupa o painel central inteiro, até o fim da janela. As semanas
+ * dividem a altura por igual: cada dia fica por cima da célula (position: absolute),
+ * então nenhum conteúdo estica uma semana mais que as outras. Em janela baixa, a grade
+ * guarda um mínimo e a página rola. Tablet e celular seguem com a altura do conteúdo.
+ */
+.casca[data-tela='computador'] .pagina:has(> .mes),
+.casca[data-tela='computador'] .pagina:has(> .ano) {
+  display: flex;
+  flex-direction: column;
+}
+.casca[data-tela='computador'] .pagina > .mes {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-height: 34rem;
+}
+.casca[data-tela='computador'] .mes > .mes-quadro {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+.casca[data-tela='computador'] .mes-grade {
+  height: 100%;
+}
+.casca[data-tela='computador'] .mes-grade td {
+  position: relative;
+  height: 4.25rem;
+}
+.casca[data-tela='computador'] .mes-grade .mes-dia {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+.casca[data-tela='computador'] .mes-dia .mes-titulos {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ---- Ano ---- */
@@ -609,6 +672,59 @@
   background: var(--pinho);
   color: #fff;
   text-decoration: none;
+}
+
+/*
+ * Tablet e computador: grade uniforme, sem buracos. Quantas colunas, pela largura
+ * da página: 4 x 3, 3 x 4 ou 2 x 6. No computador as caixas esticam até o fim da
+ * janela (com um mínimo; abaixo dele a página rola) e o mini calendário estica junto.
+ * Celular: como sempre foi.
+ */
+.casca:not([data-tela='celular']) .ano {
+  container: ano / inline-size;
+}
+.casca:not([data-tela='celular']) .ano-meses {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container ano (min-width: 30rem) {
+  .casca:not([data-tela='celular']) .ano-meses {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container ano (min-width: 44rem) {
+  .casca:not([data-tela='celular']) .ano-meses {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.casca[data-tela='computador'] .pagina > .ano {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+.casca[data-tela='computador'] .ano-meses {
+  flex: 1 1 auto;
+  grid-auto-rows: minmax(12.5rem, 1fr);
+}
+.casca[data-tela='computador'] .ano-mes {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.casca[data-tela='computador'] .ano-mini {
+  flex: 1 1 auto;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  place-items: center;
+}
+.casca[data-tela='computador'] .ano-letra,
+.casca[data-tela='computador'] .ano-dia {
+  width: min(100%, 2.4rem);
+  height: min(100%, 2.4rem);
+  aspect-ratio: auto;
+  font-size: 0.74rem;
+}
+.casca[data-tela='computador'] .ano-dia[data-tem='true'],
+.casca[data-tela='computador'] .ano-dia[data-hoje='true'] {
+  border-radius: 99px;
 }
 
 /* ---- Detalhes do evento ---- */

@@ -317,6 +317,50 @@ test.describe('computador, 1280 px', () => {
   });
 });
 
+test.describe('computador, 1440 px: mês e ano ocupam o painel central', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('mês: a grade vai até o fim da janela, semanas da mesma altura, títulos até onde cabe', async ({ page }) => {
+    await abrir(page, '#/mes');
+    const principal = page.getByRole('main');
+    const grade = principal.getByRole('table', { name: 'Novembro de 2026' });
+    await expect(grade.getByRole('link')).toHaveCount(42);
+    const quadro = (await principal.locator('.mes-quadro').boundingBox())!;
+    expect(900 - (quadro.y + quadro.height)).toBeLessThan(48); // só a margem de baixo da página
+    const semanas = await grade.locator('tbody tr').evaluateAll((linhas) => linhas.map((l) => l.getBoundingClientRect().height));
+    expect(semanas).toHaveLength(6);
+    expect(Math.max(...semanas) - Math.min(...semanas)).toBeLessThan(2);
+
+    // Janela mais alta: cabem mais títulos; o que não cabe vira "+N" ao lado dos pontos.
+    const hoje = grade.getByRole('link', { name: /hoje/ });
+    await expect(hoje.locator('.mes-titulo')).toHaveCount(2);
+    await expect(hoje.locator('.mes-extra')).toHaveText('+3');
+    await page.setViewportSize({ width: 1440, height: 1400 });
+    await expect(hoje.locator('.mes-titulo')).toHaveCount(5);
+    await expect(hoje.locator('.mes-extra')).toHaveCount(0);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(hoje.locator('.mes-titulo')).toHaveCount(2);
+    expect(await semRolagemDeLado(page)).toBe(true);
+    expect(await pequenos(page)).toEqual([]);
+  });
+
+  test('ano: doze caixas iguais em 4 x 3, ocupando largura e altura do painel', async ({ page }) => {
+    await abrir(page, '#/ano');
+    const principal = page.getByRole('main');
+    const meses = principal.locator('.ano-mes');
+    await expect(meses).toHaveCount(12);
+    const caixas = await meses.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((c) => ({ x: Math.round(c.x), y: Math.round(c.y), w: Math.round(c.width), h: Math.round(c.height), fim: c.bottom })));
+    expect(new Set(caixas.map((c) => c.x)).size).toBe(4);
+    expect(new Set(caixas.map((c) => c.y)).size).toBe(3);
+    expect(new Set(caixas.map((c) => c.w)).size).toBe(1);
+    expect(Math.max(...caixas.map((c) => c.h)) - Math.min(...caixas.map((c) => c.h))).toBeLessThan(2);
+    const pagina = (await principal.boundingBox())!;
+    expect(pagina.y + pagina.height - Math.max(...caixas.map((c) => c.fim))).toBeLessThan(48);
+    expect(await semRolagemDeLado(page)).toBe(true);
+    expect(await pequenos(page)).toEqual([]);
+  });
+});
+
 test.describe('celular, 390 px', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
