@@ -1,14 +1,16 @@
 // O script do Google, falso, para os testes de ponta a ponta no navegador: o
 // código de verdade (`tratar`, em script/api.ts) roda aqui, no Node, com Drive,
-// Agenda e Gmail na memória. Dois aparelhos (dois contextos do navegador) podem
+// Agenda, Gmail e Google Tarefas na memória. Dois aparelhos (dois contextos do navegador) podem
 // falar com o mesmo script, como na vida real. Nomes e e-mails fictícios.
 import type { BrowserContext, Page, Route } from '@playwright/test';
 import { tratar } from '../../script/api';
 import type { ServicoDeAgenda } from '../../script/agenda';
 import type { ServicoDeGmail } from '../../script/email';
+import type { ServicoDeTarefas } from '../../script/tarefas-google';
 import { armazemNaMemoria } from './armazem';
 import { agendasDoDono } from './calendario';
 import { gmailFalso, guardaNaMemoria, naoLida, type MensagemFalsa } from './gmail';
+import { tarefasGoogleFalso } from './tarefas-google';
 
 export const URL_DO_SCRIPT = 'https://script.google.com/macros/s/ID-FICTICIO/exec';
 export const CODIGO_DO_APARELHO = 'codigo-ficticio-de-teste-0123456789abcdef';
@@ -19,6 +21,7 @@ export function scriptFalso({ emails = [naoLida()] }: { emails?: MensagemFalsa[]
   armazem.relogio = Date.parse('2026-11-05T13:00:00Z');
   const agenda = agendasDoDono();
   const gmail = gmailFalso(emails);
+  const tarefasGoogle = tarefasGoogleFalso();
   const guarda = guardaNaMemoria();
   /** Uma ligação por página (aparelho): cada aparelho pode ficar sem internet sozinho. */
   const ligacoes = new Set<{ offline: boolean }>();
@@ -37,6 +40,7 @@ export function scriptFalso({ emails = [naoLida()] }: { emails?: MensagemFalsa[]
         armazem,
         calendario: () => agenda.servico as unknown as ServicoDeAgenda,
         gmail: () => gmail.servico as unknown as ServicoDeGmail,
+        tarefasGoogle: () => tarefasGoogle.servico as unknown as ServicoDeTarefas,
         emailsGuardados: guarda,
       },
     );
@@ -51,6 +55,7 @@ export function scriptFalso({ emails = [naoLida()] }: { emails?: MensagemFalsa[]
     armazem,
     agenda,
     gmail,
+    tarefasGoogle,
     pedidos,
     /**
      * Faz o script responder a esta página (aparelho). Devolve a ligação dela: `cair()` e `voltar()`
