@@ -195,13 +195,25 @@ for (const [nome, viewport, sufixo] of [
       await expect(regiao('Pendências das salas').getByRole('link', { name: 'Orientações: 1 tarefa' })).toBeVisible();
       await expect(regiao('Pendências das salas').getByRole('link', { name: 'Casa: 1 tarefa' })).toBeVisible();
       const seguir = regiao(/^A seguir/);
-      await expect(seguir.getByRole('listitem')).toHaveCount(6);
-      await expect(seguir.getByRole('listitem').first()).toContainText('Ler artigo da Renata');
-      await expect(seguir.getByRole('listitem').first()).toContainText('Cabe agora');
-      // 45 min cabem nos 100 livres; 45 + 90 não: dali em diante, tudo é Depois.
-      await expect(seguir.getByRole('listitem').nth(1)).toContainText('Preparar slides da aula');
-      await expect(seguir.getByRole('listitem').nth(1)).toContainText('Depois');
-      await expect(seguir.getByRole('listitem').nth(2)).toContainText('cerca de 1 h');
+      // O primeiro da fila (Ler artigo) é o destaque do Agora: no painel direito ou, no celular, no alto.
+      const agoraNoLado =
+        sufixo === '1280' ? page.getByRole('complementary', { name: 'Agora e chat' }) : principal.getByRole('region', { name: 'Agora' });
+      await expect(agoraNoLado.getByText('Ler artigo da Renata')).toBeVisible();
+      await expect(agoraNoLado.getByText('Cabe agora')).toBeVisible();
+      await expect(seguir.getByText('Ler artigo da Renata')).toHaveCount(0);
+      // 45 + 90 passa dos 100 livres: daí em diante, sem selo.
+      await expect(seguir.getByRole('listitem').first()).toContainText('Preparar slides da aula');
+      await expect(seguir.getByText('Cabe agora')).toHaveCount(0);
+      await expect(seguir.getByText('Depois')).toHaveCount(0);
+      await expect(seguir.getByRole('listitem').nth(1)).toContainText('cerca de 1 h');
+      if (sufixo === '390') {
+        // No celular, 3 e o resto em "Ver tudo".
+        await expect(seguir.getByRole('listitem')).toHaveCount(3);
+        await seguir.getByRole('button', { name: 'Ver tudo (5)' }).click();
+      }
+      await expect(seguir.getByRole('listitem')).toHaveCount(5);
+      // A Agenda de hoje tem só o que tem hora: os 3 compromissos (as tarefas estão na Checklist).
+      await expect(regiao('Agenda de hoje').getByRole('listitem')).toHaveCount(3);
       await expect(regiao('Fechar o dia')).toContainText('Hoje: 1 tarefa feita, 3 em aberto e 2 e-mails sem resposta.');
 
       const ordem = [
@@ -237,6 +249,13 @@ for (const [nome, viewport, sufixo] of [
 
       expect(await pequenos(page)).toEqual([]);
       expect(await semRolagemDeLado(page)).toBe(true);
+      if (sufixo === '390') {
+        // No fim da página, o último botão fica acima da barra de baixo, nunca atrás dela.
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        const ultimo = await caixa(regiao('Fechar o dia').getByRole('button', { name: 'Fechar o dia' }));
+        const barra = await caixa(page.getByRole('navigation', { name: 'Principal' }));
+        expect(ultimo.y + ultimo.height).toBeLessThanOrEqual(barra.y - 8);
+      }
       await capturar(page, `painel-${sufixo}`);
       // Nada aqui escreve no Gmail: só leitura de e-mail sai do aparelho.
       expect(acoes.filter((a) => /mail/i.test(a) && a !== 'emails' && a !== 'atualizarEmails')).toEqual([]);
@@ -251,7 +270,7 @@ for (const [nome, viewport, sufixo] of [
       const destaque = principal.getByRole('region', { name: 'Em destaque' });
       await expect(destaque.getByRole('heading', { name: 'Ler artigo da Renata' })).toBeVisible();
       await expect(destaque).toContainText('Cabe agora');
-      await expect(principal.getByRole('region', { name: /^A seguir/ }).getByRole('listitem')).toHaveCount(5);
+      await expect(principal.getByRole('region', { name: /^A seguir/ }).getByRole('listitem')).toHaveCount(sufixo === '390' ? 3 : 5);
       expect(await pequenos(page)).toEqual([]);
       expect(await semRolagemDeLado(page)).toBe(true);
       await capturar(page, `agora-${sufixo}`);
@@ -296,6 +315,10 @@ for (const [nome, viewport, sufixo] of [
       await fechar.getByRole('button', { name: 'Desfazer' }).click();
       await expect(tarefas.getByRole('listitem')).toHaveCount(3);
 
+      // Uma ação em lote por coluna; o passo final é a única ação principal.
+      await expect(fechar.getByRole('button', { name: 'Passar as 3 para amanhã' })).toBeVisible();
+      await expect(fechar.getByRole('button', { name: 'Adiar os 2 e-mails' })).toBeVisible();
+      await expect(fechar.locator('.botao.primario')).toHaveCount(1);
       const emails = fechar.getByRole('list', { name: 'E-mails sem resposta' });
       await emails.getByRole('group', { name: 'O que fazer com: Dúvida sobre a prova' }).getByRole('button', { name: 'Agora não' }).click();
       await expect(emails.getByRole('listitem')).toHaveCount(1);

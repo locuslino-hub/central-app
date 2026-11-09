@@ -38,7 +38,8 @@
 
 .pagina {
   min-width: 0;
-  padding: 14px 14px calc(104px + env(safe-area-inset-bottom));
+  /* Embaixo, a altura da barra (56 + 8) e a margem dela (10), com folga: nada fica atrás da barra. */
+  padding: 14px 14px calc(120px + env(safe-area-inset-bottom));
 }
 .pagina:focus {
   outline: none;
@@ -154,6 +155,30 @@
 .botao:hover,
 .botao-link:hover {
   background: var(--poco);
+}
+/*
+ * Ação secundária em forma de texto (Tarefa 16, rodada 1): num grupo de ações,
+ * só uma é pílula; as outras são texto sublinhado, com a mesma área de toque de 44 px.
+ */
+.botao-texto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque);
+  min-height: var(--toque);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--acao2);
+  font: 600 0.95rem var(--ui);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.botao-texto:hover {
+  background: rgb(var(--som-rgb) / 0.08);
 }
 .botao.primario {
   border-color: transparent;

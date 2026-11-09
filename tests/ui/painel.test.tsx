@@ -1,5 +1,5 @@
 // Tarefa 16: o Painel do dia inteiro, na ordem da especificação (seção 7).
-import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/preact';
+import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
@@ -11,6 +11,10 @@ import { criar } from '../apoio/tarefas';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
 configure({ asyncUtilTimeout: 5000 });
+
+/** O texto inteiro de um elemento, mesmo com os números num <span class="num"> à parte. */
+const inteiro = (t: string) => (_: string, el: Element | null) =>
+  el?.textContent === t && !Array.from(el.children).some((filho) => filho.textContent === t);
 
 beforeEach(async () => {
   localStorage.clear();
@@ -168,8 +172,12 @@ describe('Caixas das salas', () => {
       'Casa: em dia',
     ]);
     expect(caixas.getByRole('link', { name: 'Orientações: 2 tarefas' }).getAttribute('href')).toBe('#/sala/sala-orientacoes');
-    expect(caixas.getByRole('link', { name: 'Investigação: 1 tarefa' }).textContent).toContain('1 tarefa');
-    expect(caixas.getByRole('link', { name: 'Investigação: 1 tarefa' }).textContent).not.toContain('1 tarefas');
+    // Na tela: o número grande e a palavra no plural certo.
+    const tile = (nome: string) => caixas.getByRole('link', { name: nome });
+    expect(tile('Investigação: 1 tarefa').querySelector('.caixa-sala-numero')?.textContent).toBe('1');
+    expect(tile('Investigação: 1 tarefa').querySelector('.caixa-sala-conta')?.textContent).toBe('tarefa');
+    expect(tile('Orientações: 2 tarefas').querySelector('.caixa-sala-conta')?.textContent).toBe('tarefas');
+    expect(tile('Casa: em dia').querySelector('.caixa-sala-conta')?.textContent).toBe('Em dia');
   });
 
   it('o e-mail de quem é de uma sala conta na caixa dela', async () => {
@@ -185,29 +193,36 @@ describe('A seguir', () => {
   const linhas = () => regiao(/^A seguir/).getAllByRole('listitem');
   const textoDe = (li: HTMLElement) => li.textContent ?? '';
 
-  it('a fila em ordem, com "cerca de" na duração não confirmada e Cabe agora ou Depois pelo tempo livre', async () => {
+  it('a fila em ordem depois do destaque do Agora, com "cerca de" e "Cabe agora" só no que cabe', async () => {
+    await criar('Arquivar notas', { data: '2026-11-05', duracaoMin: 30, duracaoConfirmada: true });
     await diaComum();
     mostrar('#/', 1280);
     const seguir = regiao(/^A seguir/);
-    expect(await seguir.findByText('Livre até 14:00, quando começa Reunião de orientação.')).toBeTruthy();
+    expect(await seguir.findByText(inteiro('Livre até 14:00, quando começa Reunião de orientação.'))).toBeTruthy();
     expect(seguir.getByText('Você tem 1 h 40.')).toBeTruthy();
+    // O primeiro da fila é o destaque do Agora (painel direito): não se repete aqui.
+    const lado = within(screen.getByRole('complementary', { name: 'Agora e chat' }));
+    expect(await lado.findByText('Arquivar notas')).toBeTruthy();
     await waitFor(() => expect(linhas()).toHaveLength(3));
+    expect(seguir.queryByText('Arquivar notas')).toBeNull();
     const [a, b, c] = linhas();
-    // 45 min cabem nos 100 livres; 45 + 60 não: dali em diante, tudo é Depois.
+    // 30 + 45 cabem nos 100 livres; + 60 não: dali em diante, sem selo.
     expect(textoDe(a)).toContain('Ler artigo da Renata');
     expect(textoDe(a)).toContain('45 min');
     expect(textoDe(a)).not.toContain('cerca de');
     expect(within(a).getByText('Cabe agora')).toBeTruthy();
     expect(textoDe(b)).toContain('Rever capítulo 3');
     expect(textoDe(b)).toContain('cerca de 1 h');
-    expect(within(b).getByText('Depois')).toBeTruthy();
+    expect(within(b).queryByText('Cabe agora')).toBeNull();
     expect(textoDe(c)).toContain('Revisão do capítulo 2');
     expect(textoDe(c)).toContain('E-mail de Marina');
-    expect(within(c).getByText('Depois')).toBeTruthy();
+    expect(within(c).queryByText('Cabe agora')).toBeNull();
+    expect(seguir.queryByText('Depois')).toBeNull();
     expect(seguir.getByRole('heading', { name: /A seguir/ }).textContent).toContain('3 itens');
   });
 
   it('1 item no singular', async () => {
+    await criar('Arquivar notas', { data: '2026-11-05' });
     await criar('Rever capítulo 3', { data: '2026-11-05' });
     await scriptDeTeste();
     mostrar('#/', 1280);
@@ -216,16 +231,32 @@ describe('A seguir', () => {
   });
 
   it('sem a agenda, o app não promete o que cabe', async () => {
+    await criar('Arquivar notas', { data: '2026-11-05' });
     await criar('Rever capítulo 3', { data: '2026-11-05' });
     await scriptDeTeste({ agendaFalha: true });
     mostrar('#/', 1280);
     const seguir = regiao(/^A seguir/);
     expect(await seguir.findByText('A agenda não carregou: ainda não sei quanto tempo livre há.')).toBeTruthy();
-    expect(seguir.queryByText('Cabe agora')).toBeNull();
-    expect(seguir.queryByText('Depois')).toBeNull();
+    await seguir.findByText('Rever capítulo 3');
+    expect(screen.queryByText('Cabe agora')).toBeNull();
+  });
+
+  it('no celular o Agora vem no alto do Painel; A seguir mostra 3 e o resto em "Ver tudo"', async () => {
+    for (const t of ['A', 'B', 'C', 'D', 'E']) await criar(`Tarefa ${t}`, { data: '2026-11-05' });
+    await scriptDeTeste();
+    mostrar('#/', 390);
+    const regioes = () => principal().getAllByRole('region');
+    const agora = await principal().findByRole('region', { name: 'Agora' });
+    expect(regioes().indexOf(agora)).toBeLessThan(regioes().indexOf(principal().getByRole('region', { name: 'Mensagem do dia' })));
+    expect(await within(agora).findByText('Tarefa A')).toBeTruthy();
+    await waitFor(() => expect(linhas()).toHaveLength(3));
+    expect(regiao(/^A seguir/).queryByText('Tarefa A')).toBeNull();
+    fireEvent.click(regiao(/^A seguir/).getByRole('button', { name: 'Ver tudo (4)' }));
+    expect(linhas()).toHaveLength(4);
   });
 
   it('tarefa ligada a e-mail tem Responder; se o e-mail já está Feito, não', async () => {
+    await criar('Arquivar notas', { data: '2026-11-05' }); // o destaque do Agora
     await criar('Responder: Revisão do capítulo 2', { data: '2026-11-05', emailId: 'msg-marina' });
     await scriptDeTeste({ eventos: [REUNIAO], emails: [email('Revisão do capítulo 2', { id: 'msg-marina' })] });
     mostrar('#/', 1280);
@@ -269,7 +300,8 @@ describe('Painel e Sem prazo juntos', () => {
     mostrar('#/', 1280);
     fireEvent.click(await regiao('Sem prazo').findByRole('button', { name: 'Hoje' }));
     expect(await regiao('Checklist do dia').findByRole('checkbox', { name: 'Comprar café' })).toBeTruthy();
-    expect(await regiao(/^A seguir/).findByText('Comprar café')).toBeTruthy();
+    // E entra na fila: sozinha, ela é o destaque do Agora.
+    expect(await within(screen.getByRole('complementary', { name: 'Agora e chat' })).findByText('Comprar café')).toBeTruthy();
     await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe('2026-11-05'));
   });
 });

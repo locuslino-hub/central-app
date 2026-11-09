@@ -44,6 +44,20 @@
 .painel-contagem {
   color: var(--tinta2);
   font: 500 0.95rem var(--ui);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+/* A serifa não tem algarismos alinhados ("1" parece "l"): números em serifa saem na letra da interface. */
+.num {
+  font-family: var(--ui);
+  font-size: 0.82em;
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.01em;
+}
+/* "Ver tudo (N)" no fim de uma lista recolhida (celular). */
+.ver-tudo {
+  margin-top: 4px;
+  padding-left: 0;
 }
 .a-seguir h2 {
   display: flex;
@@ -99,41 +113,35 @@
 
 .caixas-salas-lista {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* Computador: as 7 salas numa linha só. */
+@media (min-width: 1100px) {
+  .caixas-salas-lista {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+/* Faixa de cor à esquerda (a sala), o nome, o número grande e o que ele conta. */
 .caixa-sala {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  min-height: 4.9rem;
+  min-height: 6.4rem;
   height: 100%;
-  padding: 13px 16px 14px;
-  border-radius: var(--r-m);
-  background: var(--f);
+  padding: 11px 10px 12px 14px;
+  border-left: 5px solid var(--c);
+  border-radius: 6px var(--r-p) var(--r-p) 6px;
+  background: var(--folha);
   box-shadow: var(--relevo-p);
-  color: var(--c);
+  color: var(--tinta);
   text-decoration: none;
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease;
-}
-.caixa-sala::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  right: -24px;
-  bottom: -34px;
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--c) 10%, var(--f));
 }
 .caixa-sala:hover {
   transform: translateY(-2px);
@@ -144,25 +152,31 @@
   outline-offset: 2px;
 }
 .caixa-sala-nome {
-  margin-bottom: 2px;
+  color: var(--c);
+  font-size: 0.85rem;
   font-weight: 700;
   line-height: 1.2;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.caixa-sala-numero {
+  margin-top: auto;
+  padding-top: 6px;
+  font: 600 1.9rem/1 var(--ui);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.02em;
 }
 .caixa-sala-conta {
+  margin-top: 2px;
   color: var(--tinta2);
-  font-size: 0.87rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
 }
-/* Sala em dia: fica quieta, sem fundo de cor. A palavra "Em dia" diz o mesmo. */
-.caixa-sala[data-vazia='true'] {
-  background: var(--folha);
-}
-.caixa-sala[data-vazia='true']::after {
-  background: var(--f);
-}
-.caixa-sala[data-vazia='true'] .caixa-sala-conta {
-  color: var(--tinta3);
+/* Sala em dia: o número fica quieto (cinza de texto, ainda legível); a palavra "Em dia" diz o mesmo. */
+.caixa-sala[data-vazia='true'] .caixa-sala-numero {
+  color: var(--tinta2);
+  font-weight: 500;
 }
 
 /* ---- A seguir: a fila ---- */
@@ -258,17 +272,13 @@
   flex: none;
   padding: 3px 11px;
   border-radius: 99px;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 700;
   white-space: nowrap;
 }
 .fila-cabe[data-cabe='true'] {
   background: var(--cabe);
   color: var(--pinho2);
-}
-.fila-cabe[data-cabe='false'] {
-  background: var(--poco);
-  color: var(--tinta3);
 }
 .fila-responder {
   padding: 0 16px;
@@ -346,9 +356,42 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-.fechar-acoes .botao {
-  padding: 0 16px;
+.fechar-acoes .botao-texto {
   font-size: 0.92rem;
+}
+.fechar-lote {
+  padding: 0 16px;
+  font-size: 0.9rem;
+}
+.fechar-prazo {
+  flex: 1 1 100%;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-p);
+  background: var(--folha);
+}
+.fechar-prazo-campos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.fechar-prazo-campos label {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 8rem;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.fechar-prazo-campos .campo {
+  width: 100%;
+  font-size: 16px;
+}
+.fechar-prazo-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .fechar-final {
   display: flex;
@@ -432,10 +475,6 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.destaque .fila-cabe[data-cabe='false'] {
-  background: rgb(255 255 255 / 0.6);
-  color: var(--tinta2);
-}
 .destaque .fila-cabe[data-cabe='true'] {
   background: var(--folha);
 }
@@ -507,7 +546,7 @@
 }
 .agora-depois-titulo {
   margin: 4px 0 0;
-  color: var(--tinta3);
+  color: var(--tinta2);
   font-size: 0.82rem;
   font-weight: 600;
 }
@@ -608,8 +647,24 @@
 }
 .triagem-conta {
   margin: 4px 0 10px;
-  font-family: var(--titulo);
-  font-size: 1.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* O Agora no alto do Painel (celular e tablet, onde não há painel direito). */
+.agora-no-painel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agora-no-painel h2::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--coral2);
+  animation: vivo 2.8s ease-in-out infinite;
 }
 
 /* ---- Celular ---- */
@@ -630,7 +685,7 @@
     scrollbar-width: none;
   }
   .caixas-salas-lista li {
-    flex: 0 0 8.75rem;
+    flex: 0 0 8.25rem;
     scroll-snap-align: start;
   }
   .destaque {

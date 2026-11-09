@@ -424,27 +424,32 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
           {atrasada && <span class="etiqueta etiqueta-atrasada">Atrasada</span>}
           {quando && <span class="tarefa-quando">{quando}</span>}
           <DuracaoTarefa tarefa={tarefa} />
-          {tarefa.feito && conclusoes.temDesfazer(tarefa.id) && (
-            <button
-              type="button"
-              class="tarefa-desfazer"
-              aria-label={`Desfazer: ${tarefa.titulo}`}
-              onClick={() => void executar(() => conclusoes.desfazer(tarefa.id))}
-            >
-              Desfazer
-            </button>
-          )}
+        </div>
+      </div>
+      {/* Coluna fixa à direita: Editar sempre no mesmo lugar; Desfazer logo acima, quando há. */}
+      <div class="tarefa-lado">
+        {tarefa.feito && conclusoes.temDesfazer(tarefa.id) && (
           <button
             type="button"
-            class="tarefa-editar"
-            ref={botaoEditar}
-            aria-expanded={editando}
-            aria-label={`Editar: ${tarefa.titulo}`}
-            onClick={() => (editando ? fecharEdicao() : setEditando(true))}
+            class="tarefa-desfazer"
+            aria-label={`Desfazer: ${tarefa.titulo}`}
+            onClick={() => void executar(() => conclusoes.desfazer(tarefa.id))}
           >
-            Editar
+            Desfazer
           </button>
-        </div>
+        )}
+        <button
+          type="button"
+          class="tarefa-editar"
+          ref={botaoEditar}
+          aria-expanded={editando}
+          aria-label={`Editar: ${tarefa.titulo}`}
+          onClick={() => (editando ? fecharEdicao() : setEditando(true))}
+        >
+          Editar
+        </button>
+      </div>
+      <div class="tarefa-extra">
         {tarefa.semanaVencida && (
           <p class="tarefa-aviso">
             <span>Saiu de Esta semana: a semana de {diaMes(tarefa.semanaVencida, hoje)} acabou.</span>

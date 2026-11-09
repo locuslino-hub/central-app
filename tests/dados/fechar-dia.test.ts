@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { desfazer } from '../../src/dados/desfazer';
 import { diaFechado, fecharDia } from '../../src/dados/fechar-dia';
 import { lerConfig, listar, salvar } from '../../src/dados/loja';
-import { adiarTarefa, moverTarefa, moverTarefas } from '../../src/dados/tarefas';
+import * as loja from '../../src/dados/loja';
+import { EmParte } from '../../src/dados/desfazer';
+import { adiarEmails } from '../../src/dados/emails-estado';
+import { adiarTarefa, moverTarefa, moverTarefas, mudarPrazo } from '../../src/dados/tarefas';
 import { criar } from '../apoio/tarefas';
 
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa.
@@ -74,15 +77,18 @@ describe('moverTarefa (Fechar o dia)', () => {
     expect(await lerTarefa(id)).toMatchObject({ data: HOJE, semana: '2026-11-02', semanaVencida: '2026-10-26' });
   });
 
-  it('prazo e compromisso têm hora: não vão para Sem prazo (nada é gravado)', async () => {
+  it('prazo fica com o seu dia: nem Amanhã nem Sem prazo (nada é gravado)', async () => {
     const prazo = await criar('Entrega', { data: '2026-11-04', prazoHora: '17:00' });
-    const compromisso = await criar('Reunião antiga', { data: HOJE, inicio: '10:00' });
     expect(await moverTarefa(prazo.id, { tipo: 'sem-prazo' })).toBeUndefined();
+    expect(await moverTarefa(prazo.id, { tipo: 'amanha', hoje: HOJE })).toBeUndefined();
+    expect(await lerTarefa(prazo.id)).toMatchObject({ data: '2026-11-04', prazoHora: '17:00' });
+  });
+
+  it('compromisso antigo (com hora de início) vai para amanhã, mas não para Sem prazo', async () => {
+    const compromisso = await criar('Reunião antiga', { data: HOJE, inicio: '10:00' });
     expect(await moverTarefa(compromisso.id, { tipo: 'sem-prazo' })).toBeUndefined();
-    expect((await lerTarefa(prazo.id)).data).toBe('2026-11-04');
-    // Para amanhã, sim: o prazo vai junto.
-    await moverTarefa(prazo.id, { tipo: 'amanha', hoje: HOJE });
-    expect(await lerTarefa(prazo.id)).toMatchObject({ data: '2026-11-06', prazoHora: '17:00' });
+    await moverTarefa(compromisso.id, { tipo: 'amanha', hoje: HOJE });
+    expect((await lerTarefa(compromisso.id)).data).toBe('2026-11-06');
   });
 
   it('dia que não existe não grava; na virada do mês, amanhã é dia 1', async () => {
@@ -105,10 +111,80 @@ describe('moverTarefa (Fechar o dia)', () => {
     expect((await lerTarefa(b.id)).data).toBe('2026-11-04');
   });
 
+  it('moverTarefas deixa as de prazo onde estão', async () => {
+    const a = await criar('Rever capítulo 3', { data: HOJE });
+    const p = await criar('Entrega', { data: HOJE, prazoHora: '17:00' });
+    const entrada = await moverTarefas([a.id, p.id], { tipo: 'amanha', hoje: HOJE });
+    expect(entrada?.rotulo).toBe('1 tarefa para amanhã');
+    expect((await lerTarefa(p.id)).data).toBe(HOJE);
+  });
+
+  it('se uma escrita falha no meio, o que já andou tem Desfazer mesmo assim', async () => {
+    const a = await criar('Rever capítulo 3', { data: HOJE });
+    const b = await criar('Ler artigo', { data: HOJE });
+    const salvarDeVerdade = loja.salvar;
+    let vezes = 0;
+    const espiao = vi.spyOn(loja, 'salvar').mockImplementation(async (...args: Parameters<typeof loja.salvar>) => {
+      vezes += 1;
+      if (vezes === 2) throw new Error('disco cheio');
+      return salvarDeVerdade(...args);
+    });
+    const erro = await moverTarefas([a.id, b.id], { tipo: 'amanha', hoje: HOJE }).catch((e: unknown) => e);
+    espiao.mockRestore();
+    expect(erro).toBeInstanceOf(EmParte);
+    const parcial = erro as EmParte;
+    expect(parcial.entrada.rotulo).toBe('1 tarefa para amanhã');
+    expect(desfazer.ultimo()).toBe(parcial.entrada);
+    expect((await lerTarefa(a.id)).data).toBe('2026-11-06');
+    await parcial.entrada.reverter();
+    expect((await lerTarefa(a.id)).data).toBe(HOJE);
+    expect((await lerTarefa(b.id)).data).toBe(HOJE);
+  });
+
   it('moverTarefas com uma só diz "1 tarefa"; sem nenhuma, nada', async () => {
     const a = await criar('Rever capítulo 3', { data: HOJE });
     expect((await moverTarefas([a.id], { tipo: 'amanha', hoje: HOJE }))?.rotulo).toBe('1 tarefa para amanhã');
     expect(await moverTarefas([], { tipo: 'amanha', hoje: HOJE })).toBeUndefined();
+  });
+});
+
+describe('adiarEmails (Fechar o dia: "Adiar os N e-mails")', () => {
+  it('todos voltam amanhã, com um Desfazer só que devolve cada estado como era', async () => {
+    await salvar('estadosEmail', { id: 'msg-b', feito: false, adiadaAte: '2026-11-01' });
+    const entrada = await adiarEmails(['msg-a', 'msg-b'], HOJE);
+    expect(entrada?.rotulo).toBe('2 e-mails adiados para amanhã');
+    const estados = await listar('estadosEmail');
+    expect(estados.map((e) => [e.id, e.adiadaAte]).sort()).toEqual([
+      ['msg-a', '2026-11-06'],
+      ['msg-b', '2026-11-06'],
+    ]);
+    await entrada!.reverter();
+    expect((await listar('estadosEmail')).map((e) => [e.id, e.adiadaAte])).toEqual([['msg-b', '2026-11-01']]);
+  });
+
+  it('um só no singular; nenhum, nada', async () => {
+    expect((await adiarEmails(['msg-a'], HOJE))?.rotulo).toBe('1 e-mail adiado para amanhã');
+    expect(await adiarEmails([], HOJE)).toBeUndefined();
+  });
+});
+
+describe('mudarPrazo (Fechar o dia: "Mudar prazo")', () => {
+  it('muda dia e hora do prazo; Desfazer devolve os dois', async () => {
+    const { id } = await criar('Entrega do relatório', { data: '2026-11-04', prazoHora: '17:00' });
+    const entrada = await mudarPrazo(id, '2026-11-09', '12:00');
+    expect(entrada?.rotulo).toBe('Prazo mudado: Entrega do relatório');
+    expect(await lerTarefa(id)).toMatchObject({ data: '2026-11-09', prazoHora: '12:00' });
+    await entrada!.reverter();
+    expect(await lerTarefa(id)).toMatchObject({ data: '2026-11-04', prazoHora: '17:00' });
+  });
+
+  it('só vale para tarefa com prazo, dia que existe e hora certa', async () => {
+    const comum = await criar('Ler artigo', { data: HOJE });
+    const prazo = await criar('Entrega', { data: HOJE, prazoHora: '17:00' });
+    expect(await mudarPrazo(comum.id, '2026-11-09', '12:00')).toBeUndefined();
+    expect(await mudarPrazo(prazo.id, '2026-02-30', '12:00')).toBeUndefined();
+    expect(await mudarPrazo(prazo.id, '2026-11-09', '25:00')).toBeUndefined();
+    expect(await lerTarefa(prazo.id)).toMatchObject({ data: HOJE, prazoHora: '17:00' });
   });
 });
 

@@ -16,8 +16,9 @@ export function diaFechado(config: Pick<Config, 'diaFechado'> | undefined, hoje:
  * marca do dia fechado: o fim do dia, mesmo que mude nesse meio tempo, fica.
  */
 export async function fecharDia(hoje: string): Promise<Desfazivel> {
-  const anterior = (await lerConfig()).diaFechado;
-  await salvar('config', { ...(await lerConfig()), diaFechado: hoje });
+  const atual = await lerConfig();
+  const anterior = atual.diaFechado;
+  await salvar('config', { ...atual, diaFechado: hoje });
   return desfazer.registrar('Dia fechado', async () => {
     const { diaFechado: _fechado, ...resto } = await lerConfig();
     await salvar('config', anterior === undefined ? resto : { ...resto, diaFechado: anterior });

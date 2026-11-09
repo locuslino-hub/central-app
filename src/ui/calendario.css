@@ -141,7 +141,7 @@
   border: 1px solid var(--tinta3);
   border-radius: 99px;
   color: var(--tinta2);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -251,7 +251,7 @@
   border-radius: 99px;
   background: var(--pinho);
   color: #fff;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 .cal-tarefas-semana {

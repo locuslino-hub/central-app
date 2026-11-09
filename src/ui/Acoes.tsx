@@ -17,6 +17,8 @@ export type Acoes = {
   /** `fazer` devolve o que mostrar com Desfazer, ou nada (nada mudou). */
   agir(fazer: () => Promise<Feito | null | undefined>, mensagemDeErro: string): Promise<void>;
   desfazer(): Promise<void>;
+  /** Tira o aviso (sem desfazer): a tela mudou de assunto, como ao fechar o dia. */
+  limpar(): void;
 };
 
 export function useAcoes(): Acoes {
@@ -56,6 +58,10 @@ export function useAcoes(): Acoes {
       } finally {
         ocupado.current = false;
       }
+    },
+    limpar() {
+      setFeito(null);
+      setErro(null);
     },
   };
 }

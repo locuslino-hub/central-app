@@ -36,3 +36,49 @@ export function criarDesfazer() {
 }
 
 export const desfazer = criarDesfazer();
+
+/**
+ * Uma ação em lote andou só em parte e depois falhou: o erro sobe com o
+ * Desfazer do que já andou (registrado na pilha), para nada ficar sem volta.
+ */
+export class EmParte extends Error {
+  constructor(
+    readonly entrada: Desfazivel,
+    readonly causa: unknown,
+  ) {
+    super('Só parte foi feita');
+  }
+}
+
+/**
+ * Roda `passos` em ordem; cada um devolve a sua volta (ou nada, se não mudou
+ * nada). No fim, mesmo com falha no meio, registra um Desfazer só com o que
+ * andou. `rotulo(n)`: o texto para `n` itens que andaram.
+ */
+export async function emLote(
+  passos: readonly (() => Promise<(() => Promise<void>) | undefined>)[],
+  rotulo: (n: number) => string,
+): Promise<Desfazivel | undefined> {
+  const voltas: (() => Promise<void>)[] = [];
+  let falha: { causa: unknown } | undefined;
+  let entrada: Desfazivel | undefined;
+  try {
+    for (const passo of passos) {
+      const volta = await passo();
+      if (volta) voltas.push(volta);
+    }
+  } catch (causa) {
+    falha = { causa };
+  } finally {
+    if (voltas.length > 0) {
+      entrada = desfazer.registrar(rotulo(voltas.length), async () => {
+        for (const voltar of [...voltas].reverse()) await voltar();
+      });
+    }
+  }
+  if (falha) {
+    if (entrada) throw new EmParte(entrada, falha.causa);
+    throw falha.causa;
+  }
+  return entrada;
+}

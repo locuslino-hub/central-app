@@ -53,6 +53,9 @@ export function CaixasSalas({ salas, tarefas, fila, pessoas, hoje }: Props) {
           const t = tarefasPorSala.get(sala.id) ?? 0;
           const e = emailsPorSala.get(sala.id) ?? 0;
           const partes = [...(t > 0 ? [nTarefas(t)] : []), ...(e > 0 ? [nEmails(e)] : [])];
+          // Um tipo só: o número grande já diz quantos, a legenda diz o quê. Os dois: a legenda detalha.
+          const legenda =
+            partes.length === 0 ? 'Em dia' : partes.length === 2 ? juntar(partes) : t > 0 ? (t === 1 ? 'tarefa' : 'tarefas') : e === 1 ? 'e-mail' : 'e-mails';
           return (
             <li key={sala.id}>
               <a
@@ -62,15 +65,10 @@ export function CaixasSalas({ salas, tarefas, fila, pessoas, hoje }: Props) {
                 data-vazia={String(partes.length === 0)}
               >
                 <span class="caixa-sala-nome">{sala.nome}</span>
-                {partes.length > 0 ? (
-                  partes.map((parte) => (
-                    <span key={parte} class="caixa-sala-conta">
-                      {parte}
-                    </span>
-                  ))
-                ) : (
-                  <span class="caixa-sala-conta">Em dia</span>
-                )}
+                <span class="caixa-sala-numero" aria-hidden="true">
+                  {t + e}
+                </span>
+                <span class="caixa-sala-conta">{legenda}</span>
               </a>
             </li>
           );

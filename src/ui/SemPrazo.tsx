@@ -64,12 +64,12 @@ function Acoes({ tarefa, hoje, prepararFoco }: AcoesProps) {
         <button type="button" class="botao" onClick={() => void mover(() => moverParaHoje(tarefa.id, hoje))}>
           Hoje
         </button>
-        <button type="button" class="botao" onClick={() => void mover(() => moverParaSemana(tarefa.id, hoje))}>
+        <button type="button" class="botao-texto" onClick={() => void mover(() => moverParaSemana(tarefa.id, hoje))}>
           Esta semana
         </button>
         <button
           type="button"
-          class="botao"
+          class="botao-texto"
           ref={botaoEscolher}
           aria-expanded={escolhendo}
           onClick={() => (escolhendo ? fechar() : setEscolhendo(true))}

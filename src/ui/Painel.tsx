@@ -6,18 +6,22 @@
 //   5. Por responder ao lado de A seguir.
 //   6. Sem prazo.
 //   7. Fechar o dia.
-// No celular as duplas viram uma coluna, na mesma ordem.
+// No celular as duplas viram uma coluna, na mesma ordem. Onde não há painel
+// direito (celular e tablet), o cartão do Agora vem no alto, antes de tudo.
+// A seguir começa depois do destaque do Agora (que está no painel direito ou
+// no alto): a mesma tarefa não aparece duas vezes.
 import { useMemo } from 'preact/hooks';
 import { horaDe, montarCalendario } from '../dados/calendario';
 import { minutoEmLisboa } from '../dados/dia';
 import { AgendaHoje } from './AgendaHoje';
+import { AgoraCurto } from './Agora';
 import { ASeguir, textoDoTempoLivre } from './ASeguir';
 import { AvisoDaFila } from './AvisoDaFila';
 import { AvisosDeConflito } from './AvisosDeConflito';
 import { CaixasSalas } from './CaixasSalas';
 import { Checklist } from './Checklist';
 import { FecharDia } from './FecharDia';
-import { usePessoas, useSalas } from './hooks';
+import { usePessoas, useSalas, useTela } from './hooks';
 import { LinhaDia } from './LinhaDia';
 import { juntar, nEmails, nTarefas } from './plural';
 import { PorResponder } from './PorResponder';
@@ -115,11 +119,18 @@ export function Painel() {
   const dia = useAgoraDoDia();
   const salas = useSalas();
   const pessoas = usePessoas() ?? [];
+  const tela = useTela();
   return (
     <>
       <AvisosDeConflito />
       <AvisoDaFila />
       <div class="painel-do-dia">
+        {tela !== 'computador' && (
+          <section class="painel agora-no-painel" aria-labelledby="titulo-agora-no-painel">
+            <h2 id="titulo-agora-no-painel">Agora</h2>
+            <AgoraCurto semDepois />
+          </section>
+        )}
         <MensagemDoDia dia={dia} />
         <LinhaDoDia dia={dia} />
         <CaixasSalas salas={salas} tarefas={dia.tarefas} fila={dia.fila} pessoas={pessoas} hoje={dia.hoje} />
@@ -129,7 +140,7 @@ export function Painel() {
         </div>
         <div class="hoje-grade">
           <PorResponder />
-          <ASeguir dia={dia} salas={salas} limite={6} comLink />
+          <ASeguir dia={dia} salas={salas} pular={1} limite={6} comLink />
         </div>
         <div class="hoje-grade">
           <SemPrazo />

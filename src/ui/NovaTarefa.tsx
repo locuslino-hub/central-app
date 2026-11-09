@@ -44,7 +44,8 @@ export function NovaTarefa({ rotulo, data }: Props) {
 
   return (
     <form class="nova-tarefa" noValidate onSubmit={adicionar}>
-      <label class="nova-tarefa-rotulo" for={id}>
+      {/* O rótulo fica para o leitor de tela; na tela, o mesmo texto vai dentro do campo. */}
+      <label class="nova-tarefa-rotulo so-leitor" for={id}>
         {rotulo}
       </label>
       <div class="nova-tarefa-campos">
@@ -54,6 +55,7 @@ export function NovaTarefa({ rotulo, data }: Props) {
           class="campo"
           value={texto}
           autocomplete="off"
+          placeholder={rotulo}
           enterkeyhint="done"
           aria-invalid={erro === 'Escreva a tarefa.' ? true : undefined}
           onInput={(e) => {
@@ -61,8 +63,12 @@ export function NovaTarefa({ rotulo, data }: Props) {
             setErro(null);
           }}
         />
-        <button type="submit" class="botao primario">
-          Adicionar
+        {/* Em coluna estreita só o "+" aparece (o campo precisa de espaço para o texto de dentro); o nome é sempre "Adicionar". */}
+        <button type="submit" class="botao primario nova-tarefa-botao" aria-label="Adicionar">
+          <span class="nova-tarefa-mais" aria-hidden="true">
+            +
+          </span>
+          <span class="nova-tarefa-texto">Adicionar</span>
         </button>
       </div>
       {erro && (

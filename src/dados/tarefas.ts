@@ -2,7 +2,7 @@
 // registro de novo na hora de escrever e muda só o seu campo: uma edição que
 // chegou do outro aparelho nesse meio tempo não é desfeita. Tudo passa por `salvar`.
 import { dataValida, segundaDaSemana, somarDias } from '../chat/datas';
-import { desfazer, type Desfazivel } from './desfazer';
+import { desfazer, emLote, type Desfazivel } from './desfazer';
 import { apagar, lerRegistros, salvar } from './loja';
 import type { ParaSalvar, Tarefa } from './tipos';
 
@@ -180,8 +180,10 @@ async function moverSemRegistrar(id: string, destino: Destino): Promise<{ lugar:
   if (destino.tipo === 'amanha' && !diaExiste(destino.hoje)) return undefined;
   const antes = await lerTarefa(id);
   if (!antes) return undefined;
-  // Prazo e compromisso têm hora: sem dia, perderiam o sentido.
-  if (destino.tipo === 'sem-prazo' && (antes.inicio || antes.prazoHora)) return undefined;
+  // Prazo fica com o seu dia (mudar o prazo é outra decisão: `mudarPrazo`).
+  if (antes.prazoHora) return undefined;
+  // Compromisso antigo tem hora: sem dia, perderia o sentido.
+  if (destino.tipo === 'sem-prazo' && antes.inicio) return undefined;
   const lugar: Lugar = { data: antes.data, semana: antes.semana, semanaVencida: antes.semanaVencida };
   const feita = await atualizar(id, (tarefa) => {
     const { data: _data, ...resto } = semSemana(tarefa) as Tarefa;
@@ -208,7 +210,8 @@ const rotuloDoDestino = (destino: Destino) => (destino.tipo === 'amanha' ? 'Para
 /**
  * Leva a tarefa para amanhã ou para Sem prazo (Fechar o dia) e devolve a
  * entrada do desfazer. `undefined`, sem gravar, se a tarefa sumiu, o dia não
- * existe ou ela tem hora (prazo, compromisso) e o destino é Sem prazo.
+ * existe, ela tem prazo (o prazo não anda sozinho) ou é compromisso e o
+ * destino é Sem prazo.
  */
 export async function moverTarefa(id: string, destino: Destino): Promise<Desfazivel | undefined> {
   const movida = await moverSemRegistrar(id, destino);
@@ -216,18 +219,37 @@ export async function moverTarefa(id: string, destino: Destino): Promise<Desfazi
   return desfazer.registrar(`${rotuloDoDestino(destino)}: ${movida.titulo}`, devolverLugar(id, movida.lugar));
 }
 
-/** Várias de uma vez ("Passar todas para amanhã"), com um Desfazer só. */
-export async function moverTarefas(ids: readonly string[], destino: Destino): Promise<Desfazivel | undefined> {
-  const voltas: (() => Promise<void>)[] = [];
-  for (const id of ids) {
-    const movida = await moverSemRegistrar(id, destino);
-    if (movida) voltas.push(devolverLugar(id, movida.lugar));
-  }
-  if (voltas.length === 0) return undefined;
-  const n = voltas.length;
-  const quantas = n === 1 ? '1 tarefa' : `${n} tarefas`;
-  const rotulo = destino.tipo === 'amanha' ? `${quantas} para amanhã` : `${quantas} em Sem prazo`;
-  return desfazer.registrar(rotulo, async () => {
-    for (const voltar of voltas) await voltar();
+/**
+ * Várias de uma vez ("Passar as 3 para amanhã"), com um Desfazer só. As que
+ * têm prazo ficam (ver `moverTarefa`). Se uma escrita falhar no meio, o que já
+ * andou ganha o seu Desfazer mesmo assim (o erro sobe como `EmParte`).
+ */
+export function moverTarefas(ids: readonly string[], destino: Destino): Promise<Desfazivel | undefined> {
+  return emLote(
+    ids.map((id) => async () => {
+      const movida = await moverSemRegistrar(id, destino);
+      return movida && devolverLugar(id, movida.lugar);
+    }),
+    (n) => {
+      const quantas = n === 1 ? '1 tarefa' : `${n} tarefas`;
+      return destino.tipo === 'amanha' ? `${quantas} para amanhã` : `${quantas} em Sem prazo`;
+    },
+  );
+}
+
+/**
+ * Muda o prazo (dia e hora) de uma tarefa com prazo. Desfazer devolve o dia e
+ * a hora de antes. `undefined`, sem gravar, se a tarefa sumiu, não tem prazo,
+ * o dia não existe ou a hora não é `HH:MM`.
+ */
+export async function mudarPrazo(id: string, dia: string, hora: string): Promise<Desfazivel | undefined> {
+  if (!diaExiste(dia) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return undefined;
+  const antes = await lerTarefa(id);
+  if (!antes?.prazoHora) return undefined;
+  const { data, prazoHora } = antes;
+  const feita = await atualizar(id, (tarefa) => ({ ...semSemana(tarefa), data: dia, prazoHora: hora }) as Tarefa);
+  if (!feita) return undefined;
+  return desfazer.registrar(`Prazo mudado: ${feita.titulo}`, async () => {
+    await atualizar(id, (tarefa) => ({ ...tarefa, ...(data !== undefined ? { data } : {}), prazoHora }));
   });
 }

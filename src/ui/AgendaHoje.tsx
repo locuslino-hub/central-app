@@ -1,5 +1,7 @@
 // Agenda de hoje (spec, seção 7, item 4): compromissos do Google Agenda e tarefas
-// com hora, num só lugar. Só leitura: clicar num evento mostra os detalhes.
+// com hora (prazo, compromisso antigo), num só lugar. A tarefa só com dia não
+// entra: ela já está na Checklist ao lado. Só leitura: clicar num evento mostra
+// os detalhes. No celular, depois de 3 itens, o resto fica em "Ver tudo".
 import { useMemo } from 'preact/hooks';
 import { montarCalendario } from '../dados/calendario';
 import { AvisoDaAgenda } from './AvisoDaAgenda';
@@ -7,6 +9,7 @@ import { useDetalheDoEvento } from './DetalheEvento';
 import { useAgora, useDia, useSalas, useTarefas } from './hooks';
 import { ItemDeAgenda } from './ItemDeAgenda';
 import { useEventos } from './useEventos';
+import { useVerTudo } from './VerTudo';
 import './calendario.css';
 
 export function AgendaHoje() {
@@ -21,7 +24,8 @@ export function AgendaHoje() {
     () => montarCalendario({ eventos: leitura.eventos, tarefas: tarefas ?? [], de: hoje, ate: hoje, agora }).dia(hoje),
     [leitura.eventos, tarefas, hoje, agora],
   );
-  const itens = [...dia.diaInteiro, ...dia.horarios];
+  const itens = [...dia.diaInteiro, ...dia.horarios].filter((item) => item.tipo !== 'tarefa');
+  const { mostrar, botao } = useVerTudo(itens.length);
   const lido = leitura.lidoEm !== null && tarefas !== undefined;
 
   return (
@@ -36,11 +40,12 @@ export function AgendaHoje() {
       )}
       {itens.length > 0 && (
         <ul class="cal-lista">
-          {itens.map((item) => (
+          {itens.slice(0, mostrar).map((item) => (
             <ItemDeAgenda key={item.chave} item={item} salas={salas} aoAbrir={abrir} />
           ))}
         </ul>
       )}
+      {botao}
       {detalhe}
     </section>
   );

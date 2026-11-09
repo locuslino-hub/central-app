@@ -14,7 +14,9 @@ import { FecharDia } from './FecharDia';
 import { usePessoas, useSalas } from './hooks';
 import { corDaSala } from './Menu';
 import { minuscula } from './quando';
-import { Triagem } from './Triagem';
+import { porDecidir, Triagem } from './Triagem';
+import { useCaixaDeEmails } from './useEmails';
+import { ComNumeros } from './Numeros';
 import { useAgoraDoDia, type AgoraDoDia } from './useAgoraDoDia';
 import './painel.css';
 
@@ -128,7 +130,15 @@ function Destaque({ item, dia, salas, pessoas, acoes, aoMarcar, curto = false }:
         <span class="destaque-duracao">{duracaoDoItem(item)}</span>
         <SeloDoEncaixe encaixe={dia.encaixes.get(item.chave)} />
       </div>
-      {curto ? <p class="destaque-titulo">{titulo}</p> : <h2 class="destaque-titulo">{titulo}</h2>}
+      {curto ? (
+        <p class="destaque-titulo">
+          <ComNumeros texto={titulo} />
+        </p>
+      ) : (
+        <h2 class="destaque-titulo">
+          <ComNumeros texto={titulo} />
+        </h2>
+      )}
       {!curto && email?.trecho && item.tipo === 'email' && <p class="destaque-trecho">{email.trecho}</p>}
       <p class="destaque-porque">{`Por que agora: ${minuscula(porQue(item, hoje))}`}</p>
       <div class="destaque-acoes" role="group" aria-label={`Ações: ${titulo}`}>
@@ -152,8 +162,12 @@ function FilaVazia({ fechado }: { fechado: boolean }) {
 
 // ---- No painel direito ----
 
-/** O cartão do painel direito: tempo livre, destaque, os dois seguintes e o caminho para a página. */
-export function AgoraCurto() {
+/**
+ * O cartão do painel direito: tempo livre, destaque, os dois seguintes e o
+ * caminho para a página. `semDepois`: no alto do Painel (celular e tablet), os
+ * seguintes já estão em A seguir, mais abaixo.
+ */
+export function AgoraCurto({ semDepois = false }: { semDepois?: boolean }) {
   const dia = useAgoraDoDia();
   const salas = useSalas();
   const pessoas = usePessoas() ?? [];
@@ -172,7 +186,7 @@ export function AgoraCurto() {
       {dia.fila !== undefined && !primeiro && (
         <p class="agora-vazio-curto">{dia.fechado ? 'Dia fechado. Nada na fila.' : 'Nada na fila agora.'}</p>
       )}
-      {resto.length > 0 && (
+      {!semDepois && resto.length > 0 && (
         <>
           <p class="agora-depois-titulo" id="agora-depois">
             Depois
@@ -191,7 +205,7 @@ export function AgoraCurto() {
         </>
       )}
       <p class="agora-abrir">
-        <a class="botao-link" href="#/agora">
+        <a class="botao-texto" href="#/agora">
           Abrir o Agora
         </a>
       </p>
@@ -232,10 +246,12 @@ export function AgoraPagina() {
   const salas = useSalas();
   const [aba, setAba] = useState<Aba>('agora');
   const botoes = useRef<Partial<Record<Aba, HTMLButtonElement | null>>>({});
-  const porDecidir = (dia.fila ?? []).filter((item) => item.tipo === 'email').length;
+  // Uma fonte só para a contagem da aba e para a lista da Triagem.
+  const caixa = useCaixaDeEmails();
+  const quantos = porDecidir(caixa.itens).length;
   const nome: Record<Aba, string> = {
     agora: 'Agora',
-    triagem: porDecidir > 0 ? `Triagem (${porDecidir})` : 'Triagem',
+    triagem: quantos > 0 ? `Triagem (${quantos})` : 'Triagem',
     fechar: 'Fechar o dia',
   };
 
@@ -281,7 +297,7 @@ export function AgoraPagina() {
       </div>
       <div role="tabpanel" id={`painel-aba-${aba}`} aria-labelledby={`aba-${aba}`} class="aba-painel">
         {aba === 'agora' && <ConteudoDoAgora dia={dia} salas={salas} />}
-        {aba === 'triagem' && <Triagem />}
+        {aba === 'triagem' && <Triagem caixa={caixa} />}
         {aba === 'fechar' && <FecharDia dia={dia} salas={salas} />}
       </div>
     </div>

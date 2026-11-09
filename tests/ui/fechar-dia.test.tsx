@@ -95,12 +95,59 @@ describe('Fechar o dia: o que ficou', () => {
     await vi.waitFor(async () => expect((await tarefaPor('Rever capítulo 3')).feito).toBe(false));
   });
 
-  it('prazo vencido não vai para Sem prazo (tem hora)', async () => {
+  it('prazo não anda sozinho: Mudar prazo (dia e hora) ou Feita', async () => {
     await criar('Entrega do relatório', { data: '2026-11-04', prazoHora: '17:00' });
     await scriptDeTeste();
     mostrar();
     const grupo = within(await (await listaDeTarefas()).findByRole('group', { name: 'O que fazer com: Entrega do relatório' }));
-    expect(grupo.getAllByRole('button').map((b) => b.textContent)).toEqual(['Amanhã', 'Feita']);
+    expect(grupo.getAllByRole('button').map((b) => b.textContent)).toEqual(['Mudar prazo', 'Feita']);
+
+    fireEvent.click(grupo.getByRole('button', { name: 'Mudar prazo' }));
+    const dia = fechar().getByLabelText('Dia') as HTMLInputElement;
+    await waitFor(() => expect(document.activeElement).toBe(dia));
+    expect(dia.value).toBe('2026-11-05'); // o prazo já passou: começa em hoje
+    expect((fechar().getByLabelText('Hora') as HTMLInputElement).value).toBe('17:00');
+    fireEvent.input(dia, { target: { value: '2026-11-09' } });
+    fireEvent.click(fechar().getByRole('button', { name: 'Salvar prazo' }));
+    await vi.waitFor(async () => expect(await tarefaPor('Entrega do relatório')).toMatchObject({ data: '2026-11-09', prazoHora: '17:00' }));
+    expect(await fechar().findByText('Prazo mudado: Entrega do relatório')).toBeTruthy();
+    fireEvent.click(fechar().getByRole('button', { name: 'Desfazer' }));
+    await vi.waitFor(async () => expect((await tarefaPor('Entrega do relatório')).data).toBe('2026-11-04'));
+  });
+
+  it('o lote de tarefas deixa as de prazo de fora', async () => {
+    await criar('Entrega do relatório', { data: '2026-11-04', prazoHora: '17:00' });
+    await criar('Rever capítulo 3', { data: '2026-11-05' });
+    await criar('Ler artigo', { data: '2026-11-05' });
+    await scriptDeTeste();
+    mostrar();
+    fireEvent.click(await fechar().findByRole('button', { name: 'Passar as 2 para amanhã' }));
+    await vi.waitFor(async () => expect((await tarefaPor('Ler artigo')).data).toBe('2026-11-06'));
+    expect((await tarefaPor('Entrega do relatório')).data).toBe('2026-11-04');
+  });
+
+  it('e-mails: Adiar os N de uma vez, com um Desfazer só', async () => {
+    await scriptDeTeste({ emails: [email('Revisão do capítulo 2', { id: 'msg-a' }), email('Dúvida sobre a prova', { id: 'msg-b' })] });
+    mostrar();
+    fireEvent.click(await fechar().findByRole('button', { name: 'Adiar os 2 e-mails' }));
+    expect(await fechar().findByText('2 e-mails adiados para amanhã')).toBeTruthy();
+    expect(await fechar().findByText('Nenhum e-mail esperando resposta.')).toBeTruthy();
+    await vi.waitFor(async () => expect(await listar('estadosEmail')).toHaveLength(2));
+    fireEvent.click(fechar().getByRole('button', { name: 'Desfazer' }));
+    await vi.waitFor(async () => expect(await listar('estadosEmail')).toEqual([]));
+  });
+
+  it('no celular, depois de 3, o resto fica em "Ver tudo (N)"', async () => {
+    for (const t of ['A', 'B', 'C', 'D', 'E']) await criar(`Tarefa ${t}`, { data: '2026-11-05' });
+    await scriptDeTeste();
+    mostrar(390);
+    const lista = await listaDeTarefas();
+    await waitFor(() => expect(lista.getAllByRole('listitem')).toHaveLength(3));
+    const ver = fechar().getByRole('button', { name: 'Ver tudo (5)' });
+    expect(ver.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(ver);
+    expect(lista.getAllByRole('listitem')).toHaveLength(5);
+    expect(fechar().getByRole('button', { name: 'Mostrar menos' }).getAttribute('aria-expanded')).toBe('true');
   });
 
   it('Passar todas para amanhã, com um Desfazer só', async () => {
@@ -144,6 +191,9 @@ describe('Fechar o dia: o passo final', () => {
     await diaComSobras();
     mostrar();
     expect(await fechar().findByText('O que ficar em aberto volta amanhã sozinho.')).toBeTruthy();
+    // Uma ação antes de fechar: o aviso dela some ao fechar e não volta ao reabrir.
+    fireEvent.click(within(await (await listaDeEmails()).findByRole('group', { name: 'O que fazer com: Revisão do capítulo 2' })).getByRole('button', { name: 'Agora não' }));
+    expect(await fechar().findByText('E-mail adiado para amanhã')).toBeTruthy();
     fireEvent.click(fechar().getByRole('button', { name: 'Fechar o dia' }));
     expect(await fechar().findByText('Dia fechado.')).toBeTruthy();
     expect(fechar().getByText('Você concluiu 1 tarefa hoje. 2 tarefas voltam amanhã.')).toBeTruthy();
@@ -156,6 +206,8 @@ describe('Fechar o dia: o passo final', () => {
     fireEvent.click(desfazer);
     expect(await fechar().findByRole('button', { name: 'Fechar o dia' })).toBeTruthy();
     await vi.waitFor(async () => expect((await lerConfig()).diaFechado).toBeUndefined());
+    expect(fechar().queryByText('E-mail adiado para amanhã')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(fechar().getByRole('button', { name: 'Fechar o dia' })));
   });
 
   it('o dia fechado continua fechado ao abrir o app de novo, com Reabrir o dia', async () => {

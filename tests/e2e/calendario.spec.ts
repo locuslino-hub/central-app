@@ -372,7 +372,11 @@ test.describe('celular, 390 px', () => {
 
   test('o Painel do dia mostra a Agenda de hoje, e a página não rola de lado', async ({ page }) => {
     await abrir(page, '#/');
-    await expect(page.getByRole('region', { name: 'Agenda de hoje' }).getByRole('button', { name: /Reunião de orientação/ })).toBeVisible();
+    const agenda = page.getByRole('region', { name: 'Agenda de hoje' });
+    // No celular, depois de 3 itens o resto fica em "Ver tudo (N)" (Tarefa 16, rodada 1).
+    await expect(agenda.getByRole('listitem')).toHaveCount(3);
+    await agenda.getByRole('button', { name: /^Ver tudo \(\d+\)$/ }).click();
+    await expect(agenda.getByRole('button', { name: /Reunião de orientação/ })).toBeVisible();
     expect(await semRolagemDeLado(page)).toBe(true);
     expect(await pequenos(page)).toEqual([]);
     await capturar(page, 'painel-390');

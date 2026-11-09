@@ -8,10 +8,12 @@ import { linkSeguro } from '../dados/emails';
 import type { Encaixe, ItemFila } from '../dados/fila';
 import type { Sala } from '../dados/tipos';
 import { corDaSala } from './Menu';
+import { ComNumeros } from './Numeros';
 import { nItens } from './plural';
 import { quandoChegou } from './PorResponder';
 import { formatarDuracao, minuscula, nomeDoDia, quandoDaTarefa } from './quando';
 import type { AgoraDoDia } from './useAgoraDoDia';
+import { useVerTudo } from './VerTudo';
 import './painel.css';
 
 // ---- Textos ----
@@ -100,7 +102,9 @@ export function TempoLivre({ dia }: { dia: AgoraDoDia }) {
   const texto = textoDoTempoLivre(dia);
   return (
     <div class="tempo-livre" aria-live="polite">
-      <p class="tempo-livre-ate">{texto.principal}</p>
+      <p class="tempo-livre-ate">
+        <ComNumeros texto={texto.principal} />
+      </p>
       {texto.detalhe && <p class="tempo-livre-quanto">{texto.detalhe}</p>}
     </div>
   );
@@ -126,12 +130,16 @@ export function ResponderDoItem({ item, dia, classe = 'botao fila-responder' }: 
   );
 }
 
-/** "Cabe agora" ou "Depois", em palavras (não só na cor). Sem tempo livre conhecido, nada. */
+/**
+ * "Cabe agora", em palavras (não só na cor), no que cabe no tempo livre. O que
+ * não cabe fica sem selo: a ordem da fila já diz que vem depois. Sem tempo
+ * livre conhecido, nada.
+ */
 export function SeloDoEncaixe({ encaixe }: { encaixe: Encaixe | undefined }) {
-  if (!encaixe) return null;
+  if (!encaixe?.cabe) return null;
   return (
-    <span class="fila-cabe" data-cabe={String(encaixe.cabe)}>
-      {encaixe.cabe ? 'Cabe agora' : 'Depois'}
+    <span class="fila-cabe" data-cabe="true">
+      Cabe agora
     </span>
   );
 }
@@ -162,7 +170,7 @@ type Props = {
   salas: readonly Sala[];
   /** Itens que já aparecem antes (o destaque do Agora): ficam de fora da lista, mas contam no tempo. */
   pular?: number;
-  /** Quantos mostrar; o resto fica no Agora. Sem limite, todos. */
+  /** Quantos mostrar no computador; o resto fica no Agora. Sem limite, todos. No celular, 3 e "Ver tudo". */
   limite?: number;
   /** No Agora o tempo livre já está no alto da página. */
   semTempoLivre?: boolean;
@@ -173,7 +181,9 @@ type Props = {
 export function ASeguir({ dia, salas, pular = 0, limite, semTempoLivre = false, comLink = false }: Props) {
   const fila = dia.fila ?? [];
   const resto = fila.slice(pular);
-  const mostrados = limite === undefined ? resto : resto.slice(0, limite);
+  const limitados = limite === undefined ? resto : resto.slice(0, limite);
+  const { mostrar, botao } = useVerTudo(limitados.length);
+  const mostrados = limitados.slice(0, mostrar);
   return (
     <section class="painel a-seguir" aria-labelledby="titulo-a-seguir" aria-busy={dia.fila === undefined}>
       <h2 id="titulo-a-seguir">
@@ -194,10 +204,11 @@ export function ASeguir({ dia, salas, pular = 0, limite, semTempoLivre = false, 
           ))}
         </ul>
       )}
+      {botao}
       {comLink && (
         <p class="fila-rodape">
-          <a class="botao-link" href="#/agora">
-            {resto.length > mostrados.length ? `Ver os ${resto.length} no Agora` : 'Abrir o Agora'}
+          <a class="botao-texto" href="#/agora">
+            {resto.length > limitados.length ? `Ver os ${resto.length} no Agora` : 'Abrir o Agora'}
           </a>
         </p>
       )}

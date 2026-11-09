@@ -89,7 +89,7 @@ describe('Agenda de hoje', () => {
     expect(cartao().getByText('Congresso noturno').closest('li')!.textContent).toContain('Continuação do dia anterior, até 02:00');
   });
 
-  it('as tarefas entram junto: o prazo é um marcador, a tarefa com hora é um bloco, a só com dia fica na linha de tarefas', async () => {
+  it('só o que tem hora entra: o prazo é um marcador, a tarefa com hora é um bloco; a só com dia fica na Checklist', async () => {
     const agenda = await agendaDeTeste();
     agenda.responder([aula()]);
     await criar('Entregar relatório', { data: '2026-11-05', prazoHora: '17:00' });
@@ -109,23 +109,22 @@ describe('Agenda de hoje', () => {
     expect(bloco.getAttribute('data-tipo')).toBe('bloco');
     expect(bloco.textContent).toContain('15:30 às 16:30');
 
-    const soDia = cartao().getByText('Ligar para a Renata').closest('li') as HTMLElement;
-    expect(soDia.getAttribute('data-tipo')).toBe('tarefa');
-    expect(soDia.textContent).toContain('Tarefa');
+    // Tarefa só com dia já está na Checklist ao lado: aqui não se repete (Tarefa 16, rodada 1).
+    expect(cartao().queryByText('Ligar para a Renata')).toBeNull();
 
     expect(cartao().queryByText('Tarefa de amanhã')).toBeNull();
     expect(cartao().queryByText('Sem dia')).toBeNull();
 
-    // Ordem: dia inteiro e tarefas, depois por hora (aula 09:00, reunião 15:30, prazo 17:00).
+    // Ordem: pela hora (aula 09:00, reunião 15:30, prazo 17:00).
     const ordem = cartao().getAllByRole('listitem').map((i) => i.querySelector('.cal-titulo')?.textContent);
-    expect(ordem).toEqual(['Ligar para a Renata', 'Aula de Modelagem', 'Reunião com a Marina', 'Entregar relatório']);
+    expect(ordem).toEqual(['Aula de Modelagem', 'Reunião com a Marina', 'Entregar relatório']);
   });
 
-  it('tarefa feita leva "feita"; prazo que já passou leva "passado"', async () => {
+  it('tarefa com hora feita leva "feita"; prazo que já passou leva "passado"', async () => {
     const agenda = await agendaDeTeste();
     agenda.responder([]);
     await criar('Enviar o resumo', { data: '2026-11-05', prazoHora: '09:00' });
-    await criar('Reservar a sala', { data: '2026-11-05', feito: true });
+    await criar('Reservar a sala', { data: '2026-11-05', inicio: '16:00', feito: true });
     render(<AgendaHoje />);
     const prazo = (await cartao().findByText('Enviar o resumo')).closest('li') as HTMLElement;
     expect(prazo.getAttribute('data-passado')).toBe('true');
@@ -397,7 +396,7 @@ describe('Agenda de hoje', () => {
     it('tarefa não abre detalhes: é só uma linha', async () => {
       const agenda = await agendaDeTeste();
       agenda.responder([]);
-      await criar('Ligar para a Renata', { data: '2026-11-05' });
+      await criar('Ligar para a Renata', { data: '2026-11-05', prazoHora: '18:00' });
       render(<AgendaHoje />);
       await cartao().findByText('Ligar para a Renata');
       expect(cartao().queryByRole('button', { name: /Ligar para a Renata/ })).toBeNull();

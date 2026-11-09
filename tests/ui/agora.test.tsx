@@ -13,6 +13,10 @@ import { criar } from '../apoio/tarefas';
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
 configure({ asyncUtilTimeout: 5000 });
 
+/** O texto inteiro de um elemento, mesmo com os números num <span class="num"> à parte. */
+const inteiro = (t: string) => (_: string, el: Element | null) =>
+  el?.textContent === t && !Array.from(el.children).some((filho) => filho.textContent === t);
+
 beforeEach(async () => {
   localStorage.clear();
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -56,7 +60,7 @@ describe('#/agora', () => {
     mostrar('#/agora', 1280);
     expect(principal().getByRole('heading', { level: 1, name: 'Agora' })).toBeTruthy();
     expect(principal().queryByText('Esta tela chega numa próxima versão.')).toBeNull();
-    expect(await principal().findByText('Livre até 14:00, quando começa Reunião de orientação.')).toBeTruthy();
+    expect(await principal().findByText(inteiro('Livre até 14:00, quando começa Reunião de orientação.'))).toBeTruthy();
     expect(principal().getByText('Você tem 1 h 40.')).toBeTruthy();
 
     // O destaque é o primeiro da fila.
@@ -71,7 +75,9 @@ describe('#/agora', () => {
     const linhas = seguir.getAllByRole('listitem');
     expect(linhas.map((li) => li.querySelector('.fila-titulo')?.textContent)).toEqual(['Rever capítulo 3', 'Revisão do capítulo 2', 'Dúvida sobre a prova']);
     expect(linhas[0].textContent).toContain('cerca de 1 h');
-    expect(within(linhas[0]).getByText('Depois')).toBeTruthy();
+    // Não cabe: sem selo (a ordem já diz que vem depois).
+    expect(within(linhas[0]).queryByText('Cabe agora')).toBeNull();
+    expect(within(linhas[0]).queryByText('Depois')).toBeNull();
   });
 
   it('o painel direito não repete o Agora quando a página já é ele', async () => {
@@ -139,8 +145,8 @@ describe('#/agora', () => {
     await criar('Rever capítulo 3', { data: '2026-11-05' });
     await scriptDeTeste({ eventos: [evento('Aula de métodos', { inicio: '2026-11-05T12:00:00+00:00', fim: '2026-11-05T13:00:00+00:00' })] });
     mostrar('#/agora', 1280);
-    expect(await principal().findByText('Agora: Aula de métodos, até 13:00.')).toBeTruthy();
-    expect(await noDestaque((d) => d.getByText('Depois'))).toBeTruthy();
+    expect(await principal().findByText(inteiro('Agora: Aula de métodos, até 13:00.'))).toBeTruthy();
+    expect(await noDestaque((d) => d.getByRole('heading', { name: 'Rever capítulo 3' }))).toBeTruthy();
     expect(destaque().queryByText('Cabe agora')).toBeNull();
   });
 

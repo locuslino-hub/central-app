@@ -251,14 +251,14 @@ export function CartaoDeEmail({ item, salas, hoje, caixa, aoResponder }: CartaoP
           </a>
         )}
         {!tarefa && (
-          <button type="button" class="botao" aria-label={`Virar tarefa: ${assunto}`} onClick={() => void caixa.virarTarefa(item)}>
+          <button type="button" class="botao-texto" aria-label={`Virar tarefa: ${assunto}`} onClick={() => void caixa.virarTarefa(item)}>
             Virar tarefa
           </button>
         )}
-        <button type="button" class="botao" aria-label={`Agora não: ${assunto}`} onClick={() => void caixa.adiar(email)}>
+        <button type="button" class="botao-texto" aria-label={`Agora não: ${assunto}`} onClick={() => void caixa.adiar(email)}>
           Agora não
         </button>
-        <button type="button" class="botao" aria-label={`Feito: ${assunto}`} onClick={() => void caixa.feito(email)}>
+        <button type="button" class="botao-texto" aria-label={`Feito: ${assunto}`} onClick={() => void caixa.feito(email)}>
           Feito
         </button>
       </div>

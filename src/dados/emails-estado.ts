@@ -8,7 +8,7 @@
 // Nada aqui chama o script: Feito e Agora não só mudam a Central. O Gmail
 // nunca é alterado.
 import { somarDias } from '../chat/datas';
-import { desfazer, type Desfazivel } from './desfazer';
+import { desfazer, emLote, type Desfazivel } from './desfazer';
 import { apagar, lerRegistros, listar, salvar } from './loja';
 import { criarTarefa } from './tarefas';
 import type { Email } from './emails';
@@ -51,6 +51,22 @@ export function concluirEmail(id: string): Promise<Desfazivel> {
 /** Agora não: o e-mail volta amanhã (`hoje` é o dia de Lisboa, `AAAA-MM-DD`). */
 export function adiarEmail(id: string, hoje: string): Promise<Desfazivel> {
   return gravar(id, { feito: false, adiadaAte: somarDias(hoje, 1) }, 'E-mail adiado para amanhã');
+}
+
+/**
+ * "Adiar os 3 e-mails" (Fechar o dia): todos voltam amanhã, com um Desfazer
+ * só. Falha no meio: o que já foi adiado ganha o Desfazer mesmo assim (`EmParte`).
+ */
+export function adiarEmails(ids: readonly string[], hoje: string): Promise<Desfazivel | undefined> {
+  const amanha = somarDias(hoje, 1);
+  return emLote(
+    ids.map((id) => async () => {
+      const antes = await estadoDe(id);
+      await salvar('estadosEmail', { id, feito: false, adiadaAte: amanha });
+      return devolver(id, antes);
+    }),
+    (n) => (n === 1 ? '1 e-mail adiado para amanhã' : `${n} e-mails adiados para amanhã`),
+  );
 }
 
 /** Apaga os estados com mais de 15 dias. Devolve quantos. */
