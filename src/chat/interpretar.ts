@@ -84,7 +84,7 @@ function duracaoDita(item: Item): number | null {
 /**
  * A Tarefa que o item vira: só campos da Tarefa, nenhum vazio. Até a Tarefa
  * 10–12 levar compromissos ao Google Agenda, eles também são Tarefa: com a
- * data e a duração de `inicio` a `fim` (a hora de início não tem campo ainda).
+ * data, a hora de início (`inicio`, R28) e a duração de `inicio` a `fim`.
  */
 export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
   const dita = duracaoDita(item);
@@ -102,17 +102,31 @@ export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
   if (item.data) tarefa.data = item.data;
   else if (item.semana) tarefa.semana = item.semana;
   if (item.tipo === 'tarefa' && item.data && item.prazoHora) tarefa.prazoHora = item.prazoHora;
+  // R28: o compromisso guarda a hora de início até a Tarefa 10 levá-lo ao Google Agenda.
+  if (item.tipo === 'compromisso' && item.data && item.inicio) tarefa.inicio = item.inicio;
   return tarefa;
 }
 
 /**
  * Guarda o item (pela loja: sincroniza) e registra o desfazer na pilha do app.
  * O `desfazer` devolvido desfaz este item, mesmo que outro tenha vindo depois.
+ * Se apagar falhar, chamar de novo tenta de novo; depois de dar certo, nada faz.
  */
 export async function criarItem(item: Item): Promise<{ tarefa: Tarefa; desfazer: () => Promise<void> }> {
   const tarefa = await salvar('tarefas', paraTarefa(item));
-  const entrada = desfazer.registrar(`Item do chat: ${tarefa.titulo}`, async () => {
+  let apagada = false;
+  const apagarEsta = async () => {
+    if (apagada) return;
     await apagar('tarefas', tarefa.id);
-  });
-  return { tarefa, desfazer: () => entrada.reverter() };
+    apagada = true;
+  };
+  // A pilha tira a entrada antes de rodar: a nova tentativa vem de `apagarEsta`.
+  const entrada = desfazer.registrar(`Item do chat: ${tarefa.titulo}`, apagarEsta);
+  return {
+    tarefa,
+    desfazer: async () => {
+      await entrada.reverter();
+      await apagarEsta();
+    },
+  };
 }

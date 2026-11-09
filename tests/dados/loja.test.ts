@@ -330,6 +330,22 @@ describe('desfazer', () => {
     expect(pilha.ultimo()?.rotulo).toBe('primeiro');
   });
 
+  it('registrar devolve a própria entrada: desfaz aquela, mesmo fora do topo, uma vez só', async () => {
+    const pilha = criarDesfazer();
+    const reverter = vi.fn();
+    const entrada = pilha.registrar('primeiro', reverter);
+    pilha.registrar('segundo', () => {});
+
+    expect(entrada.rotulo).toBe('primeiro');
+    await entrada.reverter();
+    await entrada.reverter();
+
+    expect(reverter).toHaveBeenCalledTimes(1);
+    expect(pilha.ultimo()?.rotulo).toBe('segundo');
+    await pilha.ultimo()!.reverter();
+    expect(pilha.ultimo()).toBeUndefined();
+  });
+
   it('pilhas criadas à parte não se misturam', () => {
     const a = criarDesfazer();
     a.registrar('de a', () => {});

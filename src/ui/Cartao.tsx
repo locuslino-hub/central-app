@@ -9,6 +9,8 @@ import {
   desfazerCartao,
   escolherSala,
   fecharTroca,
+  naoEPessoa,
+  type Acao,
   type EstadoCartao,
 } from '../chat/conversa';
 import { diaDaSemana, segundaDaSemana, somarDias } from '../chat/datas';
@@ -84,29 +86,36 @@ function motivo(cartao: EstadoCartao, sala: string | undefined): string | null {
   }
 }
 
-type Foco = 'salas' | 'trocar' | 'cartao' | null;
+type Alvo = 'salas' | 'trocar' | 'cartao';
+type Foco = { alvo: Alvo; depoisDe: Acao } | null;
 
 export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: Sala[]; hoje: string }) {
   const { id, item, situacao } = cartao;
   const raiz = useRef<HTMLElement>(null);
   const grupoDeSalas = useRef<HTMLDivElement>(null);
   const botaoTrocar = useRef<HTMLButtonElement>(null);
-  // O botão apertado some depois do clique: o foco vai para o que aparece no lugar.
+  // O botão apertado some depois do clique: quando a ação pedida termina
+  // (`passos` cresce e `ultimaAcao` é ela), o foco vai para o que apareceu no
+  // lugar, e o pedido acaba. Outra ação que termina antes (o guardar
+  // automático) não leva o pedido. Toda ação conclui, então nenhum pedido fica.
   const focarDepois = useRef<Foco>(null);
+  const pedirFoco = (alvo: Alvo, depoisDe: Acao) => {
+    focarDepois.current = { alvo, depoisDe };
+  };
 
   useEffect(() => {
-    const alvo = focarDepois.current;
-    if (!alvo) return;
+    const pedido = focarDepois.current;
+    if (!pedido || pedido.depoisDe !== cartao.ultimaAcao) return;
+    focarDepois.current = null;
+    const { alvo } = pedido;
     const elemento =
       alvo === 'salas'
-        ? grupoDeSalas.current?.querySelector('button')
+        ? (grupoDeSalas.current?.querySelector('button') ?? raiz.current)
         : alvo === 'trocar'
           ? (botaoTrocar.current ?? raiz.current)
           : raiz.current;
-    if (!elemento) return;
-    focarDepois.current = null;
-    elemento.focus();
-  });
+    elemento?.focus();
+  }, [cartao.passos]);
 
   if (situacao === 'desfeito' || situacao === 'descartado') {
     return (
@@ -125,7 +134,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
   const porque = motivo(cartao, nomeDaSala);
 
   const escolher = (salaId: string) => {
-    focarDepois.current = 'trocar';
+    pedirFoco('trocar', 'escolher');
     void escolherSala(id, salaId);
   };
 
@@ -145,6 +154,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       {situacao === 'confirmar' && <p class="chat-pergunta">Confira antes de guardar.</p>}
       {situacao === 'erro' && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
+      {cartao.aviso && <p class="chat-pergunta">{cartao.aviso}</p>}
       {mostrarSalas && (
         <div class="chat-salas" role="group" aria-label={pergunta ?? 'Escolher sala'} ref={grupoDeSalas}>
           {salas.map((sala) => (
@@ -166,7 +176,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
             type="button"
             class="botao primario"
             onClick={() => {
-              focarDepois.current = 'cartao';
+              pedirFoco('cartao', 'guardar');
               void confirmar(id);
             }}
           >
@@ -179,11 +189,23 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
             class="botao"
             ref={botaoTrocar}
             onClick={() => {
-              focarDepois.current = 'salas';
+              pedirFoco('salas', 'trocar');
               abrirTroca(id);
             }}
           >
             Trocar sala
+          </button>
+        )}
+        {pergunta && (
+          <button
+            type="button"
+            class="botao"
+            onClick={() => {
+              pedirFoco('salas', 'nao-e-pessoa');
+              naoEPessoa(id);
+            }}
+          >
+            Não é pessoa
           </button>
         )}
         {cartao.trocando && item.salaId !== null && (
@@ -191,7 +213,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
             type="button"
             class="botao"
             onClick={() => {
-              focarDepois.current = 'trocar';
+              pedirFoco('trocar', 'manter');
               fecharTroca(id);
             }}
           >
@@ -203,7 +225,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
             type="button"
             class="botao"
             onClick={() => {
-              focarDepois.current = 'cartao';
+              pedirFoco('cartao', 'desfazer');
               void desfazerCartao(id);
             }}
           >
@@ -215,8 +237,8 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
             type="button"
             class="botao"
             onClick={() => {
-              focarDepois.current = 'cartao';
-              descartar(id);
+              pedirFoco('cartao', 'descartar');
+              void descartar(id);
             }}
           >
             Descartar

@@ -18,6 +18,8 @@ export type Pessoa = Base & { nome: string; salaId: string; papel?: string; emai
 /**
  * `data`: `AAAA-MM-DD`. `semana`: a segunda-feira da semana, `AAAA-MM-DD`.
  * Sem `data` e sem `semana` = Sem prazo. `prazoHora` só existe em tarefa com prazo.
+ * `inicio` (`HH:MM`, R28): hora de início de compromisso criado pelo chat, até a
+ * Tarefa 10 levar compromissos ao Google Agenda.
  */
 export type Tarefa = Base & {
   titulo: string;
@@ -26,6 +28,7 @@ export type Tarefa = Base & {
   data?: string;
   semana?: string;
   prazoHora?: string;
+  inicio?: string;
   duracaoMin: number;
   duracaoConfirmada: boolean;
   feito: boolean;

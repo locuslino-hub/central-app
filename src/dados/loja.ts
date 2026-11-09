@@ -54,20 +54,30 @@ const SALAS_INICIAIS: [id: string, nome: string][] = [
 
 /**
  * Palavras que a memória do chat já conhece (Tarefa 8): `termo` como o dono
- * escreveria, ligado a uma sala. Ids fixos pelo mesmo motivo das salas.
+ * escreveria, ligado a uma sala, no singular e no plural (a memória compara
+ * palavra inteira). Ids fixos pelo mesmo motivo das salas.
  */
 export const PALAVRAS_INICIAIS: readonly [id: string, termo: string, salaId: string][] = [
   ['palavra-banheiro', 'banheiro', 'sala-casa'],
+  ['palavra-banheiros', 'banheiros', 'sala-casa'],
   ['palavra-cozinha', 'cozinha', 'sala-casa'],
+  ['palavra-cozinhas', 'cozinhas', 'sala-casa'],
   ['palavra-lampada', 'lâmpada', 'sala-casa'],
+  ['palavra-lampadas', 'lâmpadas', 'sala-casa'],
   ['palavra-chuveiro', 'chuveiro', 'sala-casa'],
+  ['palavra-chuveiros', 'chuveiros', 'sala-casa'],
   ['palavra-torneira', 'torneira', 'sala-casa'],
+  ['palavra-torneiras', 'torneiras', 'sala-casa'],
   ['palavra-projeto', 'projeto', 'sala-investigacao'],
+  ['palavra-projetos', 'projetos', 'sala-investigacao'],
   ['palavra-tese', 'tese', 'sala-doutoramento'],
+  ['palavra-teses', 'teses', 'sala-doutoramento'],
   ['palavra-aula', 'aula', 'sala-aulas'],
   ['palavra-aulas', 'aulas', 'sala-aulas'],
   ['palavra-orientacao', 'orientação', 'sala-orientacoes'],
+  ['palavra-orientacoes', 'orientações', 'sala-orientacoes'],
   ['palavra-aluna', 'aluna', 'sala-orientacoes'],
+  ['palavra-alunas', 'alunas', 'sala-orientacoes'],
   ['palavra-mba', 'MBA', 'sala-mba'],
 ];
 

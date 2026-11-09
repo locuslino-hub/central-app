@@ -83,6 +83,14 @@ test.describe('celular, 390 px', () => {
     await expect(page.getByText(/Em que sala fica/)).toHaveCount(0);
   });
 
+  test('a região da conversa existe para o leitor de tela antes da primeira mensagem', async ({ page }) => {
+    await page.goto('/central-app/#/chat');
+    const regiao = page.getByRole('main').getByRole('log', { name: 'Conversa' });
+    await expect(regiao).toBeAttached();
+    expect(await regiao.evaluate((el) => getComputedStyle(el).display)).not.toBe('none');
+    expect(await regiao.evaluate((el) => getComputedStyle(el).visibility)).toBe('visible');
+  });
+
   test('não há botão de microfone', async ({ page }) => {
     await page.goto('/central-app/#/chat');
     const formulario = page.getByRole('main').locator('form');

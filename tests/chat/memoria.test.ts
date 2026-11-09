@@ -8,6 +8,7 @@ import {
   PALAVRAS_INICIAIS,
   apagar,
   assinar,
+  gravarDoServidor,
   listar,
   listarPendentes,
   salvar,
@@ -36,6 +37,16 @@ describe('palavras iniciais', () => {
     expect(await salaDe('cozinha')).toBe('sala-casa');
     expect(await salaDe('lâmpada')).toBe('sala-casa');
     expect(await salaDe('projeto')).toBe('sala-investigacao');
+  });
+
+  it('traz os plurais: lâmpadas, banheiros, projetos, aulas…', async () => {
+    expect(await salaDe('lâmpadas')).toBe('sala-casa');
+    expect(await salaDe('banheiros')).toBe('sala-casa');
+    expect(await salaDe('cozinhas')).toBe('sala-casa');
+    expect(await salaDe('projetos')).toBe('sala-investigacao');
+    expect(await salaDe('teses')).toBe('sala-doutoramento');
+    expect(await salaDe('alunas')).toBe('sala-orientacoes');
+    expect((await carregarMemoria()).acharSala('Trocar as lampadas da sala')).toBe('sala-casa');
   });
 
   it('traz também as óbvias: aula e aulas, orientação e aluna, MBA', async () => {
@@ -107,7 +118,7 @@ describe('memória: acharSala', () => {
     expect((await carregarMemoria()).acharSala(frase)).toBe(sala);
   });
 
-  it.each(['Ligar o projetor', 'Reprojeto de vida', 'Banheiros públicos', 'Nada a ver'])(
+  it.each(['Ligar o projetor', 'Reprojeto de vida', 'Um banheirão', 'Nada a ver'])(
     'só palavra inteira conta: %j não acha sala',
     async (frase) => {
       expect((await carregarMemoria()).acharSala(frase)).toBeNull();
@@ -216,6 +227,35 @@ describe('aprender', () => {
     expect(memoria.acharSala('Arrumar a garagem')).toBe('sala-casa');
     await memoria.aprender('lâmpada', 'sala-pessoal');
     expect(memoria.acharSala('Trocar a lâmpada')).toBe('sala-pessoal');
+  });
+});
+
+describe('gravações ao mesmo tempo', () => {
+  it('duas lembrarPessoa simultâneas do mesmo nome criam uma pessoa só', async () => {
+    const [a, b] = await Promise.all([
+      lembrarPessoa('Renata', 'sala-orientacoes'),
+      lembrarPessoa('renata', 'sala-aulas'),
+    ]);
+    expect(await listar('pessoas')).toHaveLength(1);
+    expect(a.id).toBe(b.id);
+    expect((await listar('pessoas'))[0].salaId).toBe('sala-aulas');
+  });
+
+  it('dois aprender simultâneos do mesmo termo novo criam uma palavra só', async () => {
+    const antes = (await listar('palavras')).length;
+    await Promise.all([aprender('garagem', 'sala-casa'), aprender('Garagem', 'sala-pessoal')]);
+    const garagens = (await listar('palavras')).filter((p) => p.termo.toLowerCase() === 'garagem');
+    expect(garagens).toHaveLength(1);
+    expect(await listar('palavras')).toHaveLength(antes + 1);
+  });
+
+  it('uma gravação que falha não trava as seguintes', async () => {
+    const real = globalThis.indexedDB;
+    globalThis.indexedDB = { open() { throw new Error('disco cheio'); } } as unknown as IDBFactory;
+    await expect(lembrarPessoa('Renata', 'sala-aulas')).rejects.toThrow();
+    globalThis.indexedDB = real;
+    await lembrarPessoa('Renata', 'sala-aulas');
+    expect(await listar('pessoas')).toHaveLength(1);
   });
 });
 
@@ -420,13 +460,35 @@ describe('criarItem', () => {
       tipo: 'compromisso', titulo: 'Reunião sobre o projeto', salaId: 'sala-investigacao',
       data: '2026-11-06', inicio: '11:00', fim: '12:00', marcar: false,
     });
-    expect(uma).toMatchObject({ data: '2026-11-06', duracaoMin: 60, duracaoConfirmada: true });
+    expect(uma).toMatchObject({ data: '2026-11-06', inicio: '11:00', duracaoMin: 60, duracaoConfirmada: true });
     expect('prazoHora' in uma).toBe(false);
 
     const { tarefa: outra } = await criarItem({
       tipo: 'compromisso', titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '14:00', fim: '15:30', marcar: false,
     });
     expect(outra.duracaoMin).toBe(90);
+  });
+
+  it('tarefa não leva inicio, mesmo que o item traga', async () => {
+    const { tarefa: salva } = await criarItem(tarefa({ data: '2026-11-06', inicio: '10:00' }));
+    expect('inicio' in salva).toBe(false);
+  });
+
+  it('a hora de início do compromisso vai e volta pela sincronia; hora malformada é recusada', async () => {
+    const { tarefa: salva } = await criarItem({
+      tipo: 'compromisso', titulo: 'Banca', salaId: null, data: '2026-11-06', inicio: '14:00', fim: '15:30', marcar: false,
+    });
+    const doServidor = { ...salva, id: 'vinda', aparelho: 'celular', atualizadoEm: Date.now() };
+
+    await gravarDoServidor([
+      { colecao: 'tarefas', registro: doServidor },
+      { colecao: 'tarefas', registro: { ...doServidor, id: 'torta', inicio: '25:00' } },
+      { colecao: 'tarefas', registro: { ...doServidor, id: 'numero', inicio: 14 } },
+    ]);
+
+    const guardadas = await listar('tarefas');
+    expect(guardadas.find((t) => t.id === 'vinda')).toMatchObject({ inicio: '14:00', duracaoMin: 90 });
+    expect(guardadas.map((t) => t.id).sort()).toEqual([salva.id, 'vinda'].sort());
   });
 
   it('prazoHora só vai em tarefa com dia: nunca em compromisso nem em tarefa sem prazo', async () => {
@@ -474,9 +536,21 @@ describe('criarItem', () => {
     const segundo = await criarItem(tarefa({ titulo: 'Segundo' }));
 
     await segundo.desfazer();
+    expect(await listar('tarefas')).toEqual([primeiro.tarefa]);
     expect(desfazer.ultimo()?.rotulo).toBe('Item do chat: Primeiro');
     await desfazer.ultimo()!.reverter();
     expect(await listar('tarefas')).toEqual([]);
-    void primeiro;
+  });
+
+  it('desfazer que falhou pode ser tentado de novo', async () => {
+    const { desfazer: desfazerEste } = await criarItem(tarefa({ titulo: 'Comprar pão' }));
+    const real = globalThis.indexedDB;
+    globalThis.indexedDB = { open() { throw new Error('disco cheio'); } } as unknown as IDBFactory;
+    await expect(desfazerEste()).rejects.toThrow();
+    globalThis.indexedDB = real;
+    expect(await listar('tarefas')).toHaveLength(1);
+
+    await desfazerEste();
+    expect(await listar('tarefas')).toEqual([]);
   });
 });

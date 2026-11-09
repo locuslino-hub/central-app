@@ -5,7 +5,17 @@
 // (`salvar`), então sincroniza com o outro aparelho.
 //
 // Comparação sem acento e sem maiúscula, sempre por palavra inteira:
-// "lampada" acha "lâmpada", mas "projetor" não acha "projeto".
+// "lampada" acha "lâmpada", mas "projetor" não acha "projeto" (por isso as
+// palavras iniciais trazem o plural à parte). Nome em minúscula ("para
+// renata") não é tratado como pessoa desconhecida: só nome com maiúscula.
+//
+// Quem decide a sala, nesta ordem (regras.ts aplica): 1) sala dita na frase
+// ("nas tarefas do doutoramento", "MBA"); 2) palavra guardada na memória
+// ("banheiro" é Casa); 3) sala da pessoa cadastrada citada. Por isso Trocar
+// sala aprende na palavra quando foi ela que decidiu, e na pessoa quando foi ela.
+//
+// Gravações da memória passam uma de cada vez (`emOrdem`): duas respostas ao
+// mesmo tempo não criam a mesma pessoa ou palavra duas vezes neste aparelho.
 
 import { listar, salvar } from '../dados/loja';
 import type { Palavra, Pessoa, Sala } from '../dados/tipos';
@@ -128,6 +138,15 @@ function montar(pessoas: Pessoa[], palavras: Palavra[], salas: Sala[]): MemoriaD
   return memoria;
 }
 
+let fila: Promise<unknown> = Promise.resolve();
+
+/** Roda depois da gravação anterior; uma que falha não trava as seguintes. */
+function emOrdem<T>(gravar: () => Promise<T>): Promise<T> {
+  const vez = fila.then(gravar);
+  fila = vez.catch(() => {});
+  return vez;
+}
+
 /** Lê pessoas, palavras e salas da loja. Ler de novo a cada frase pega o que veio do outro aparelho. */
 export async function carregarMemoria(): Promise<MemoriaDoChat> {
   const [pessoas, palavras, salas] = await Promise.all([listar('pessoas'), listar('palavras'), listar('salas')]);
@@ -140,7 +159,11 @@ export async function carregarMemoria(): Promise<MemoriaDoChat> {
  * para acento e maiúscula), muda a sala no mesmo registro. Senão, cria a palavra.
  * Devolve o que gravou, ou `undefined` se não havia o que gravar.
  */
-export async function aprender(termo: string, salaId: string): Promise<Palavra | Pessoa | undefined> {
+export function aprender(termo: string, salaId: string): Promise<Palavra | Pessoa | undefined> {
+  return emOrdem(() => aprenderAgora(termo, salaId));
+}
+
+async function aprenderAgora(termo: string, salaId: string): Promise<Palavra | Pessoa | undefined> {
   const limpo = termo.normalize('NFC').trim().replace(/\s+/g, ' ');
   if (!limpo || !salaId) return undefined;
   const chave = comparavel(limpo);
@@ -157,7 +180,11 @@ export async function aprender(termo: string, salaId: string): Promise<Palavra |
  * Guarda a pessoa que o chat não conhecia, só com nome e sala (o cadastro
  * completo é da Tarefa 9). Mesmo nome já cadastrado: só muda a sala.
  */
-export async function lembrarPessoa(nome: string, salaId: string): Promise<Pessoa> {
+export function lembrarPessoa(nome: string, salaId: string): Promise<Pessoa> {
+  return emOrdem(() => lembrarPessoaAgora(nome, salaId));
+}
+
+async function lembrarPessoaAgora(nome: string, salaId: string): Promise<Pessoa> {
   const limpo = nome.normalize('NFC').trim().replace(/\s+/g, ' ');
   const existente = (await listar('pessoas')).find((p) => comparavel(p.nome) === comparavel(limpo));
   if (existente) return existente.salaId === salaId ? existente : salvar('pessoas', { ...existente, salaId });

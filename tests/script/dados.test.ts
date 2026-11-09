@@ -333,6 +333,9 @@ describe('ações pelo tratar', () => {
     ['documento com url javascript', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'javascript:alert(1)', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
     ['documento com url sem esquema', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'exemplo.invalid/x', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
     ['config sem fimDoDia', { colecao: 'config', registro: { id: 'geral', atualizadoEm: T0, aparelho: 'a' } }],
+    ['inicio 25:00', item({ ...tarefa('t', 'a', T0), data: '2026-11-06', inicio: '25:00' })],
+    ['inicio sem dois pontos', item({ ...tarefa('t', 'a', T0), data: '2026-11-06', inicio: '1100' })],
+    ['inicio número', { colecao: 'tarefas', registro: { ...tarefa('t', 'a', T0), inicio: 11 } }],
   ])('item inválido (%s) vai para recusadas e nada é gravado', (_nome, mudanca) => {
     const armazem = armazemNaMemoria();
     const resposta = pedir(armazem, 'enviar', { mudancas: [mudanca] }) as {
@@ -356,6 +359,7 @@ describe('ações pelo tratar', () => {
     ['documento http', { colecao: 'documentos', registro: { id: 'd', titulo: 'Plano', url: 'HTTP://exemplo.invalid/plano', arquivado: false, atualizadoEm: T0, aparelho: 'a' } }],
     ['sala semeada', { colecao: 'salas', registro: { id: 'sala-mba', nome: 'MBA', ordem: 4, atualizadoEm: 0, aparelho: 'semente' } }],
     ['config', { colecao: 'config', registro: { id: 'geral', fimDoDia: '21:00', atualizadoEm: T0, aparelho: 'a' } }],
+    ['compromisso com inicio', item({ ...tarefa('t', 'a', T0), data: '2026-11-06', inicio: '11:00', duracaoMin: 60 })],
     ['rascunho sem sala', { colecao: 'rascunhos', registro: { id: 'r', texto: '', atualizadoEm: T0, aparelho: 'a' } }],
     ['id de UUID', item(tarefa('0b6f6a8e-3c1d-4c55-9a51-2f7c1d2e3f40', 'a', T0, '9d1c2b3a-0000-4000-8000-000000000000'))],
   ])('item válido (%s) é aceito', (_nome, mudanca) => {

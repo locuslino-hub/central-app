@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
-import { limparConversa } from '../../src/chat/conversa';
+import { assinarConversa, lerConversa, limparConversa } from '../../src/chat/conversa';
 import type { ItemDoChat } from '../../src/chat/interpretar';
 import { listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
 import { descreverQuando } from '../../src/ui/Cartao';
@@ -233,6 +233,283 @@ describe('cartão do chat', () => {
     fireEvent.click(within(cartao).getByRole('button', { name: 'Guardar' }));
 
     expect((await esperarTarefas(1))[0].salaId).toBe('sala-mba');
+  });
+});
+
+/** Faz o IndexedDB falhar até chamar a função devolvida. */
+function quebrarBanco() {
+  const real = globalThis.indexedDB;
+  globalThis.indexedDB = { open() { throw new Error('disco cheio'); } } as unknown as IDBFactory;
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  return () => {
+    globalThis.indexedDB = real;
+  };
+}
+
+const esperar = (ms = 40) => new Promise((pronto) => setTimeout(pronto, ms));
+
+describe('pessoa e aprendizado (rodada 1)', () => {
+  it('"Viagem para Lisboa": Não é pessoa tira a pergunta e a sala escolhida não cria pessoa', async () => {
+    render(<Chat />);
+    // Sem verbo: certeza baixa, o cartão espera o Guardar.
+    dizer('Viagem para Lisboa');
+    const cartao = await ultimoCartao();
+    expect(within(cartao).getByText('Em que sala fica Lisboa?')).toBeTruthy();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Não é pessoa' }));
+
+    expect(within(cartao).queryByText('Em que sala fica Lisboa?')).toBeNull();
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Doutoramento'));
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Pessoal' }));
+    await within(cartao).findByText('Sala escolhida por você.');
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Guardar' }));
+
+    expect((await esperarTarefas(1))[0].salaId).toBe('sala-pessoal');
+    expect(await listar('pessoas')).toEqual([]);
+  });
+
+  it('item já guardado: Não é pessoa e depois a sala não cria pessoa e muda a tarefa', async () => {
+    render(<Chat />);
+    dizer('Comprar passagem para Lisboa');
+    const cartao = await ultimoCartao();
+    expect(within(cartao).getByText('Em que sala fica Lisboa?')).toBeTruthy();
+    await esperarTarefas(1);
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Não é pessoa' }));
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Pessoal' }));
+
+    await within(cartao).findByText('Sala escolhida por você.');
+    await waitFor(async () => expect((await tarefas())[0].salaId).toBe('sala-pessoal'));
+    expect(await listar('pessoas')).toEqual([]);
+  });
+
+  it('certeza baixa: a pessoa nova só é guardada ao Guardar', async () => {
+    render(<Chat />);
+    dizer('mensagem para Renata às 15h');
+    const cartao = await ultimoCartao();
+    expect(within(cartao).getByText('Confira antes de guardar.')).toBeTruthy();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Orientações' }));
+    await within(cartao).findByText('Vou lembrar: Renata fica em Orientações.');
+    await esperar();
+    expect(await listar('pessoas')).toEqual([]);
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Guardar' }));
+
+    const [salva] = await esperarTarefas(1);
+    const pessoas = await listar('pessoas');
+    expect(pessoas).toEqual([expect.objectContaining({ nome: 'Renata', salaId: 'sala-orientacoes' })]);
+    expect(salva).toMatchObject({ salaId: 'sala-orientacoes', pessoaId: pessoas[0].id });
+  });
+
+  it('certeza baixa: Descartar depois de responder a pergunta não guarda a pessoa', async () => {
+    render(<Chat />);
+    dizer('mensagem para Renata às 15h');
+    const cartao = await ultimoCartao();
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Orientações' }));
+    await within(cartao).findByText('Vou lembrar: Renata fica em Orientações.');
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Descartar' }));
+
+    await within(cartao).findByText('Descartado. Nada ficou guardado.');
+    await esperar();
+    expect(await listar('pessoas')).toEqual([]);
+    expect(await tarefas()).toEqual([]);
+  });
+
+  it('certeza baixa: Trocar sala só aprende a palavra ao Guardar, e Descartar não aprende', async () => {
+    const salaDaLampada = async () => (await listar('palavras')).find((p) => p.id === 'palavra-lampada')?.salaId;
+    render(<Chat />);
+    dizer('Trocar a lâmpada às 15h');
+    const primeiro = await ultimoCartao();
+    expect(within(primeiro).getByText('Confira antes de guardar.')).toBeTruthy();
+    fireEvent.click(within(primeiro).getByRole('button', { name: 'Trocar sala' }));
+    fireEvent.click(within(primeiro).getByRole('button', { name: 'Pessoal' }));
+    await within(primeiro).findByText('Vou lembrar: "lâmpada" fica em Pessoal.');
+    await esperar();
+    expect(await salaDaLampada()).toBe('sala-casa');
+
+    fireEvent.click(within(primeiro).getByRole('button', { name: 'Descartar' }));
+    await within(primeiro).findByText('Descartado. Nada ficou guardado.');
+    expect(await salaDaLampada()).toBe('sala-casa');
+
+    dizer('Trocar a lâmpada às 16h');
+    const segundo = await ultimoCartao(2);
+    fireEvent.click(within(segundo).getByRole('button', { name: 'Trocar sala' }));
+    fireEvent.click(within(segundo).getByRole('button', { name: 'Pessoal' }));
+    await within(segundo).findByText('Vou lembrar: "lâmpada" fica em Pessoal.');
+    fireEvent.click(within(segundo).getByRole('button', { name: 'Guardar' }));
+
+    expect((await esperarTarefas(1))[0].salaId).toBe('sala-pessoal');
+    expect(await salaDaLampada()).toBe('sala-pessoal');
+  });
+
+  it('Trocar sala enquanto o item ainda está sendo guardado vale para a tarefa guardada', async () => {
+    render(<Chat />);
+    dizer('Trocar a lâmpada da garagem');
+    const cartao = await screen.findByRole('article');
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Trocar sala' }));
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Pessoal' }));
+
+    await within(cartao).findByText('Vou lembrar: "lâmpada" fica em Pessoal.');
+    await waitFor(async () => expect(await tarefas()).toEqual([expect.objectContaining({ salaId: 'sala-pessoal' })]));
+  });
+
+  it('responder a pergunta enquanto o item ainda está sendo guardado liga a pessoa à tarefa', async () => {
+    render(<Chat />);
+    dizer('Adicione em atividades do dia mandar mensagem para Renata');
+    const cartao = await screen.findByRole('article');
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Orientações' }));
+
+    await within(cartao).findByText('Vou lembrar: Renata fica em Orientações.');
+    await waitFor(async () => {
+      const [renata] = await listar('pessoas');
+      expect(renata).toBeTruthy();
+      expect(await tarefas()).toEqual([expect.objectContaining({ salaId: 'sala-orientacoes', pessoaId: renata.id })]);
+    });
+  });
+
+  it('Trocar sala e Desfazer logo em seguida: a tarefa não volta', async () => {
+    render(<Chat />);
+    dizer('Trocar a lâmpada da garagem');
+    const cartao = await ultimoCartao();
+    await esperarTarefas(1);
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Trocar sala' }));
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Pessoal' }));
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Desfazer' }));
+
+    await within(cartao).findByText('Desfeito. Nada ficou guardado.');
+    await esperar(80);
+    expect(await tarefas()).toEqual([]);
+  });
+});
+
+describe('erros, foco e campo (rodada 1)', () => {
+  it('erro ao guardar: o cartão avisa e Guardar tenta de novo', async () => {
+    render(<Chat />);
+    dizer('asdf qwer');
+    const cartao = await ultimoCartao();
+    const consertar = quebrarBanco();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Guardar' }));
+    await within(cartao).findByText('Não consegui guardar. Tente de novo.');
+    consertar();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Guardar' }));
+    await within(cartao).findByRole('button', { name: 'Desfazer' });
+    expect(await esperarTarefas(1)).toHaveLength(1);
+  });
+
+  it('erro ao desfazer: o item continua guardado, com aviso, e Desfazer tenta de novo', async () => {
+    render(<Chat />);
+    dizer('Preciso parafusar o apoio do banheiro');
+    const cartao = await ultimoCartao();
+    await esperarTarefas(1);
+    const consertar = quebrarBanco();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Desfazer' }));
+    await within(cartao).findByText('Não consegui desfazer. Tente de novo.');
+    consertar();
+    expect(await tarefas()).toHaveLength(1);
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Desfazer' }));
+    await within(cartao).findByText('Desfeito. Nada ficou guardado.');
+    expect(await tarefas()).toEqual([]);
+  });
+
+  it('o cartão só diz Desfeito depois de apagar: com erro, nunca passa por desfeito', async () => {
+    render(<Chat />);
+    dizer('Preciso parafusar o apoio do banheiro');
+    const cartao = await ultimoCartao();
+    await esperarTarefas(1);
+    const vistas: string[] = [];
+    const parar = assinarConversa(() => {
+      for (const m of lerConversa()) if (m.de === 'central') for (const c of m.cartoes) vistas.push(c.situacao);
+    });
+    const consertar = quebrarBanco();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Desfazer' }));
+    await within(cartao).findByText('Não consegui desfazer. Tente de novo.');
+    consertar();
+    parar();
+
+    expect(vistas).toContain('desfazendo');
+    expect(vistas).not.toContain('desfeito');
+  });
+
+  it.each([
+    ['Guardar', 'Descartar'],
+    ['Descartar', 'Guardar'],
+  ])('%s e logo %s: só a primeira vale, e o foco fica no cartão', async (primeiro, segundo) => {
+    render(<Chat />);
+    dizer('asdf qwer');
+    const cartao = await ultimoCartao();
+
+    fireEvent.click(within(cartao).getByRole('button', { name: primeiro }));
+    fireEvent.click(within(cartao).getByRole('button', { name: segundo }));
+
+    if (primeiro === 'Guardar') await within(cartao).findByRole('button', { name: 'Desfazer' });
+    else await within(cartao).findByText('Descartado. Nada ficou guardado.');
+    await waitFor(() => expect(document.activeElement).toBe(cartao));
+    expect(await tarefas()).toHaveLength(primeiro === 'Guardar' ? 1 : 0);
+  });
+
+  it('Manter a sala fecha a escolha sem mudar nada e devolve o foco a Trocar sala', async () => {
+    render(<Chat />);
+    dizer('Trocar a lâmpada da garagem');
+    const cartao = await ultimoCartao();
+    await esperarTarefas(1);
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Trocar sala' }));
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Manter a sala' }));
+
+    expect(within(cartao).queryByRole('button', { name: 'Pessoal' })).toBeNull();
+    expect(within(cartao).getByText('Casa')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Trocar sala'));
+    await esperar();
+    expect((await tarefas())[0].salaId).toBe('sala-casa');
+  });
+
+  it.each([
+    ['Guardar', 'asdf qwer', 'Desfazer'],
+    ['Descartar', 'asdf qwer', 'Descartado. Nada ficou guardado.'],
+    ['Desfazer', 'Preciso parafusar o apoio do banheiro', 'Desfeito. Nada ficou guardado.'],
+  ])('depois de %s, o foco fica no cartão', async (botao, frase, depois) => {
+    render(<Chat />);
+    dizer(frase);
+    const cartao = await ultimoCartao();
+    if (botao === 'Desfazer') await esperarTarefas(1);
+
+    fireEvent.click(within(cartao).getByRole('button', { name: botao }));
+
+    await within(cartao).findAllByText(depois);
+    await waitFor(() => expect(document.activeElement).toBe(cartao));
+  });
+
+  it('com o campo em uso, respostas e mudanças na loja não apagam o texto nem tiram o foco', async () => {
+    render(<Chat />);
+    dizer('Preciso parafusar o apoio do banheiro');
+    const entrada = campo();
+    entrada.focus();
+    fireEvent.input(entrada, { target: { value: 'Comprar' } });
+
+    const cartao = await ultimoCartao();
+    await esperarTarefas(1);
+    const casa = (await listar('salas')).find((sala) => sala.id === 'sala-casa')!;
+    await salvar('salas', { ...casa, nome: 'Lar' });
+    await within(cartao).findByText('Lar');
+
+    expect(campo().value).toBe('Comprar');
+    expect(document.activeElement).toBe(campo());
+  });
+
+  it('a região que o leitor de tela acompanha existe antes da primeira mensagem e é a mesma depois', async () => {
+    render(<Chat />);
+    const regiao = screen.getByRole('log');
+    dizer('Preciso parafusar o apoio do banheiro');
+    await ultimoCartao();
+    expect(screen.getByRole('log')).toBe(regiao);
+    expect(within(regiao).getByText('Anotei.')).toBeTruthy();
   });
 });
 

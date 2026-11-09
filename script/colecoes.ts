@@ -9,8 +9,10 @@ export const FOLGA_DO_FUTURO_MS = 10 * 60 * 1000;
 
 // Regex, e não `new URL`: o Apps Script não tem URL.
 const URL_VALIDA = /^https?:\/\/\S+$/i;
+/** `HH:MM`, de 00:00 a 23:59. */
+const HORA_VALIDA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
-type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url';
+type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?';
 
 /** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
 export const ESQUEMAS = {
@@ -23,6 +25,7 @@ export const ESQUEMAS = {
     data: 'texto?',
     semana: 'texto?',
     prazoHora: 'texto?',
+    inicio: 'hora?',
     emailId: 'texto?',
     adiadaAte: 'texto?',
   },
@@ -59,6 +62,8 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || valor === null || typeof valor === 'string';
     case 'url':
       return typeof valor === 'string' && URL_VALIDA.test(valor);
+    case 'hora?':
+      return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
   }
 }
 

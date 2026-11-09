@@ -18,9 +18,7 @@
   flex-direction: column;
   gap: 12px;
 }
-.chat-log:empty {
-  display: none;
-}
+/* Vazia, mas sempre presente: o leitor de tela já acompanha a primeira resposta. */
 
 /* Mensagem do dono, à direita. */
 .chat-dono {
