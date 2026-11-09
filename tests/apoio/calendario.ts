@@ -366,6 +366,10 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       const guardado: EventoGuardado = {
         status: 'confirmed',
         htmlLink: `https://www.google.com/calendar/event?eid=${e.id}`,
+        // A API sempre manda o organizador: na principal, o próprio dono; nas
+        // outras, a agenda (não é o dono). `organizer: undefined` explícito
+        // simula a resposta sem o campo.
+        ...('organizer' in e ? {} : { organizer: a.entrada.primary ? { self: true } : {} }),
         ...resto,
         inicio: ponto(inicio),
         fim: ponto(fim),

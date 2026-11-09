@@ -64,6 +64,14 @@ describe('eventos criados por outras pessoas continuam na Central', () => {
     expect(aula.somenteLeitura).toBe(true);
   });
 
+  it('resposta sem organizador: falha fechado, vale como somente leitura e não grava', () => {
+    const cal = agendasDoDono();
+    cal.evento(PRINCIPAL, { id: 'semorg', summary: 'Sem organizador', ...HORA, organizer: undefined });
+    expect(lista(cal)[0].somenteLeitura).toBe(true);
+    expect(marcarEventoFeito({ id: 'semorg', feito: true }, servico(cal))).toEqual({ feito: true, gravado: false });
+    expect(cal.de('Events.patch')).toEqual([]);
+  });
+
   it('aniversário e outros tipos especiais não são gravados pelo app', () => {
     const cal = agendasDoDono();
     cal.evento(PRINCIPAL, { id: 'niver', summary: 'Aniversário da Aurora', inicio: '2026-10-23', fim: '2026-10-24', eventType: 'birthday' });
@@ -90,6 +98,21 @@ describe('leitura do feito', () => {
     const cal = agendasDoDono();
     cal.evento(PRINCIPAL, { id: 'f2', summary: 'Café', ...HORA, extendedProperties: { private: { centralFeito: '1' } } });
     expect(lista(cal)[0]).toMatchObject({ titulo: 'Café', feito: true });
+  });
+
+  it('"✓" sem espaço é do dono, não marca do app: não é feito e o título fica inteiro', () => {
+    const cal = agendasDoDono();
+    cal.evento(PRINCIPAL, { id: 'f4', summary: '✓Checklist do laboratório', ...HORA });
+    const [evento] = lista(cal);
+    expect(evento.titulo).toBe('✓Checklist do laboratório');
+    expect(evento.feito).toBeUndefined();
+  });
+
+  it('centralFeito "" (desmarcado pelo app) vale mais que um "✓ " que ficou no título', () => {
+    const cal = agendasDoDono();
+    cal.evento(PRINCIPAL, { id: 'f5', summary: '✓ Café', ...HORA, extendedProperties: { private: { centralFeito: '' } } });
+    expect(lista(cal)[0]).toMatchObject({ titulo: 'Café' });
+    expect(lista(cal)[0].feito).toBeUndefined();
   });
 
   it('sem marca: não feito, e o "✓" no meio do título fica', () => {
@@ -141,6 +164,48 @@ describe('marcarEventoFeito', () => {
     marcarEventoFeito({ id: 'meu1', feito: true }, servico(cal));
     expect(guardado(cal, 'meu1').summary).toBe('✓ Orientação com Renata');
     expect(cal.de('Events.patch')).toHaveLength(1);
+  });
+
+  it('título que já começa com "✓" (do dono) não ganha outro; desmarcar não tira o dele', () => {
+    const cal = agendasDoDono();
+    meu(cal, { summary: '✓Checklist do laboratório' });
+    marcarEventoFeito({ id: 'meu1', feito: true }, servico(cal));
+    expect(guardado(cal, 'meu1').summary).toBe('✓Checklist do laboratório');
+    expect(lista(cal)[0]).toMatchObject({ titulo: '✓Checklist do laboratório', feito: true });
+    marcarEventoFeito({ id: 'meu1', feito: false }, servico(cal));
+    expect(guardado(cal, 'meu1').summary).toBe('✓Checklist do laboratório');
+    expect(lista(cal)[0].feito).toBeUndefined();
+  });
+
+  it('com convidados, o título não muda (iria para eles): só a marca privada da cópia do dono', () => {
+    const cal = agendasDoDono();
+    meu(cal, {
+      attendees: [
+        { email: 'renata.ficticia@example.com', responseStatus: 'accepted' },
+        { email: PRINCIPAL, self: true, organizer: true, responseStatus: 'accepted' },
+      ],
+    });
+    expect(marcarEventoFeito({ id: 'meu1', feito: true }, servico(cal))).toEqual({ feito: true, gravado: true });
+    const [chamada] = cal.de('Events.patch');
+    expect(Object.keys(chamada.args[0] as object)).toEqual(['extendedProperties']);
+    expect(chamada.args[3]).toEqual({ sendUpdates: 'none' });
+    expect(guardado(cal, 'meu1').summary).toBe('Orientação com Renata');
+    expect(guardado(cal, 'meu1').extendedProperties!.private!.centralFeito).toBe('1');
+    expect(cal.notificacoes).toEqual([]);
+    expect(lista(cal)[0]).toMatchObject({ titulo: 'Orientação com Renata', feito: true });
+
+    marcarEventoFeito({ id: 'meu1', feito: false }, servico(cal));
+    expect(guardado(cal, 'meu1').summary).toBe('Orientação com Renata');
+    expect(lista(cal)[0].feito).toBeUndefined();
+  });
+
+  it('lê os convidados (só o self) antes de gravar, nunca o e-mail deles', () => {
+    const cal = agendasDoDono();
+    meu(cal);
+    marcarEventoFeito({ id: 'meu1', feito: true }, servico(cal));
+    const campos = (cal.de('Events.get')[0].args[2] as { fields: string }).fields;
+    expect(campos).toContain('attendees(self)');
+    expect(campos).not.toMatch(/email/);
   });
 
   it('evento criado pela Central pode ser marcado e mantém a marca do app', () => {

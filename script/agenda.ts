@@ -45,7 +45,8 @@ const CHAVE_DA_SALA = 'centralSala';
 const CHAVE_DO_FEITO = 'centralFeito';
 /** O começo do título de um compromisso feito, no Google. */
 export const MARCA_DO_FEITO = '✓ ';
-const COMECA_COM_FEITO = /^✓\s*/;
+/** Só "✓ " com espaço é a marca gravada pelo app; "✓" colado ao texto é do dono. */
+const COMECA_COM_FEITO = /^✓ /;
 const POR_PAGINA = 2500;
 const PAGINAS_NO_MAXIMO = 20;
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -59,7 +60,7 @@ const CAMPOS_DA_MARCA = 'id,status,extendedProperties';
 const CAMPOS_DO_EVENTO =
   'id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)';
 /** O que marcarEventoFeito precisa ler antes de gravar. */
-const CAMPOS_DO_FEITO = 'id,status,eventType,summary,organizer(self),extendedProperties';
+const CAMPOS_DO_FEITO = 'id,status,eventType,summary,organizer(self),attendees(self),extendedProperties';
 
 const DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
 const HORA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -418,24 +419,34 @@ function ponto(valor: unknown): { texto: string; ms: number; dia: boolean } | nu
 
 /**
  * O dono pode gravar neste evento? Só na principal, em evento comum (não
- * aniversário etc.) e que ele mesmo organiza. Sem organizador na resposta,
- * vale como dele (a API sempre o manda; o dono é o organizador do que cria).
+ * aniversário etc.) e que ele mesmo organiza. Falha fechado: sem o
+ * organizador na resposta, não é tratado como dele.
  */
 function doDono(api: unknown, agendaId: string): boolean {
   if (agendaId !== PRINCIPAL) return false;
   const tipo = proprio(api, 'eventType');
   if (tipo !== undefined && tipo !== 'default') return false;
   const organizador = proprio(api, 'organizer');
-  return organizador === undefined || proprio(organizador, 'self') === true;
+  return proprio(organizador, 'self') === true;
 }
 
-/** Título sem a marca de feito e se ele está feito (marca no título ou propriedade privada). */
+/** Há alguém convidado além do dono? Mudar o título iria para essas pessoas. */
+function temConvidados(api: unknown): boolean {
+  const convidados = proprio(api, 'attendees');
+  return Array.isArray(convidados) && convidados.some((c) => proprio(c, 'self') !== true);
+}
+
+/**
+ * Título sem a marca de feito e se ele está feito. A propriedade privada,
+ * quando o app já a gravou ('1' ou ''), decide; sem ela, vale o "✓ " no título.
+ */
 function lerFeito(api: unknown): { titulo: string; feito: boolean } {
   const resumo = proprio(api, 'summary');
   const texto = typeof resumo === 'string' ? resumo : '';
   const marcado = COMECA_COM_FEITO.test(texto);
   const privada = proprio(proprio(proprio(api, 'extendedProperties'), 'private'), CHAVE_DO_FEITO);
-  return { titulo: marcado ? texto.replace(COMECA_COM_FEITO, '') : texto, feito: marcado || privada === '1' };
+  const feito = typeof privada === 'string' ? privada === '1' : marcado;
+  return { titulo: marcado ? texto.replace(COMECA_COM_FEITO, '') : texto, feito };
 }
 
 /** Evento da API -> Evento do app, ou null se faltar o essencial. `ordem` serve só para ordenar. */
@@ -674,7 +685,10 @@ export function trocarSalaEvento(dados: unknown, servico: ServicoDeAgenda): Even
 /**
  * `marcarEventoFeito {id, feito}` na principal: título com "✓ " no começo e
  * centralFeito '1' (ou sem os dois, ao desmarcar). Manda só o título e o mapa
- * privado inteiro (como trocarSalaEvento), sem notificar ninguém. Já no
+ * privado inteiro (como trocarSalaEvento), sem notificar ninguém. Com
+ * convidados, o título não muda (a mudança chegaria a eles): só a marca
+ * privada, que é da cópia do dono. Título que já começa com "✓" (do dono) não
+ * ganha outro, e desmarcar só tira o "✓ " do app. Já no
  * estado pedido, não grava (a fila pode repetir). Evento que não é do dono
  * (convite de outra pessoa, outra agenda, aniversário), apagado, que sumiu ou
  * que o Google não deixa gravar (403): `gravado: false`, sem erro; o app
@@ -692,14 +706,19 @@ export function marcarEventoFeito(dados: unknown, servico: ServicoDeAgenda): { f
   }
   if (proprio(atual, 'status') === 'cancelled' || !doDono(atual, PRINCIPAL)) return naoGravou;
   const resumo = proprio(atual, 'summary');
-  const semMarca = (typeof resumo === 'string' ? resumo : '').replace(COMECA_COM_FEITO, '');
-  const titulo = feito ? `${MARCA_DO_FEITO}${semMarca}` : semMarca;
+  const texto = typeof resumo === 'string' ? resumo : '';
+  const mudaTitulo = !temConvidados(atual);
+  let titulo = texto;
+  if (mudaTitulo) {
+    if (feito && !texto.startsWith('✓')) titulo = `${MARCA_DO_FEITO}${texto}`;
+    if (!feito) titulo = texto.replace(COMECA_COM_FEITO, '');
+  }
   const privadas = proprio(proprio(atual, 'extendedProperties'), 'private');
   const marca = feito ? '1' : '';
-  const jaEsta = (typeof resumo === 'string' ? resumo : '') === titulo && (proprio(privadas, CHAVE_DO_FEITO) ?? '') === marca;
+  const jaEsta = texto === titulo && proprio(privadas, CHAVE_DO_FEITO) === marca;
   if (jaEsta) return { feito, gravado: true };
   const corpo = {
-    summary: titulo,
+    ...(titulo !== texto ? { summary: titulo } : {}),
     extendedProperties: { private: { ...(objeto(privadas) ? privadas : {}), [CHAVE_DO_FEITO]: marca } },
   };
   try {
