@@ -1,10 +1,10 @@
 // Pontos de entrada do Apps Script. Cada função exportada aqui vira uma função
 // global no pacote (ver build.mjs). O resto fica em api.ts e dados.ts, sem serviços do Google.
-import { provarAgenda, type ServicoDeAgenda } from './agenda';
+import { CAMPOS_EXTRAS, diagnosticarEventos, hojeEmLisboa, provarAgenda, type CampoExtra, type ServicoDeAgenda } from './agenda';
 import { novoCodigo, resumoDoErro, tratarCorpo, type Ambiente } from './api';
 import { NOME_DO_ARQUIVO, Ocupado, type Armazem } from './dados';
 import { atualizarEmails as atualizarListaDeEmails, type GuardaDeEmails, type ServicoDeGmail } from './email';
-import { provarTarefas, type ServicoDeTarefas } from './tarefas-google';
+import { diagnosticarTarefas, provarTarefas, type GuardaDeTarefas, type ServicoDeTarefas } from './tarefas-google';
 
 const CHAVE_DO_CODIGO = 'CODIGO_DO_APARELHO';
 const CHAVE_DO_ARQUIVO = 'ID_DO_ARQUIVO_DE_DADOS';
@@ -232,6 +232,31 @@ const emailsGuardados: GuardaDeEmails = {
   },
 };
 
+/** O que o script já achou no Google Tarefas (lugar e estado das tarefas dos blocos). Sem cache, só lê mais. */
+const guardaDeTarefas: GuardaDeTarefas = {
+  get: (chave) => cacheDoScript()?.get(chave) ?? null,
+  put(chave, valor, segundos) {
+    cacheDoScript()?.put(chave, valor, segundos);
+  },
+  putAll(valores, segundos) {
+    cacheDoScript()?.putAll(valores, segundos);
+  },
+  remove(chave) {
+    cacheDoScript()?.remove(chave);
+  },
+};
+
+/**
+ * Campos novos da agenda (label, taskId) que o diagnosticoAgenda viu nesta
+ * conta. Gravados por ele; ausentes, a leitura usa só os campos de base.
+ */
+const CHAVE_DOS_EXTRAS = 'CAMPOS_EXTRAS_DA_AGENDA';
+
+function extrasDaAgenda(): CampoExtra[] {
+  const texto = propriedades().getProperty(CHAVE_DOS_EXTRAS) ?? '';
+  return CAMPOS_EXTRAS.filter((campo) => texto.split(',').indexOf(campo) >= 0);
+}
+
 const ambiente: Ambiente = {
   lerCodigo,
   armazem,
@@ -239,6 +264,8 @@ const ambiente: Ambiente = {
   gmail,
   tarefasGoogle,
   emailsGuardados,
+  guardaDeTarefas,
+  extrasDaAgenda,
 };
 
 export function doPost(evento?: GoogleAppsScript.Events.DoPost) {
@@ -411,6 +438,71 @@ export function diagnosticarDrive() {
   } catch (erro) {
     linhas.push(`Leitura pela API do Drive: falhou (${resumoDoErro(erro)})`);
   }
+  Logger.log(linhas.join('\n'));
+}
+
+function diaMais(data: string, dias: number): string {
+  const [ano, mes, dia] = data.split('-').map(Number);
+  return new Date(Date.UTC(ano, mes - 1, dia) + dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+type Contagem = ReturnType<typeof diagnosticarEventos>;
+
+function linhaDosEventos(nome: string, c: Contagem): string {
+  return (
+    `${nome}: eventos: ${c.eventos}; com description de tarefa: ${c.comDescricaoDeTarefa}; com taskId: ${c.comTaskId}; ` +
+    `com colorId: ${c.comColorId}; com label: ${c.comLabel}; marcados como disponíveis: ${c.transparentes}.`
+  );
+}
+
+/**
+ * O dono roda pelo editor para saber o que a API da Agenda devolve nesta
+ * conta (blocos do Google Tarefas e cores). Lê os eventos de hoje e dos
+ * próximos 7 dias da agenda principal com a resposta inteira da API e busca
+ * as tarefas dos blocos no Google Tarefas. Registra só contagens e nomes de
+ * campos: nunca títulos, ids, e-mails nem descrições. Se a API devolve
+ * `label` ou `taskId`, liga a leitura deles (guardado nas propriedades do
+ * script); não grava mais nada.
+ */
+export function diagnosticoAgenda() {
+  const linhas = ['Diagnóstico da Agenda (só contagens, sem títulos, ids nem descrições):'];
+  const hoje = hojeEmLisboa(Date.now());
+  const ate = diaMais(hoje, 7);
+  let ids: string[] = [];
+  const vistos = new Set<CampoExtra>(extrasDaAgenda());
+  try {
+    const doDia = diagnosticarEventos(calendario(), hoje, hoje);
+    const daSemana = diagnosticarEventos(calendario(), hoje, ate);
+    ids = daSemana.idsDasTarefas;
+    linhas.push(linhaDosEventos('Hoje', doDia));
+    linhas.push(linhaDosEventos('Hoje e próximos 7 dias', daSemana));
+    const tipos = Object.keys(daSemana.tipos)
+      .sort()
+      .map((tipo) => `${tipo} ${daSemana.tipos[tipo]}`);
+    linhas.push(`Tipos de evento: ${tipos.join(', ') || 'nenhum'}.`);
+    linhas.push(`Campos vistos: ${daSemana.campos.join(', ') || 'nenhum'}.`);
+    if (daSemana.comLabel > 0) linhas.push(`Campos da etiqueta (label): ${daSemana.camposDaEtiqueta.join(', ') || 'nenhum'}.`);
+    if (daSemana.comLabel > 0) vistos.add('label');
+    if (daSemana.comTaskId > 0) vistos.add('taskId');
+  } catch (erro) {
+    linhas.push(`Google Agenda falhou (${resumoDoErro(erro)}).`);
+  }
+  try {
+    const t = diagnosticarTarefas(ids, { de: hoje, ate }, tarefasGoogle());
+    linhas.push(
+      `Google Tarefas: listas: ${t.listas}; blocos de tarefa: ${t.blocos}; achados na leitura do período: ${t.noPeriodo}; ` +
+        `achados na busca completa: ${t.naBusca} (pelo link: ${t.peloLink}; pelo id: ${t.peloId}).`,
+    );
+  } catch (erro) {
+    linhas.push(`Google Tarefas falhou (${resumoDoErro(erro)}).`);
+  }
+  const extras = CAMPOS_EXTRAS.filter((campo) => vistos.has(campo));
+  try {
+    propriedades().setProperty(CHAVE_DOS_EXTRAS, extras.join(','));
+  } catch (erro) {
+    linhas.push(`Não consegui guardar os campos novos (${resumoDoErro(erro)}).`);
+  }
+  linhas.push(`Leitura da etiqueta (label): ${extras.indexOf('label') >= 0 ? 'ligada' : 'desligada'}; leitura do taskId: ${extras.indexOf('taskId') >= 0 ? 'ligada' : 'desligada'}.`);
   Logger.log(linhas.join('\n'));
 }
 

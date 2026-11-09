@@ -183,7 +183,8 @@ function carregar({
   semAgenda = false,
   semGmail = false,
   semTarefas = false,
-}: { semAgenda?: boolean; semGmail?: boolean; semTarefas?: boolean } = {}) {
+  camposNovos = [],
+}: { semAgenda?: boolean; semGmail?: boolean; semTarefas?: boolean; camposNovos?: ('label' | 'taskId')[] } = {}) {
   const propriedades = new Map<string, string>();
   const leituras = new Map<string, number>();
   const registros: string[] = [];
@@ -207,12 +208,15 @@ function carregar({
         cache.prazoPorChave.set(chave, segundos ?? -1);
         cache.valores.set(chave, valor);
       },
+      putAll(valores: Record<string, string>, segundos?: number) {
+        for (const [chave, valor] of Object.entries(valores)) this.put(chave, valor, segundos);
+      },
       remove: (chave: string) => void cache.valores.delete(chave),
     };
   };
   const trava = { livre: true, presa: false, esperas: [] as number[] };
   let uuids = 0;
-  const calendario = agendasDoDono();
+  const calendario = agendasDoDono({ camposNovos });
   const gmail = gmailFalso();
   const tarefasGoogle = tarefasGoogleFalso();
   const gatilhos = gatilhosFalsos();
@@ -1252,5 +1256,69 @@ describe('rodada 1 da T13: limite e limpeza do cache pelo pacote', () => {
     (globais as unknown as ComGmail).atualizarEmails();
     expect(cache.valores.has(CHAVE)).toBe(false);
     expect(cache.valores.has(CHAVE_DA_HORA)).toBe(false);
+  });
+});
+
+describe('diagnosticoAgenda (blocos do Google Tarefas e cores)', () => {
+  const PRINCIPAL = 'marina.ficticia@example.com';
+  const AVISO = 'As mudanças feitas no título não serão salvas. Para fazer edições, acesse: https://tasks.google.com/task/';
+
+  function preparado(opcoes: { camposNovos?: ('label' | 'taskId')[] } = {}) {
+    const carregado = carregar(opcoes);
+    const hoje = hojeEmLisboa();
+    const hora = { inicio: `${hoje}T12:00:00Z`, fim: `${hoje}T13:00:00Z` };
+    const { calendario, tarefasGoogle } = carregado;
+    calendario.evento(PRINCIPAL, { id: 'blocoSecreto1', summary: 'Tese da Marina', ...hora, description: `${AVISO}webSecreto1`, eventType: 'focusTime', transparency: 'transparent', label: { id: 'etqSecreta', backgroundColor: '#3f51b5' } });
+    calendario.evento(PRINCIPAL, { id: 'blocoSecreto2', summary: 'Ler a Renata', ...hora, description: `${AVISO}webSecreto2`, eventType: 'focusTime' });
+    calendario.evento(PRINCIPAL, { id: 'comumSecreto', summary: 'Café com Prof. Souza', ...hora, colorId: '9', description: 'Sala secreta' });
+    const lista = tarefasGoogle.lista('Tese');
+    tarefasGoogle.tarefa(lista, { id: 'apiSecreta1', idDaWeb: 'webSecreto1', due: `${hoje}T00:00:00.000Z` });
+    const diagnosticar = () => {
+      const antes = carregado.registros.length;
+      (carregado.globais as unknown as { diagnosticoAgenda(): void }).diagnosticoAgenda();
+      return carregado.registros.slice(antes).join('\n');
+    };
+    return { ...carregado, diagnosticar };
+  }
+
+  it('é função global no topo do arquivo, para o dono rodar pelo editor', () => {
+    expect(pacote).toMatch(/^function diagnosticoAgenda\(/m);
+  });
+
+  it('registra só contagens e nomes de campos: nada de títulos, ids, e-mails nem descrições', () => {
+    const { diagnosticar, erros } = preparado();
+    const relatorio = diagnosticar();
+    expect(relatorio).toContain('Hoje: eventos: 3; com description de tarefa: 2; com taskId: 0; com colorId: 1; com label: 0;');
+    expect(relatorio).toMatch(/Tipos de evento: .*focusTime 2/);
+    expect(relatorio).toMatch(/Campos vistos: .*description.*summary/);
+    expect(relatorio).toMatch(/Google Tarefas: listas: 1; blocos de tarefa: 2; achados na leitura do período: 1; achados na busca completa: 1 \(pelo link: 1; pelo id: 0\)/);
+    expect(relatorio).toMatch(/label\): desligada; leitura do taskId: desligada/);
+    for (const proibido of ['Secret', 'Marina', 'Renata', 'Souza', 'example.com', 'mudanças', 'tasks.google.com', 'Sala']) {
+      expect(relatorio + erros.join('\n')).not.toContain(proibido);
+    }
+  });
+
+  it('quando a API devolve label, conta e liga a leitura dela na ação eventos', () => {
+    const carregado = preparado({ camposNovos: ['label'] });
+    const relatorio = carregado.diagnosticar();
+    expect(relatorio).toMatch(/com label: 1/);
+    expect(relatorio).toMatch(/Campos da etiqueta \(label\): backgroundColor, id\./);
+    expect(relatorio).toMatch(/label\): ligada/);
+    expect(relatorio).not.toContain('etqSecreta');
+    expect(carregado.propriedades.get('CAMPOS_EXTRAS_DA_AGENDA')).toBe('label');
+
+    carregado.globais.gerarCodigo();
+    const codigo = carregado.propriedades.get('CODIGO_DO_APARELHO');
+    const hoje = hojeEmLisboa();
+    const { resposta } = carregado.postar(JSON.stringify({ codigo, acao: 'eventos', dados: { de: hoje, ate: hoje } }));
+    const eventos = (resposta as { dados: { eventos: { id: string; cor?: unknown; tarefaGoogleId?: string }[] } }).dados.eventos;
+    expect(eventos.find((e) => e.id === 'blocoSecreto1')).toMatchObject({ tarefaGoogleId: 'webSecreto1', cor: { chave: 'label:etqSecreta', hex: '#3f51b5' } });
+    expect(eventos.find((e) => e.id === 'comumSecreto')!.cor).toEqual({ chave: 'cor:9', hex: '#3f51b5' });
+  });
+
+  it('sem o Google Tarefas ligado, diz que falhou e segue', () => {
+    const carregado = carregar({ semTarefas: true });
+    (carregado.globais as unknown as { diagnosticoAgenda(): void }).diagnosticoAgenda();
+    expect(carregado.registros.join('\n')).toMatch(/Google Tarefas falhou/);
   });
 });
