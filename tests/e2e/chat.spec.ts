@@ -139,7 +139,7 @@ test.describe('computador, 1280 px', () => {
     await campo.press('Enter');
 
     const cartao = painel.getByRole('article');
-    await expect(cartao.getByText('Compromisso')).toBeVisible();
+    await expect(cartao.getByText('Compromisso', { exact: true })).toBeVisible();
     await expect(cartao.getByText('Sexta, 6/11, 11:00 às 12:00')).toBeVisible();
     await cartao.getByRole('button', { name: 'Trocar sala' }).click();
     await expect(cartao.getByRole('button', { name: 'Doutoramento' })).toBeFocused();
