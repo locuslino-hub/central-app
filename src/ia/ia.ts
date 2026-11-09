@@ -6,13 +6,16 @@
 // - `baixando`: download em curso, com progresso.
 // - `carregando`: abrindo o modelo em segundo plano. O chat já funciona.
 // - `pronta`: o chat pode perguntar.
-// - `indisponivel`: o aparelho não roda a IA, ou algo falhou. O chat segue com
-//   regras e memória.
+// - `indisponivel`: o aparelho não roda a IA, algo falhou, ou uma versão nova
+//   do app já assumiu e esta tela é a velha (`desatualizado`: o trabalhador da
+//   versão velha pode nem existir mais no servidor). O chat segue com regras e
+//   memória.
 //
 // A IA é opcional: `interpretar` nunca lança erro. Sem IA pronta, resposta
 // quebrada, falha ou desistência, devolve `null` e o chat usa as regras.
 
 import { lerResposta, montarInstrucoes, type ContextoIA, type ItemIA } from './instrucoes';
+import { novaVersaoPronta } from '../pwa';
 import type { Motivo, Pedido, Resposta } from './trabalhador';
 
 export type EstadoIA = 'ausente' | 'baixando' | 'carregando' | 'pronta' | 'indisponivel';
@@ -23,10 +26,13 @@ export type IA = {
   interpretar(frase: string, contexto: ContextoIA): Promise<ItemIA[] | null>;
 };
 
+/** Por que a IA está indisponível: os do trabalhador e `desatualizado` (versão nova do app ativa). */
+export type MotivoIA = Motivo | 'desatualizado';
+
 export type DetalhesIA = {
   estado: EstadoIA;
   /** Por que está indisponível. */
-  motivo?: Motivo;
+  motivo?: MotivoIA;
   /** Download em curso, em bytes. */
   progresso?: { baixados: number; total: number };
   /** Resposta de `navigator.storage.persist()` no último download. */
@@ -65,6 +71,8 @@ export type Ambiente = {
   suportado(): boolean;
   criarTrabalhador(): Trabalhador;
   persistir(): Promise<boolean | null>;
+  /** Uma versão nova do app já assumiu (src/pwa.ts): é preciso recarregar antes de abrir a IA. */
+  desatualizado(): boolean;
   /** Endereço completo da pasta `litertlm/` do app, com `/` no fim. */
   caminhoWasm: string;
 };
@@ -85,17 +93,20 @@ export function criarIA(ambiente: Ambiente = ambienteDoNavegador()): IALocal {
   }
 
   function quebrou(erro: unknown) {
-    console.error('A IA local parou', erro);
+    const desatualizado = ambiente.desatualizado();
+    if (!desatualizado) console.error('A IA local parou', erro);
     trabalhador?.terminate();
     trabalhador = null;
     inicio = null;
-    mudar({ estado: 'indisponivel', motivo: 'falhou' });
+    mudar({ estado: 'indisponivel', motivo: desatualizado ? 'desatualizado' : 'falhou' });
     for (const espera of [...esperas]) espera.resolver(null);
     esperas.clear();
   }
 
   function obterTrabalhador(): Trabalhador {
     if (trabalhador) return trabalhador;
+    // Com a versão nova no comando, o arquivo do trabalhador desta versão já saiu do aparelho.
+    if (ambiente.desatualizado()) throw new Error('Versão nova do app ativa: recarregue para usar a IA');
     const novo = ambiente.criarTrabalhador();
     novo.onmessage = ({ data }) => {
       if (data.tipo === 'progresso') {
@@ -172,7 +183,8 @@ export function criarIA(ambiente: Ambiente = ambienteDoNavegador()): IALocal {
     },
 
     async reabrir() {
-      if (detalhes.estado !== 'indisponivel' || detalhes.motivo === 'sem-suporte') return false;
+      const { estado, motivo } = detalhes;
+      if (estado !== 'indisponivel' || motivo === 'sem-suporte' || motivo === 'desatualizado') return false;
       const resposta = await pedir({ tipo: 'verificar' }, daEtapa('verificado', 'verificar'));
       if (resposta?.tipo !== 'verificado' || !resposta.guardado) return false;
       await carregar();
@@ -181,7 +193,8 @@ export function criarIA(ambiente: Ambiente = ambienteDoNavegador()): IALocal {
 
     async baixar() {
       const { estado, motivo } = detalhes;
-      const podeBaixar = estado === 'ausente' || (estado === 'indisponivel' && motivo !== 'sem-suporte');
+      const podeBaixar =
+        estado === 'ausente' || (estado === 'indisponivel' && motivo !== 'sem-suporte' && motivo !== 'desatualizado');
       if (!podeBaixar || !ambiente.suportado()) return;
       let persistente: boolean | null;
       try {
@@ -259,6 +272,7 @@ export function ambienteDoNavegador(): Ambiente {
         return null;
       }
     },
+    desatualizado: novaVersaoPronta,
     get caminhoWasm() {
       return new URL(`${import.meta.env.BASE_URL}litertlm/`, location.href).href;
     },

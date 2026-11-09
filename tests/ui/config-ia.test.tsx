@@ -95,6 +95,19 @@ describe('IA local em Configurações', () => {
     expect(ambiente.pedidos.some((p) => p.tipo === 'baixar')).toBe(false);
   });
 
+  it('versão nova do app: pede para atualizar, com o botão Atualizar no lugar de "Tentar de novo"', async () => {
+    const ambiente = trabalhadorFalso({ guardado: true, desatualizado: true });
+    const ia = criarIA(ambiente);
+    await ia.iniciar();
+    let recarregou = 0;
+    render(<ConfigIA ia={ia} recarregar={() => recarregou++} />);
+    expect(screen.getByText('Atualize o app para usar a IA.')).toBeTruthy();
+    expect(screen.queryByText(/A IA não abriu/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    fireEvent.click(botao('Atualizar'));
+    expect(recarregou).toBe(1);
+  });
+
   it('sem espaço: diz o que fazer e deixa tentar de novo', async () => {
     const { ambiente } = await montar({ guardado: false, falhaAoBaixar: 'sem-espaco' });
     fireEvent.click(botao('Baixar a IA'));

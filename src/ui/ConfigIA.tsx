@@ -19,12 +19,20 @@ const MOTIVOS: Record<NonNullable<DetalhesIA['motivo']>, string> = {
   'sem-espaco': `Falta espaço neste aparelho. Libere ${TAMANHO} e tente de novo.`,
   'sem-internet': 'O download parou por falta de internet. Tente de novo com Wi-Fi.',
   falhou: 'A IA não abriu neste aparelho. O chat continua com as regras e a memória.',
+  desatualizado: 'Atualize o app para usar a IA.',
   cancelado: 'Download cancelado.',
 };
 
 type Confirmando = 'baixar' | 'apagar' | null;
 
-export function ConfigIA({ ia = iaDoApp }: { ia?: IALocal }) {
+export function ConfigIA({
+  ia = iaDoApp,
+  recarregar = () => window.location.reload(),
+}: {
+  ia?: IALocal;
+  /** Abre a versão nova do app (troca nos testes). */
+  recarregar?: () => void;
+}) {
   const [detalhes, setDetalhes] = useState<DetalhesIA>(ia.detalhes());
   const [confirmando, setConfirmando] = useState<Confirmando>(null);
   const confirmar = useRef<HTMLButtonElement>(null);
@@ -126,7 +134,13 @@ export function ConfigIA({ ia = iaDoApp }: { ia?: IALocal }) {
         return (
           <>
             <p>{MOTIVOS[motivo ?? 'falhou']}</p>
+            {motivo === 'desatualizado' && (
+              <button type="button" class="botao primario" onClick={recarregar}>
+                Atualizar
+              </button>
+            )}
             {motivo !== 'sem-suporte' &&
+              motivo !== 'desatualizado' &&
               (confirmando === 'baixar' ? (
                 perguntaDeBaixar
               ) : (

@@ -65,6 +65,33 @@ describe('estado da IA', () => {
     expect(ia.detalhes().motivo).toBe('falhou');
   });
 
+  it('versão nova do app já ativa: não cria trabalhador e pede para atualizar', async () => {
+    const ambiente = trabalhadorFalso({ guardado: true, desatualizado: true });
+    const criar = vi.spyOn(ambiente, 'criarTrabalhador');
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const ia = criarIA(ambiente);
+    await ia.iniciar();
+    expect(criar).not.toHaveBeenCalled();
+    expect(ia.estado()).toBe('indisponivel');
+    expect(ia.detalhes().motivo).toBe('desatualizado');
+    expect(await ia.interpretar('Comprar pão', CONTEXTO)).toBeNull();
+    expect(erro).not.toHaveBeenCalled();
+    erro.mockRestore();
+  });
+
+  it('trabalhador que quebra depois que a versão nova assumiu pede para atualizar, não "falhou"', async () => {
+    const ambiente = trabalhadorFalso({ guardado: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const ia = criarIA(ambiente);
+    await ia.iniciar();
+    expect(ia.estado()).toBe('pronta');
+    ambiente.versaoNova = true;
+    ambiente.quebrar();
+    expect(ia.estado()).toBe('indisponivel');
+    expect(ia.detalhes().motivo).toBe('desatualizado');
+    expect(await ia.reabrir()).toBe(false);
+  });
+
   it('erro ao carregar deixa indisponível, e o chat segue sem IA', async () => {
     const ia = criarIA(trabalhadorFalso({ guardado: true, falhaAoCarregar: true }));
     await ia.iniciar();

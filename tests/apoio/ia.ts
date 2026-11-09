@@ -21,11 +21,15 @@ type Opcoes = {
   persistente?: boolean | null;
   /** Segura o download até `soltarDownload()`. */
   segurarDownload?: boolean;
+  /** Uma versão nova do app já assumiu (service worker) e esta tela é a velha. */
+  desatualizado?: boolean;
 };
 
 export type AmbienteFalso = Ambiente & {
   /** Falha ao carregar o modelo (pode mudar no meio do teste). */
   falhaAoCarregar: boolean;
+  /** Versão nova do app já ativa (pode mudar no meio do teste). */
+  versaoNova: boolean;
   pedidos: Pedido[];
   perguntas: { id: number; sistema: string; frase: string }[];
   persistiu: number;
@@ -45,6 +49,8 @@ export function trabalhadorFalso(opcoes: Opcoes = {}): AmbienteFalso {
 
   const ambiente: AmbienteFalso = {
     falhaAoCarregar: opcoes.falhaAoCarregar ?? false,
+    versaoNova: opcoes.desatualizado ?? false,
+    desatualizado: () => ambiente.versaoNova,
     pedidos: [],
     perguntas: [],
     persistiu: 0,
