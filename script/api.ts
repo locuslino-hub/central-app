@@ -1,6 +1,6 @@
 // Lógica pura do script: nada aqui toca serviços do Google. Tudo o que vem de
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
-import { criarEvento, listarEventos, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
+import { criarEvento, listarEventos, marcarEventoFeito, removerEvento, trocarSalaEvento, type ServicoDeAgenda } from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 import { listarEmails, pedirAtualizacao, type GuardaDeEmails, type ServicoDeGmail } from './email';
 
@@ -48,6 +48,7 @@ const acoes = new Map<unknown, Acao>([
   ['criarEvento', (dados, ambiente) => criarEvento(dados, calendario(ambiente))],
   ['removerEvento', (dados, ambiente) => removerEvento(dados, calendario(ambiente))],
   ['trocarSalaEvento', (dados, ambiente) => trocarSalaEvento(dados, calendario(ambiente))],
+  ['marcarEventoFeito', (dados, ambiente) => marcarEventoFeito(dados, calendario(ambiente))],
   // E-mail só se lê: não há ação que mude o Gmail. Nenhuma das duas usa `dados`.
   ['emails', (_dados, ambiente) => listarEmails(() => gmail(ambiente), emailsGuardados(ambiente))],
   // Com limite de 60 s (email.ts): toques repetidos devolvem a lista guardada.

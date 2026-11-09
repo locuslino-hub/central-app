@@ -8,6 +8,10 @@
 // - nunca envia, convida nem notifica: evento criado não tem convidados e
 //   toda gravação leva sendUpdates 'none';
 // - a sala fica em extendedProperties.private.centralSala;
+// - o "feito" fica no título ("✓ " no começo) e em centralFeito '1'; só se
+//   grava em evento da principal organizado pelo próprio dono. Convites de
+//   outras pessoas e eventos de outras agendas são lidos como sempre, com
+//   `somenteLeitura` (o app guarda o feito deles só na Central);
 // - desfazer só apaga evento da principal com a marca privada do app
 //   (centralCriado '1'), nunca outro evento do dono;
 // - o pedido é conferido antes de qualquer chamada ao Google;
@@ -38,18 +42,24 @@ export const TITULO_NO_MAXIMO = 200;
 const PRINCIPAL = 'primary';
 const MARCA_DO_APP = 'centralCriado';
 const CHAVE_DA_SALA = 'centralSala';
+const CHAVE_DO_FEITO = 'centralFeito';
+/** O começo do título de um compromisso feito, no Google. */
+export const MARCA_DO_FEITO = '✓ ';
+const COMECA_COM_FEITO = /^✓\s*/;
 const POR_PAGINA = 2500;
 const PAGINAS_NO_MAXIMO = 20;
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /** Só os campos usados: sem descrição, local nem e-mail de convidados. */
 const CAMPOS_DOS_EVENTOS =
-  'items(id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),extendedProperties(private)),nextPageToken';
+  'items(id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)),nextPageToken';
 const CAMPOS_DA_LISTA = 'items(id,primary,selected,hidden,deleted),nextPageToken';
 const CAMPOS_DA_MARCA = 'id,status,extendedProperties';
 /** Um evento inteiro, com os mesmos campos da lista (para o criarEvento repetido). */
 const CAMPOS_DO_EVENTO =
-  'id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),extendedProperties(private)';
+  'id,status,eventType,summary,start,end,transparency,htmlLink,attendees(self,responseStatus),organizer(self),extendedProperties(private)';
+/** O que marcarEventoFeito precisa ler antes de gravar. */
+const CAMPOS_DO_FEITO = 'id,status,eventType,summary,organizer(self),extendedProperties';
 
 const DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
 const HORA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -84,6 +94,13 @@ export type Evento = {
   salaId: string | null;
   /** Abrir no Google Agenda (só https do Google). */
   link: string | null;
+  /** Feito ("✓ " no título ou centralFeito '1'). Só vem quando é true. */
+  feito?: boolean;
+  /**
+   * O app não grava neste evento: é de outra agenda, é convite de outra pessoa
+   * ou é de um tipo especial (aniversário...). Só vem quando é true.
+   */
+  somenteLeitura?: boolean;
 };
 
 export type NovoEvento = {
@@ -115,6 +132,7 @@ export interface EventoDaApi {
   transparency?: string;
   htmlLink?: string;
   attendees?: { self?: boolean; responseStatus?: string }[];
+  organizer?: { self?: boolean };
   extendedProperties?: { private?: Record<string, string>; shared?: Record<string, string> };
 }
 
@@ -295,6 +313,13 @@ export function lerId(dados: unknown): string {
   return id;
 }
 
+export function lerMarcaDeFeito(dados: unknown): { id: string; feito: boolean } {
+  const id = lerId(dados);
+  const feito = (dados as Record<string, unknown>).feito;
+  exigir(typeof feito === 'boolean');
+  return { id, feito };
+}
+
 export function lerTrocaDeSala(dados: unknown): { id: string; salaId: string | null } {
   const id = lerId(dados);
   const salaId = (dados as Record<string, unknown>).salaId;
@@ -391,6 +416,28 @@ function ponto(valor: unknown): { texto: string; ms: number; dia: boolean } | nu
   }
 }
 
+/**
+ * O dono pode gravar neste evento? Só na principal, em evento comum (não
+ * aniversário etc.) e que ele mesmo organiza. Sem organizador na resposta,
+ * vale como dele (a API sempre o manda; o dono é o organizador do que cria).
+ */
+function doDono(api: unknown, agendaId: string): boolean {
+  if (agendaId !== PRINCIPAL) return false;
+  const tipo = proprio(api, 'eventType');
+  if (tipo !== undefined && tipo !== 'default') return false;
+  const organizador = proprio(api, 'organizer');
+  return organizador === undefined || proprio(organizador, 'self') === true;
+}
+
+/** Título sem a marca de feito e se ele está feito (marca no título ou propriedade privada). */
+function lerFeito(api: unknown): { titulo: string; feito: boolean } {
+  const resumo = proprio(api, 'summary');
+  const texto = typeof resumo === 'string' ? resumo : '';
+  const marcado = COMECA_COM_FEITO.test(texto);
+  const privada = proprio(proprio(proprio(api, 'extendedProperties'), 'private'), CHAVE_DO_FEITO);
+  return { titulo: marcado ? texto.replace(COMECA_COM_FEITO, '') : texto, feito: marcado || privada === '1' };
+}
+
 /** Evento da API -> Evento do app, ou null se faltar o essencial. `ordem` serve só para ordenar. */
 function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: number; fimMs: number } | null {
   const id = proprio(api, 'id');
@@ -398,7 +445,7 @@ function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: numb
   const inicio = ponto(proprio(api, 'start'));
   const fim = ponto(proprio(api, 'end'));
   if (!inicio || !fim) return null;
-  const titulo = proprio(api, 'summary');
+  const { titulo, feito } = lerFeito(api);
   const link = proprio(api, 'htmlLink');
   const convidados = proprio(api, 'attendees');
   const sala = proprio(proprio(proprio(api, 'extendedProperties'), 'private'), CHAVE_DA_SALA);
@@ -409,7 +456,7 @@ function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: numb
     evento: {
       id,
       agendaId,
-      titulo: typeof titulo === 'string' ? titulo : '',
+      titulo,
       inicio: inicio.texto,
       fim: fim.texto,
       diaInteiro: inicio.dia,
@@ -417,6 +464,8 @@ function traduzir(api: unknown, agendaId: string): { evento: Evento; ordem: numb
       recusado,
       salaId: typeof sala === 'string' && SALAS_FIXAS.indexOf(sala) >= 0 ? sala : null,
       link: linkValido(link) ? link : null,
+      ...(feito ? { feito: true } : {}),
+      ...(doDono(api, agendaId) ? {} : { somenteLeitura: true }),
     },
     // Dia inteiro conta da meia-noite de Lisboa, para ordenar com os de horário.
     ordem: inicio.dia ? Date.parse(meiaNoiteEmLisboa(inicio.texto)) : inicio.ms,
@@ -620,6 +669,46 @@ export function trocarSalaEvento(dados: unknown, servico: ServicoDeAgenda): Even
     extendedProperties: { private: { ...(objeto(privadas) ? privadas : {}), [CHAVE_DA_SALA]: salaId ?? '' } },
   };
   return exigirEvento(google('events.patch', () => servico.Events.patch(corpo, PRINCIPAL, id, { sendUpdates: 'none' })));
+}
+
+/**
+ * `marcarEventoFeito {id, feito}` na principal: título com "✓ " no começo e
+ * centralFeito '1' (ou sem os dois, ao desmarcar). Manda só o título e o mapa
+ * privado inteiro (como trocarSalaEvento), sem notificar ninguém. Já no
+ * estado pedido, não grava (a fila pode repetir). Evento que não é do dono
+ * (convite de outra pessoa, outra agenda, aniversário), apagado, que sumiu ou
+ * que o Google não deixa gravar (403): `gravado: false`, sem erro; o app
+ * guarda o feito só na Central.
+ */
+export function marcarEventoFeito(dados: unknown, servico: ServicoDeAgenda): { feito: boolean; gravado: boolean } {
+  const { id, feito } = lerMarcaDeFeito(dados);
+  const naoGravou = { feito, gravado: false };
+  let atual: EventoDaApi;
+  try {
+    atual = google('events.get', () => servico.Events.get(PRINCIPAL, id, { fields: CAMPOS_DO_FEITO }));
+  } catch (erro) {
+    if (sumiu(erro)) return naoGravou;
+    throw erro;
+  }
+  if (proprio(atual, 'status') === 'cancelled' || !doDono(atual, PRINCIPAL)) return naoGravou;
+  const resumo = proprio(atual, 'summary');
+  const semMarca = (typeof resumo === 'string' ? resumo : '').replace(COMECA_COM_FEITO, '');
+  const titulo = feito ? `${MARCA_DO_FEITO}${semMarca}` : semMarca;
+  const privadas = proprio(proprio(atual, 'extendedProperties'), 'private');
+  const marca = feito ? '1' : '';
+  const jaEsta = (typeof resumo === 'string' ? resumo : '') === titulo && (proprio(privadas, CHAVE_DO_FEITO) ?? '') === marca;
+  if (jaEsta) return { feito, gravado: true };
+  const corpo = {
+    summary: titulo,
+    extendedProperties: { private: { ...(objeto(privadas) ? privadas : {}), [CHAVE_DO_FEITO]: marca } },
+  };
+  try {
+    google('events.patch', () => servico.Events.patch(corpo, PRINCIPAL, id, { sendUpdates: 'none' }));
+  } catch (erro) {
+    if (sumiu(erro) || (erro instanceof FalhaDoGoogle && erro.status === 403)) return naoGravou;
+    throw erro;
+  }
+  return { feito, gravado: true };
 }
 
 /**

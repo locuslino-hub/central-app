@@ -28,6 +28,9 @@ export interface EventoGuardado {
   extendedProperties?: { private?: Record<string, string>; shared?: Record<string, string> };
   eventType?: string;
   description?: string;
+  /** Quem organiza. Convite de outra pessoa: `self` ausente ou false. */
+  organizer?: { email?: string; self?: boolean };
+  creator?: { email?: string; self?: boolean };
   htmlLink: string;
 }
 
@@ -191,6 +194,8 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
       attendees: e.attendees,
       extendedProperties: e.extendedProperties,
       eventType: e.eventType ?? 'default',
+      organizer: e.organizer,
+      creator: e.creator,
     });
   }
 
@@ -279,6 +284,9 @@ export function calendarioFalso(opcoes: OpcoesDoFalso = {}) {
         attendees: clonar(corpo.attendees),
         extendedProperties: clonar(corpo.extendedProperties),
         description: corpo.description,
+        // Criado pelo dono na agenda dele: ele é o organizador.
+        organizer: { self: true },
+        creator: { self: true },
         htmlLink: `https://www.google.com/calendar/event?eid=${id}`,
       };
       a.eventos.set(id, evento);
