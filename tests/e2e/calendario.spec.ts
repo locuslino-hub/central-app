@@ -354,14 +354,16 @@ test.describe('computador, 1440 px: mês e ano ocupam o painel central', () => {
     expect(await pequenos(page)).toEqual([]);
   });
 
-  test('ano: doze meses iguais em 3 colunas, num cartão só, dias com compromisso na cor da sala', async ({ page }) => {
+  test('ano: doze meses iguais em 4 colunas por 3 linhas, sem rolar, num cartão só, dias com compromisso na cor da sala', async ({ page }) => {
     await abrir(page, '#/ano');
     const principal = page.getByRole('main');
     const meses = principal.locator('.ano-mes');
     await expect(meses).toHaveCount(12);
     const caixas = await meses.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((c) => ({ x: Math.round(c.x), y: Math.round(c.y), w: Math.round(c.width), h: Math.round(c.height) })));
-    expect(new Set(caixas.map((c) => c.x)).size).toBe(3);
-    expect(new Set(caixas.map((c) => c.y)).size).toBe(4);
+    expect(new Set(caixas.map((c) => c.x)).size).toBe(4);
+    expect(new Set(caixas.map((c) => c.y)).size).toBe(3);
+    // O ano cabe na janela: a página não rola de cima a baixo.
+    expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
     expect(new Set(caixas.map((c) => c.w)).size).toBe(1);
     expect(Math.max(...caixas.map((c) => c.h)) - Math.min(...caixas.map((c) => c.h))).toBeLessThan(2);
     const novembro = principal.locator('.ano-mes', { hasText: 'Novembro' });

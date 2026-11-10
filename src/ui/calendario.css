@@ -896,9 +896,15 @@
   background: var(--folha);
   box-shadow: var(--relevo);
 }
-@container ano (min-width: 34rem) {
+@container ano (min-width: 26rem) {
   .casca:not([data-tela='celular']) .ano-meses {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* Largura de sobra: quatro colunas por três linhas, o ano todo cabe sem rolar. */
+@container ano (min-width: 44rem) {
+  .casca:not([data-tela='celular']) .ano-meses {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 .casca:not([data-tela='celular']) .ano-mes {
@@ -950,12 +956,13 @@
 }
 .casca[data-tela='computador'] .pagina > .ano {
   display: flex;
-  flex: 1 0 auto;
+  flex: 1 1 0;
   flex-direction: column;
+  min-height: 30rem;
 }
 .casca[data-tela='computador'] .ano-meses {
   flex: 1 1 auto;
-  grid-auto-rows: 1fr;
+  grid-auto-rows: minmax(0, 1fr);
 }
 
 /* ---- Detalhes do evento ---- */
