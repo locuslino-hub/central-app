@@ -457,6 +457,53 @@ describe('migrarCompromissos (duas fases)', () => {
     expect((await listar('tarefas')).map((t) => t.id).sort()).toEqual([tarefa.id, outra.id].sort());
   });
 
+  it('a lista de descartadas não cresce para sempre: sai a tarefa que sumiu ou perdeu a hora', async () => {
+    const { apagar, descartarPendentes, lerMigracoesDescartadas } = await import('../../src/dados/loja');
+    const apagada = await salvar('tarefas', antiga({ titulo: 'Banca' }));
+    const semHora = await salvar('tarefas', antiga({ titulo: 'Aula extra' }));
+    const fica = await salvar('tarefas', antiga({ titulo: 'Reunião com a Renata' }));
+    await migrarCompromissos();
+    await descartarPendentes((await criarDaFila()).map((p) => p.seq));
+    expect((await lerMigracoesDescartadas()).sort()).toEqual([apagada.id, semHora.id, fica.id].sort());
+
+    await apagar('tarefas', apagada.id);
+    const { inicio: _inicio, ...resto } = (await listar('tarefas')).find((t) => t.id === semHora.id)!;
+    await salvar('tarefas', resto);
+    expect(await migrarCompromissos()).toBe(0);
+
+    expect(await lerMigracoesDescartadas()).toEqual([fica.id]);
+    expect(await daAgenda()).toEqual([]);
+  });
+
+  it('sem nenhuma tarefa com hora, a lista também é aparada', async () => {
+    const { apagar, descartarPendentes, lerMigracoesDescartadas } = await import('../../src/dados/loja');
+    const tarefa = await salvar('tarefas', antiga());
+    await migrarCompromissos();
+    await descartarPendentes((await criarDaFila()).map((p) => p.seq));
+    await apagar('tarefas', tarefa.id);
+
+    await migrarCompromissos();
+
+    expect(await lerMigracoesDescartadas()).toEqual([]);
+  });
+
+  it('concluir a migração de uma tarefa descartada a tira da lista', async () => {
+    const { descartarPendentes, enfileirarAgenda, lerMigracoesDescartadas } = await import('../../src/dados/loja');
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    const tarefa = await salvar('tarefas', antiga());
+    await migrarCompromissos();
+    const [acao] = await criarDaFila();
+    // Um pedido igual que já estava na fila (de antes do descarte) ainda chega ao Google.
+    await enfileirarAgenda({ tipo: 'agenda', acao: 'criarEvento', evento: acao.evento, migrarTarefaId: tarefa.id });
+    await descartarPendentes([acao.seq]);
+    expect(await lerMigracoesDescartadas()).toEqual([tarefa.id]);
+
+    await sincronizarCom(agenda);
+
+    expect(await lerMigracoesDescartadas()).toEqual([]);
+  });
+
   it('descartar outras ações da fila só as tira, como antes', async () => {
     const { descartarPendentes, enfileirarAgenda } = await import('../../src/dados/loja');
     const seq = await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: 'b'.repeat(32) });

@@ -466,6 +466,12 @@ async function migracoesDescartadasNa(tx: Escrita): Promise<string[]> {
   return Array.isArray(lidas) ? lidas.filter((id): id is string => typeof id === 'string') : [];
 }
 
+/** Ids das tarefas cuja ida para a agenda o dono descartou, neste aparelho. */
+export async function lerMigracoesDescartadas(): Promise<string[]> {
+  const lidas: unknown = await comBanco((banco) => banco.get(LOCAL, CHAVE_MIGRACOES_DESCARTADAS));
+  return Array.isArray(lidas) ? lidas.filter((id): id is string => typeof id === 'string') : [];
+}
+
 /**
  * "Descartar" do aviso da fila: tira as entradas de uma vez só. Se uma delas é
  * a ida de uma tarefa antiga para a agenda (migração), a decisão fica guardada
@@ -491,6 +497,40 @@ export async function descartarPendentes(seqs: readonly number[]): Promise<void>
 }
 
 /**
+ * A lista de descartadas não cresce para sempre: sai a tarefa que não existe
+ * mais, virou lápide ou perdeu a hora de início (a migração não a levaria de
+ * qualquer jeito). Roda a cada abertura, junto da migração.
+ */
+async function apararMigracoesDescartadas(): Promise<void> {
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, ['tarefas', LOCAL]);
+    const descartadas = await migracoesDescartadasNa(tx);
+    if (descartadas.length === 0) {
+      await tx.done;
+      return;
+    }
+    const tarefas = tx.objectStore('tarefas');
+    const ficam: string[] = [];
+    for (const id of descartadas) {
+      const tarefa: Tarefa | undefined = await tarefas.get(id);
+      if (tarefa && !tarefa.apagado && tarefa.inicio) ficam.push(id);
+    }
+    if (ficam.length !== descartadas.length) await tx.objectStore(LOCAL).put(ficam, CHAVE_MIGRACOES_DESCARTADAS);
+    await tx.done;
+  });
+}
+
+/** Tira uma tarefa da lista de descartadas, dentro de uma escrita que já tem `local`. */
+async function esquecerMigracaoDescartadaNa(tx: Escrita, tarefaId: string): Promise<void> {
+  const descartadas = await migracoesDescartadasNa(tx);
+  if (!descartadas.includes(tarefaId)) return;
+  await tx.objectStore(LOCAL).put(
+    descartadas.filter((id) => id !== tarefaId),
+    CHAVE_MIGRACOES_DESCARTADAS,
+  );
+}
+
+/**
  * Migração, fase 1: põe na fila o `criarEvento` de cada tarefa antiga com hora.
  * A tarefa continua à vista. Lê a tarefa de novo dentro da escrita e pula a que
  * já foi levada, apagada, ou cujo título, dia ou hora mudaram desde o plano;
@@ -498,6 +538,7 @@ export async function descartarPendentes(seqs: readonly number[]): Promise<void>
  * (`descartarPendentes`). Devolve quantas entraram.
  */
 export async function levarTarefasParaAgenda(planos: readonly { tarefaId: string; evento: EventoPendente }[]): Promise<number> {
+  await apararMigracoesDescartadas();
   let levadas = 0;
   for (const { tarefaId, evento } of planos) {
     const levou = await comBanco(async (banco) => {
@@ -532,6 +573,8 @@ export async function concluirMigracao(seq: number, tarefaId: string, evento: Ev
   const mudada = await comBanco(async (banco) => {
     const tx = escrever(banco, ['tarefas', PENDENTES, LOCAL]);
     await tx.objectStore(PENDENTES).delete(seq);
+    // O evento existe: a tarefa vira lápide ou perde a hora, e não há mais o que bloquear.
+    await esquecerMigracaoDescartadaNa(tx, tarefaId);
     const loja = tx.objectStore('tarefas');
     const atual: Colecoes['tarefas'] | undefined = await loja.get(tarefaId);
     if (!atual || atual.apagado || !atual.inicio) {
