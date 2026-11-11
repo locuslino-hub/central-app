@@ -61,6 +61,23 @@ describe('iniciarApp (o que o main.tsx liga ao abrir)', () => {
     expect(await listar('tarefas')).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
   });
 
+  it('ao abrir, tira da fila os pedidos antigos da migração (tarefa com hora → compromisso) e mantém a tarefa', async () => {
+    const { enfileirarAgenda, listar, listarPendentes, salvar } = await import('../src/dados/loja');
+    const tarefa = await salvar('tarefas', {
+      titulo: 'Reunião com a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
+      duracaoConfirmada: true, feito: false, fixada: false, marcar: false,
+    });
+    await enfileirarAgenda({
+      tipo: 'agenda', acao: 'criarEvento', migrarTarefaId: tarefa.id,
+      evento: { id: 'e'.repeat(32), titulo: tarefa.titulo, data: '2026-11-06', inicio: '15:30', fim: '16:30', salaId: null },
+    });
+    const { iniciarApp } = await import('../src/inicio');
+
+    iniciarApp();
+    await vi.waitFor(async () => expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toEqual([]));
+    expect(await listar('tarefas')).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
+  });
+
   it('pede armazenamento persistente uma vez, sem mostrar nada e sem quebrar se não houver', async () => {
     const persist = vi.fn(() => Promise.resolve(false));
     vi.stubGlobal('navigator', { storage: { persist } });

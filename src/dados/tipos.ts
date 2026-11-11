@@ -22,7 +22,7 @@ export type Pessoa = Base & { nome: string; salaId: string; papel?: string; emai
  * "tarefa" ou "atividade" com dia e hora). Aparece em Atividades e como bloco
  * na Agenda, pela `duracaoMin`. Também as tarefas antigas de quando o chat
  * guardava compromisso assim (R28); a migração que as levava ao Google Agenda
- * (`migrarCompromissos`) não roda mais.
+ * foi retirada.
  */
 export type Tarefa = Base & {
   titulo: string;
@@ -183,9 +183,9 @@ export type PendenteCriarEvento = ControleDaFila & {
   acao: 'criarEvento';
   evento: EventoPendente;
   /**
-   * Migração (Tarefa 12): id da tarefa antiga com hora que este evento substitui.
-   * A tarefa fica à vista até o script confirmar; só então vira lápide, na mesma
-   * escrita que tira esta entrada da fila.
+   * Pedido da migração antiga (Tarefa 12): id da tarefa com hora que este evento
+   * substituiria. A migração não existe mais (tarefa com hora fica tarefa, 11/11):
+   * pedido com isto sai da fila sem ir ao Google (`largarMigracoesDaFila`).
    */
   migrarTarefaId?: string;
 };

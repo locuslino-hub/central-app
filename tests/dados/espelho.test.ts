@@ -10,7 +10,6 @@ import { aplicarFeitos, idDoFeito, marcarCompromissoFeito } from '../../src/dado
 import {
   INTERVALO_ENTRE_TENTATIVAS_MS,
   TENTATIVAS_NO_MAXIMO,
-  concluirMigracao,
   enfileirarEspelhosQueFaltam,
   gravarDoServidor,
   guardarIdDoEspelho,
@@ -92,16 +91,6 @@ describe('a fila do espelho de tarefas', () => {
     expect(await listarPendentes()).toEqual(antes);
     expect(await lerTarefa(tarefa.id)).toEqual(versao);
     expect(await lerIdsDoEspelho([tarefa.id, 'outra'])).toEqual(['tarefaGoogle1', undefined]);
-  });
-
-  it('migração antiga ainda na fila que tira a hora de uma tarefa mudada: ela fica como tarefa, no espelho', async () => {
-    const antiga = await criar('Reunião antiga', { data: '2026-11-09', inicio: '10:00' });
-    await salvar('tarefas', { ...antiga, titulo: 'Reunião antiga, mudada' });
-    expect(await daTarefa(antiga.id)).toHaveLength(2);
-    await concluirMigracao(-1, antiga.id, { id: 'evento00001', titulo: 'Reunião antiga', data: '2026-11-09', inicio: '10:00', fim: '11:00', salaId: null });
-    expect((await lerTarefa(antiga.id)).inicio).toBeUndefined();
-    // Sem a hora, a espelho mostra o mesmo (título, dia): nada novo vai ao Google.
-    expect(await daTarefa(antiga.id)).toHaveLength(2);
   });
 
   it('a virada do dia e o Fechar o dia mudam o dia: entram no espelho', async () => {

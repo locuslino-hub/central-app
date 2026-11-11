@@ -27,7 +27,6 @@ import {
   lerIdsDoEspelho,
   lerDesde,
   agendaEsgotada,
-  concluirMigracao,
   lerPendente,
   lerRegistros,
   listarPendentes,
@@ -242,14 +241,18 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
  *   contada, a ação fica na fila em silêncio e a próxima rodada tenta de novo.
  *   Passando do limite (`agendaEsgotada`) a sincronia deixa de tentar, mas a
  *   entrada fica guardada e o Painel avisa (AvisoDaFila).
- * Devolve `true` se gravou registros (a migração apaga a tarefa antiga): a rodada
- * então envia de novo.
+ * Pedido antigo da migração (`migrarTarefaId`, tarefa com hora → compromisso)
+ * não vai mais ao Google: tarefa com hora fica tarefa (11/11). Sai da fila e a
+ * tarefa fica como está (`largarMigracoesDaFila` faz o mesmo ao abrir o app).
  */
-async function enviarAgenda(chamar: Chamar): Promise<boolean> {
+async function enviarAgenda(chamar: Chamar): Promise<void> {
   const acoes = (await listarPendentes()).filter((p): p is PendenteAgenda => p.tipo === 'agenda');
   let mudou = false;
-  let gravou = false;
   for (const acao of acoes) {
+    if (acao.acao === 'criarEvento' && acao.migrarTarefaId) {
+      await retirarPendente(acao.seq);
+      continue;
+    }
     if (agendaEsgotada(acao)) continue;
     // Lê de novo: o dono pode ter desfeito a criação desde que a fila foi lida.
     if (!(await lerPendente(acao.seq))) continue;
@@ -257,10 +260,7 @@ async function enviarAgenda(chamar: Chamar): Promise<boolean> {
       if (acao.acao === 'criarEvento') {
         await criarEvento(acao.evento, { chamar });
         mudou = true;
-        if (acao.migrarTarefaId) {
-          await concluirMigracao(acao.seq, acao.migrarTarefaId, acao.evento);
-          gravou = true;
-        } else if (!(await retirarPendente(acao.seq))) {
+        if (!(await retirarPendente(acao.seq))) {
           // Desfeito enquanto era enviado: o evento já existe e precisa sair.
           await removerEventoCriadoSemQuerer(acao.evento.id, chamar);
         }
@@ -277,7 +277,6 @@ async function enviarAgenda(chamar: Chamar): Promise<boolean> {
     }
   }
   if (mudou) marcarEventosObsoletos();
-  return gravou;
 }
 
 async function removerEventoCriadoSemQuerer(id: string, chamar: Chamar) {
@@ -420,8 +419,7 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
   try {
     await puxar(chamar, esperar);
     await enviar(chamar, esperar);
-    // A migração apaga tarefas antigas: esses registros saem já nesta rodada.
-    if (await enviarAgenda(chamar)) await enviar(chamar, esperar);
+    await enviarAgenda(chamar);
     // O resultado dos blocos do Google Tarefas muda registros: saem já nesta rodada.
     if (await enviarEspelhos(chamar)) await enviar(chamar, esperar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';

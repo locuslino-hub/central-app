@@ -115,8 +115,8 @@ export function estaAEnviar(evento: Evento): evento is EventoAEnviar {
 /**
  * Os compromissos da fila (`criarEvento`) do período, como eventos da tela,
  * marcados `aEnviar`. Fora ficam: os que a leitura do Google já traz (mesmo
- * id: o id é do cliente), os de outro dia e os da migração (a tarefa antiga
- * ainda aparece no lugar deles).
+ * id: o id é do cliente), os de outro dia e os pedidos antigos da migração
+ * (que nunca vão ao Google: a tarefa com hora aparece no lugar deles).
  */
 export function eventosAEnviar(pendentes: readonly Pendente[], de: string, ate: string, lidos: readonly Evento[]): EventoAEnviar[] {
   const jaLidos = new Set(lidos.map((evento) => evento.id));
