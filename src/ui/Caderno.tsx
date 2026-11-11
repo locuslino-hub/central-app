@@ -35,7 +35,13 @@ import './salas.css';
 /** Quanto tempo depois da última tecla o caderno é gravado. */
 export const ATRASO_DO_CADERNO_MS = 300;
 
-const SITUACAO: Record<Situacao, string> = { parado: '', salvando: 'Salvando…', salvo: 'Salvo', erro: 'Não consegui salvar.' };
+const SITUACAO: Record<Situacao, string> = {
+  parado: '',
+  salvando: 'Salvando…',
+  salvo: 'Salvo',
+  erro: 'Não consegui salvar.',
+  apagado: 'Esta página foi apagada; o texto não foi guardado.',
+};
 
 const ROTULO_DO_BLOCO = { texto: 'Texto', titulo: 'Título', lista: 'Item da lista' } as const;
 const NOME_DO_PAINEL = { agenda: 'Agenda', checklist: 'Checklist', semana: 'Semana' } as const;

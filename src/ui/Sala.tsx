@@ -16,6 +16,7 @@ import { ItemDeAgenda } from './ItemDeAgenda';
 import { AvisoDeApagada, useConclusoes } from './LinhaDeTarefa';
 import { ListaDeTarefas } from './ListaDeTarefas';
 import { corDaSala } from './Menu';
+import { notasPorGuardar } from '../dados/notas';
 import { Notas } from './Notas';
 import { NovaTarefa } from './NovaTarefa';
 import { Pagina } from './Pagina';
@@ -218,6 +219,8 @@ export function Sala({ id }: { id: string }) {
     return (
       <Pagina titulo="Sala não encontrada">
         <p class="aviso">Esta sala não existe neste aparelho.</p>
+        {/* Apagada com a nota por gravar: o texto que o dono escreveu continua aqui. */}
+        {notasPorGuardar('salas', id) !== undefined && <Notas colecao="salas" id={id} notas={undefined} dica="Notas" />}
         <p>
           <a class="botao-link" href={hrefDe('salas')}>
             Ver as salas

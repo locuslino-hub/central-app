@@ -9,6 +9,7 @@ import { useDia, usePessoa, useSalas, useTarefas } from './hooks';
 import { AvisoDeApagada, useConclusoes } from './LinhaDeTarefa';
 import { ListaDeTarefas } from './ListaDeTarefas';
 import { corDaSala } from './Menu';
+import { notasPorGuardar } from '../dados/notas';
 import { Notas } from './Notas';
 import { NovaTarefa } from './NovaTarefa';
 import { Pagina } from './Pagina';
@@ -125,6 +126,8 @@ export function Pessoa({ id }: { id: string }) {
     return (
       <Pagina titulo="Pessoa não encontrada">
         <p class="aviso">Esta pessoa não existe neste aparelho.</p>
+        {/* Apagada com a nota por gravar: o texto que o dono escreveu continua aqui. */}
+        {notasPorGuardar('pessoas', id) !== undefined && <Notas colecao="pessoas" id={id} notas={undefined} dica="Notas" />}
         <p>
           <a class="botao-link" href={hrefDe('salas')}>
             Ver as salas

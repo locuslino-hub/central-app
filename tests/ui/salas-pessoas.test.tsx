@@ -4,7 +4,7 @@ import { act, configure, fireEvent, render, screen, waitFor, within } from '@tes
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
-import { gravarDoServidor, listar, lerRegistros, salvar, semear, semearPalavras } from '../../src/dados/loja';
+import { apagar, gravarDoServidor, listar, lerRegistros, salvar, semear, semearPalavras } from '../../src/dados/loja';
 import type { Pessoa, Sala } from '../../src/dados/tipos';
 import { ATRASO_DAS_NOTAS_MS } from '../../src/ui/Notas';
 import { evento } from '../apoio/agenda-ui';
@@ -412,6 +412,37 @@ describe('notas', () => {
       await notaDoCelular(antes);
     });
     await waitFor(() => expect(campo().value).toBe('Nota escrita no celular'));
+  });
+
+  it('sala apagada em outro aparelho enquanto o dono escreve: não diz "Salvo", avisa e o texto continua no campo', async () => {
+    await abrirNotas();
+    campo().focus();
+    fireEvent.input(campo(), { target: { value: 'Texto que não pode sumir' } });
+    const antes = await salaGuardada();
+    await act(async () => {
+      await gravarDoServidor([{ colecao: 'salas', registro: { ...antes, apagado: true, atualizadoEm: Date.now() + 5000, aparelho: 'celular-fake' } }]);
+    });
+
+    expect(await screen.findByText('Esta sala foi apagada; a nota não foi guardada.', {}, { timeout: ATRASO_DAS_NOTAS_MS + 3000 })).toBeTruthy();
+    expect(campo().value).toBe('Texto que não pode sumir');
+    expect(screen.queryByText('Salvo')).toBeNull();
+    expect((await salaGuardada()).notas).toBeUndefined();
+  });
+
+  it('pessoa apagada com a nota por gravar: o aviso diz que a pessoa foi apagada e o texto fica', async () => {
+    await marina();
+    await scriptDeTeste();
+    mostrar('#/pessoa/p-marina');
+    const notas = (await principal().findByRole('textbox', { name: 'Notas' })) as HTMLTextAreaElement;
+    notas.focus();
+    fireEvent.input(notas, { target: { value: 'Prefere reunião às terças.' } });
+    await act(async () => {
+      await apagar('pessoas', 'p-marina');
+    });
+
+    expect(await screen.findByText('Esta pessoa foi apagada; a nota não foi guardada.', {}, { timeout: ATRASO_DAS_NOTAS_MS + 3000 })).toBeTruthy();
+    expect(campo().value).toBe('Prefere reunião às terças.');
+    expect(screen.queryByText('Salvo')).toBeNull();
   });
 
   it('as notas da pessoa ficam na pessoa, e as da sala na sala', async () => {

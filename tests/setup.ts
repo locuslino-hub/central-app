@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/preact';
 import { afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { esquecerEmails } from '../src/dados/emails';
 import { esquecerEventos } from '../src/dados/eventos';
+import { esquecerNotasPorGuardar } from '../src/dados/notas';
 
 // Vitest roda com `globals` desligado, então a limpeza automática da
 // testing-library não é registrada: registramos aqui.
@@ -11,6 +12,7 @@ beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
   esquecerEventos(); // os eventos ficam na memória do módulo: cada teste começa sem eles
   esquecerEmails(); // e os e-mails também
+  esquecerNotasPorGuardar(); // e o texto das notas ainda por guardar
 });
 
 afterEach(() => {

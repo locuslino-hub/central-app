@@ -23,3 +23,30 @@ export async function salvarNotas(colecao: DonoDeNotas, id: string, texto: strin
   await salvar(colecao, (novas === '' ? resto : { ...resto, notas: novas }) as never);
   return true;
 }
+
+/**
+ * Texto digitado nas notas que ainda não foi guardado no registro, por sala ou
+ * pessoa. Só na memória: se a sala ou a pessoa some (apagada em outro
+ * aparelho) com o texto por gravar, a página que aparece no lugar mostra o
+ * campo com ele, para o dono não perder o que escreveu.
+ */
+const porGuardar = new Map<string, string>();
+const chaveDe = (colecao: DonoDeNotas, id: string) => `${colecao}:${id}`;
+
+export function notasPorGuardar(colecao: DonoDeNotas, id: string): string | undefined {
+  return porGuardar.get(chaveDe(colecao, id));
+}
+
+export function guardarNotasPorGuardar(colecao: DonoDeNotas, id: string, texto: string): void {
+  porGuardar.set(chaveDe(colecao, id), texto);
+}
+
+/** O texto foi gravado: sai, a não ser que o dono já tenha digitado outro. */
+export function notasGuardadas(colecao: DonoDeNotas, id: string, texto: string): void {
+  if (porGuardar.get(chaveDe(colecao, id)) === texto) porGuardar.delete(chaveDe(colecao, id));
+}
+
+/** Esquece todo texto por guardar (testes). */
+export function esquecerNotasPorGuardar(): void {
+  porGuardar.clear();
+}

@@ -5,8 +5,18 @@
 //   - Uma atualização vinda de outro aparelho nunca mexe no campo em edição
 //     (texto, foco e cursor ficam como estão). Se o dono não digitou nada, a
 //     versão nova aparece quando ele sai do campo.
+//   - Sala ou pessoa apagada (inclusive em outro aparelho, com a página aberta):
+//     nada de "Salvo". O campo avisa que a nota não foi guardada e o texto fica
+//     nele (e na página "não encontrada" que aparece no lugar, ver Sala e Pessoa).
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { NOTAS_NO_MAXIMO, salvarNotas, type DonoDeNotas } from '../dados/notas';
+import {
+  NOTAS_NO_MAXIMO,
+  guardarNotasPorGuardar,
+  notasGuardadas,
+  notasPorGuardar,
+  salvarNotas,
+  type DonoDeNotas,
+} from '../dados/notas';
 import './salas.css';
 
 /** Quanto tempo depois da última tecla a nota é gravada. */
@@ -21,23 +31,32 @@ type Props = {
   dica: string;
 };
 
-type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro';
+type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro' | 'apagado';
 
-const TEXTO_DA_SITUACAO: Record<Situacao, string> = {
+const TEXTO_DA_SITUACAO: Record<Exclude<Situacao, 'apagado'>, string> = {
   parado: '',
   salvando: 'Salvando…',
   salvo: 'Salvo',
   erro: 'Não consegui salvar.',
 };
 
+const APAGADO: Record<DonoDeNotas, string> = {
+  salas: 'Esta sala foi apagada; a nota não foi guardada.',
+  pessoas: 'Esta pessoa foi apagada; a nota não foi guardada.',
+};
+
 export function Notas({ colecao, id, notas, dica }: Props) {
-  const [texto, setTexto] = useState(notas ?? '');
+  // Texto que ficou por guardar (a sala sumiu com ele no campo) volta ao campo.
+  const [pendente] = useState(() => notasPorGuardar(colecao, id));
+  const [texto, setTexto] = useState(pendente ?? notas ?? '');
   const [situacao, setSituacao] = useState<Situacao>('parado');
   const campo = useRef<HTMLTextAreaElement>(null);
   /** O texto mais novo digitado, mesmo antes de o estado se refazer. */
   const atual = useRef(texto);
   /** Digitou e ainda não gravou. */
-  const sujo = useRef(false);
+  const sujo = useRef(pendente !== undefined && pendente !== (notas ?? ''));
+  /** Abriu com texto por guardar (o efeito roda depois: o dono pode já ter digitado). */
+  const abriuPorGuardar = useRef(sujo.current);
   /** Uma versão nova chegou de fora enquanto o campo estava em uso: aparece ao sair, se nada foi digitado. */
   const chegouDeFora = useRef(false);
   const doRegistro = useRef(notas);
@@ -57,7 +76,13 @@ export function Notas({ colecao, id, notas, dica }: Props) {
       setSituacao('salvando');
       try {
         const { colecao, id } = alvo.current;
-        await salvarNotas(colecao, id, texto);
+        if (!(await salvarNotas(colecao, id, texto))) {
+          // A sala ou a pessoa não existe mais: nada foi guardado, e o texto fica.
+          sujo.current = true;
+          setSituacao('apagado');
+          return;
+        }
+        notasGuardadas(colecao, id, texto);
         // Se digitou de novo durante a gravação, o "Salvo" espera a próxima.
         if (!sujo.current) setSituacao('salvo');
       } catch (erro) {
@@ -80,6 +105,12 @@ export function Notas({ colecao, id, notas, dica }: Props) {
     atual.current = notas ?? '';
     setTexto(atual.current);
   }, [notas]);
+
+  // Abriu com texto por guardar: tenta já (se a sala ainda não existe, o aviso aparece).
+  useEffect(() => {
+    if (abriuPorGuardar.current) void gravar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Esconder o app ou sair da página também grava.
   useEffect(() => {
@@ -119,6 +150,7 @@ export function Notas({ colecao, id, notas, dica }: Props) {
           const novo = (e.target as HTMLTextAreaElement).value;
           atual.current = novo;
           sujo.current = true;
+          guardarNotasPorGuardar(colecao, id, novo);
           chegouDeFora.current = false;
           setTexto(novo);
           setSituacao('parado');
@@ -138,7 +170,7 @@ export function Notas({ colecao, id, notas, dica }: Props) {
       />
       <div class="notas-rodape">
         <p class="notas-situacao" role="status">
-          {TEXTO_DA_SITUACAO[situacao]}
+          {situacao === 'apagado' ? APAGADO[colecao] : TEXTO_DA_SITUACAO[situacao]}
         </p>
         {situacao === 'erro' && (
           <button type="button" class="botao-texto" onClick={() => void gravar()}>

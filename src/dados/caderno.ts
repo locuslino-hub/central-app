@@ -124,11 +124,13 @@ export async function removerBloco(paginaId: string, blocoId: string): Promise<D
   return feito && desfazerDeRemocao(paginaId, feito.bloco, feito.anteriorId);
 }
 
-export type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro';
+export type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro' | 'apagado';
 
 /**
  * Grava um instante depois da última chamada de `agendar`; `esvaziar` grava já.
- * As gravações andam em fila. Se uma falha, o valor continua pendente.
+ * As gravações andam em fila. Se uma falha, o valor continua pendente. `gravar`
+ * que devolve `false` (a página não existe mais) não vale como salvo: a
+ * situação fica `apagado` e o valor continua pendente.
  */
 export function criarGravador<T>(gravar: (valor: T) => Promise<unknown>, aoMudar: (s: Situacao) => void, atrasoMs: number) {
   let pendente: { valor: T } | null = null;
@@ -143,7 +145,11 @@ export function criarGravador<T>(gravar: (valor: T) => Promise<unknown>, aoMudar
       pendente = null;
       aoMudar('salvando');
       try {
-        await gravar(valor);
+        if ((await gravar(valor)) === false) {
+          pendente ??= { valor };
+          aoMudar('apagado');
+          return;
+        }
         aoMudar(pendente ? 'parado' : 'salvo');
       } catch (erro) {
         console.error('Não consegui salvar o caderno', erro);
