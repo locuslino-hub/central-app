@@ -4,9 +4,10 @@
 //
 // Filtros: Tudo (o que está aberto e os próximos 14 dias), Esta semana (de
 // segunda a domingo) e Só e-mails.
-// Telas: no computador e no tablet as colunas ficam lado a lado, numa área que
-// rola para o lado; no celular ficam empilhadas, cada uma abrindo e fechando
-// pelo cabeçalho (rolar de lado com o dedo esconde as salas vizinhas).
+// Telas: no computador e no tablet, "só o que pede atenção": as salas com algo
+// no filtro viram cartões lado a lado, do tamanho do conteúdo (sem rolar para o
+// lado), e as que estão em dia viram pílulas numa linha no alto. No celular as
+// colunas ficam empilhadas, cada uma abrindo e fechando pelo cabeçalho.
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { segundaDaSemana, somarDias } from '../chat/datas';
 import { montarCalendario, type Item } from '../dados/calendario';
@@ -93,6 +94,11 @@ type CorpoProps = {
   aoAbrir: Parameters<typeof ItemDeAgenda>[0]['aoAbrir'];
   salaDoEvento: SalaDoEvento;
 };
+
+/** A sala tem algo para mostrar no filtro escolhido? */
+function temAlgo(coluna: Coluna, filtro: FiltroDoQuadro): boolean {
+  return coluna.tarefas.length > 0 || coluna.emails.length > 0 || (filtro !== 'emails' && coluna.compromissos > 0);
+}
 
 function CorpoDaColuna({ coluna, filtro, carregando, salas, hoje, caixa, conclusoes, aoAbrir, salaDoEvento }: CorpoProps) {
   const mostrarAgenda = filtro !== 'emails';
@@ -218,6 +224,9 @@ export function Quadro() {
   const aberta = (id: string) => escolhas[id] ?? id === inicial;
 
   const props = { filtro, carregando, salas, hoje, caixa, conclusoes, aoAbrir: abrir, salaDoEvento };
+  // Enquanto lê, todas ficam como cartões (sem dizer "em dia" antes da hora).
+  const comAlgo = pronto ? colunas.filter((c) => temAlgo(c, filtro)) : colunas;
+  const emDia = pronto ? colunas.filter((c) => !temAlgo(c, filtro)) : [];
 
   return (
     <div class="quadro" data-modo={empilhado ? 'pilha' : 'colunas'}>
@@ -278,33 +287,60 @@ export function Quadro() {
           })}
         </div>
       ) : (
-        <div class="quadro-colunas" role="region" aria-label="Colunas das salas" tabIndex={0}>
-          {colunas.map((coluna) => {
-            const idNome = `quadro-nome-${coluna.id}`;
-            return (
-              <section
-                key={coluna.id}
-                class={`quadro-coluna ${corDaSala(coluna.id)}`}
-                aria-labelledby={idNome}
-                aria-busy={carregando}
-              >
-                <h2 class="quadro-topo">
-                  {coluna.sala ? (
-                    <a id={idNome} class="quadro-nome" href={hrefDe('sala', coluna.sala.id)}>
-                      {coluna.nome}
-                    </a>
-                  ) : (
-                    <span id={idNome} class="quadro-nome">
-                      {coluna.nome}
-                    </span>
-                  )}
-                  <Cabecalho coluna={coluna} />
-                </h2>
-                <CorpoDaColuna coluna={coluna} {...props} />
-              </section>
-            );
-          })}
-        </div>
+        <>
+          {emDia.length > 0 && (
+            <div class="quadro-em-dia">
+              <p class="quadro-em-dia-rotulo" id="quadro-em-dia">
+                {filtro === 'emails' ? 'Sem e-mail:' : 'Em dia:'}
+              </p>
+              <ul class="quadro-pilulas" aria-labelledby="quadro-em-dia">
+                {emDia.map((coluna) => (
+                  <li key={coluna.id}>
+                    {coluna.sala ? (
+                      <a class={`quadro-pilula ${corDaSala(coluna.id)}`} href={hrefDe('sala', coluna.sala.id)}>
+                        {coluna.nome}
+                      </a>
+                    ) : (
+                      <span class="quadro-pilula">{coluna.nome}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {pronto && comAlgo.length === 0 && (
+            <p class="quadro-tudo-em-dia">{filtro === 'emails' ? 'Nenhum e-mail por responder.' : 'Tudo em dia: nada em aberto nas salas.'}</p>
+          )}
+          {comAlgo.length > 0 && (
+            <div class="quadro-cartoes" role="region" aria-label="Salas com algo em aberto">
+              {comAlgo.map((coluna) => {
+                const idNome = `quadro-nome-${coluna.id}`;
+                return (
+                  <section
+                    key={coluna.id}
+                    class={`quadro-coluna ${corDaSala(coluna.id)}`}
+                    aria-labelledby={idNome}
+                    aria-busy={carregando}
+                  >
+                    <h2 class="quadro-topo">
+                      {coluna.sala ? (
+                        <a id={idNome} class="quadro-nome" href={hrefDe('sala', coluna.sala.id)}>
+                          {coluna.nome}
+                        </a>
+                      ) : (
+                        <span id={idNome} class="quadro-nome">
+                          {coluna.nome}
+                        </span>
+                      )}
+                      <Cabecalho coluna={coluna} />
+                    </h2>
+                    <CorpoDaColuna coluna={coluna} {...props} />
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
       {detalhe}
     </div>

@@ -42,8 +42,6 @@ function rotuloDe(id: IdComHref, hoje: Date): string {
       return 'Quadro';
     case 'atividades':
       return 'Atividades';
-    case 'sem-prazo':
-      return 'Sem prazo';
     case 'cores':
       return 'Cores do Google';
     case 'conectar':
@@ -100,7 +98,6 @@ export function MenuLateral({ rota, hoje }: Props) {
           {item('caixa', 'caixa')}
           {item('quadro', 'quadro')}
           {item('atividades', 'atividades')}
-          {item('sem-prazo', 'sem-prazo')}
         </Grupo>
         <Grupo titulo="Minhas salas">
           {salas.map((sala) => (
@@ -121,7 +118,7 @@ export function MenuLateral({ rota, hoje }: Props) {
 const ATALHOS: { id: IdComHref; icone: NomeDoIcone; rotulo: string; contem?: IdDaRota[] }[] = [
   { id: 'hoje', icone: 'painel', rotulo: 'Painel' },
   { id: 'atividades', icone: 'atividades', rotulo: 'Atividades' },
-  { id: 'sem-prazo', icone: 'sem-prazo', rotulo: 'Sem prazo' },
+  { id: 'agora', icone: 'agora', rotulo: 'Agora' },
   { id: 'salas', icone: 'salas', rotulo: 'Salas', contem: ['sala', 'pessoa'] },
   { id: 'chat', icone: 'chat', rotulo: 'Chat' },
 ];
@@ -165,7 +162,7 @@ export function Atalhos({ rota, hoje, variante }: Props & { variante: 'barra' | 
           <li>
             <BotaoMais
               aberto={aberto}
-              // O que tem atalho próprio na barra (Atividades, Sem prazo) é página atual lá, não "dentro do Mais".
+              // O que tem atalho próprio na barra (Atividades, Agora) é página atual lá, não "dentro do Mais".
               dentro={ROTAS_DO_MAIS.has(rota.id) && !ATALHOS.some((atalho) => atalho.id === rota.id)}
               aoAlternar={() => setAberto((valor) => !valor)}
               botaoRef={botao}

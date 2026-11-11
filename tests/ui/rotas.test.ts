@@ -17,7 +17,8 @@ describe('resolverRota', () => {
     ['#/caixa', 'caixa', 'Caixa'],
     ['#/quadro', 'quadro', 'Quadro'],
     ['#/atividades', 'atividades', 'Atividades'],
-    ['#/sem-prazo', 'sem-prazo', 'Sem prazo'],
+    // A página Sem prazo deixou de existir: o endereço antigo leva a Atividades.
+    ['#/sem-prazo', 'atividades', 'Atividades'],
     ['#/chat', 'chat', 'Chat'],
     ['#/conectar', 'conectar', 'Conectar aparelho'],
   ])('%j abre %s com o título %j', (hash, id, titulo) => {

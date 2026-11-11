@@ -48,6 +48,7 @@
   padding: 18px 20px 28px;
 }
 .casca[data-tela='computador'] .pagina {
+  position: relative;
   padding: 18px 36px 32px 24px;
   overflow-y: auto;
 }
@@ -74,6 +75,25 @@
 }
 .voltar:hover {
   background: rgb(var(--som-rgb) / 0.08);
+}
+/*
+ * Computador: Voltar, aviso de versão e selo da sincronia flutuam no canto direito,
+ * sem ocupar uma linha própria. O título (ou a saudação) começa colado no alto da página.
+ */
+.casca[data-tela='computador'] .topo {
+  position: absolute;
+  z-index: 5;
+  top: 18px;
+  right: 36px;
+  margin: 0;
+}
+.casca[data-tela='computador'] .voltar {
+  margin-right: 0;
+}
+.casca[data-tela='computador'] .pagina h1 {
+  margin-top: 0;
+  /* Não passa por baixo do canto com o selo. */
+  padding-right: 15rem;
 }
 
 .pagina h1 {

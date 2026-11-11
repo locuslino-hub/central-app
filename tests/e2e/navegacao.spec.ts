@@ -58,7 +58,7 @@ test.describe('celular, 390 px', () => {
 
     await barra.getByRole('button', { name: 'Mais' }).click();
     const folha = page.getByRole('dialog', { name: 'Mais' });
-    for (const nome of ['Esta semana', 'Novembro', '2026', 'Quadro', 'Atividades', 'Sem prazo']) {
+    for (const nome of ['Esta semana', 'Novembro', '2026', 'Quadro', 'Atividades']) {
       await expect(folha.getByRole('link', { name: nome })).toBeVisible();
     }
     expect(await pequenos(page)).toEqual([]);
@@ -114,7 +114,7 @@ test.describe('tablet, 800 px', () => {
     await expect(trilho.getByRole('button', { name: 'Mais' })).toBeVisible();
 
     await trilho.getByRole('button', { name: 'Mais' }).click();
-    await expect(page.getByRole('dialog').getByRole('link', { name: 'Sem prazo' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('link', { name: 'Quadro' })).toBeVisible();
     expect(await pequenos(page)).toEqual([]);
     expect(erros).toEqual([]);
   });
@@ -170,10 +170,10 @@ test.describe('computador, 1280 px', () => {
   test('clicar no menu troca a página e marca o item', async ({ page }) => {
     await page.goto('/central-app/');
     const menu = page.getByRole('navigation', { name: 'Principal' });
-    await menu.getByRole('link', { name: 'Sem prazo' }).click();
-    await expect(page).toHaveURL(/#\/sem-prazo$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Sem prazo' })).toBeVisible();
-    await expect(menu.getByRole('link', { name: 'Sem prazo' })).toHaveAttribute('aria-current', 'page');
+    await menu.getByRole('link', { name: 'Atividades' }).click();
+    await expect(page).toHaveURL(/#\/atividades$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Atividades' })).toBeVisible();
+    await expect(menu.getByRole('link', { name: 'Atividades' })).toHaveAttribute('aria-current', 'page');
     await expect(menu.locator('[aria-current]')).toHaveCount(1);
 
     await menu.getByRole('link', { name: 'Orientações' }).click();

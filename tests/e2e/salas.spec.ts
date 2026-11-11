@@ -210,7 +210,10 @@ for (const [nome, viewport, sufixo] of [
       expect(await semRolagemDeLado(page)).toBe(true);
 
       // O cartão todo abre a sala, não só o nome.
-      await cartoes.filter({ hasText: 'Orientações' }).click({ position: { x: 20, y: 90 } });
+      // Clica na linha da contagem, embaixo do nome (no computador o cartão é baixo).
+      const cartao = cartoes.filter({ hasText: 'Orientações' });
+      const altura = (await cartao.boundingBox())!.height;
+      await cartao.click({ position: { x: 20, y: altura - 10 } });
       await expect(page.getByRole('heading', { level: 1, name: 'Orientações' })).toBeVisible();
       await expect(principal.getByRole('region', { name: 'Tarefas' }).getByRole('checkbox')).toHaveCount(4);
       await expect(principal.getByText('Reunião de orientação com a Marina')).toBeVisible();

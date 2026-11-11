@@ -16,7 +16,6 @@ import { Pessoa } from './Pessoa';
 import { Quadro } from './Quadro';
 import { Sala } from './Sala';
 import { Salas } from './Salas';
-import { SemPrazo } from './SemPrazo';
 import { Semana } from './Semana';
 import { SeuNome } from './SeuNome';
 import './tarefas.css';
@@ -79,14 +78,6 @@ export function Vista({ rota }: { rota: RotaAtual }) {
       return (
         <Pagina titulo={rota.titulo}>
           <Ano data={rota.data} />
-        </Pagina>
-      );
-    case 'sem-prazo':
-      return (
-        <Pagina titulo={rota.titulo}>
-          <div class="semprazo-pagina">
-            <SemPrazo semCabecalho />
-          </div>
         </Pagina>
       );
     case 'caixa':

@@ -274,6 +274,32 @@
   color: var(--tinta2);
   font-size: 0.9rem;
 }
+/* Computador: as tarefas da semana numa faixa baixa, lado a lado, para a grade caber na janela. */
+.casca[data-tela='computador'] .cal-tarefas-semana {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+  padding: 10px 16px;
+}
+.casca[data-tela='computador'] .cal-tarefas-semana .cal-tarefas-titulo {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.casca[data-tela='computador'] .cal-tarefas-semana .cal-nota-do-cartao {
+  margin: 0;
+}
+.casca[data-tela='computador'] .cal-tarefas-semana .cal-lista {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.casca[data-tela='computador'] .cal-tarefas-semana .cal-lista > * {
+  flex: 0 1 22rem;
+  min-width: 0;
+}
 
 /* A régua das horas e a linha de agora só existem na grade (página larga). */
 .sem-regua,
@@ -392,6 +418,13 @@
     width: calc(100% / var(--colunas, 1) - 6px);
     height: max(var(--toque), calc(var(--dur, 60) / var(--minutos) * 100% - 2px));
     overflow: hidden;
+  }
+  /* Computador: a semana divide a altura da janela; a hora pode ficar mais baixa. */
+  .casca[data-tela='computador'] .semana-dias {
+    grid-template-rows: auto auto minmax(calc(var(--horas, 12) * 2.25rem), 1fr);
+  }
+  .casca[data-tela='computador'] .sem-blocos > .cal-item {
+    height: max(2.25rem, calc(var(--dur, 60) / var(--minutos) * 100% - 2px));
   }
   .sem-blocos > .cal-item:hover,
   .sem-blocos > .cal-item:focus-within {
@@ -958,11 +991,40 @@
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  min-height: 30rem;
+  min-height: 26rem;
 }
+/*
+ * Computador: o ano inteiro cabe na janela, sem rolar. Cada mês divide a altura que
+ * sobra; o mini-calendário mede o espaço dele (container de tamanho) e o dia vira um
+ * círculo do maior tamanho que couber na largura e na altura, até 1,8rem.
+ */
 .casca[data-tela='computador'] .ano-meses {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
   grid-auto-rows: minmax(0, 1fr);
+  gap: 10px 28px;
+  padding: 14px 24px 16px;
+}
+.casca[data-tela='computador'] .ano-mes {
+  min-height: 0;
+}
+.casca[data-tela='computador'] .ano-mes .ano-mes-titulo {
+  font-size: 1.35rem;
+}
+.casca[data-tela='computador'] .ano-contagem {
+  margin-bottom: 4px;
+}
+.casca[data-tela='computador'] .ano-mini {
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 0;
+}
+.casca[data-tela='computador'] .ano-letra,
+.casca[data-tela='computador'] .ano-dia {
+  width: min(1.8rem, 100cqw / 7 - 2px, 100cqh / 7 - 2px);
+  font-size: min(0.78rem, 100cqh / 7 * 0.48);
 }
 
 /* ---- Detalhes do evento ---- */

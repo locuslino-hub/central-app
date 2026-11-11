@@ -1,7 +1,7 @@
 /* Quadro (Tarefa 20): uma coluna por sala. Moderno 3, paleta Sálvia: cartões
    brancos em relevo macio e a cor da sala (--c texto, --f fundo) só no topo da
-   coluna. Toque mínimo: 44 px. Computador e tablet: colunas lado a lado numa
-   área que rola para o lado. Celular: colunas empilhadas, que abrem e fecham. */
+   coluna. Toque mínimo: 44 px. Computador e tablet: cartões das salas com algo
+   e pílulas das salas em dia. Celular: colunas empilhadas, que abrem e fecham. */
 
 .quadro {
   display: grid;
@@ -12,24 +12,102 @@
   margin: 0;
 }
 
-/* ---- Colunas lado a lado ---- */
+/* ---- Computador e tablet: só o que pede atenção ---- */
 
-.quadro-colunas {
+/* As salas em dia: uma linha de pílulas na cor de cada sala, que levam à sala. */
+.quadro-em-dia {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  min-width: 0;
-  padding: 2px 2px 16px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  scroll-padding-inline: 2px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
 }
-.quadro-colunas:focus-visible {
-  outline: 3px solid var(--acao);
+.quadro-em-dia-rotulo {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.quadro-pilulas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.quadro-pilula {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--toque);
+  padding: 0 16px;
+  border-radius: 99px;
+  background: var(--f, var(--poco));
+  color: var(--c, var(--tinta2));
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+a.quadro-pilula:hover {
+  box-shadow: inset 0 0 0 2px var(--c);
+}
+a.quadro-pilula:focus-visible {
+  outline: 3px solid var(--c);
   outline-offset: 2px;
 }
-.quadro-colunas > .quadro-coluna {
+.quadro-tudo-em-dia {
+  margin: 0;
+  color: var(--tinta2);
+}
+
+/*
+ * As salas com algo: cartões em colunas, cada um do tamanho do que tem, encaixados
+ * um embaixo do outro sem buracos (lê-se de cima para baixo). Nada rola para o lado.
+ */
+.quadro-cartoes {
+  columns: 3 16rem;
+  column-gap: 14px;
+  min-width: 0;
+}
+.quadro-cartoes > .quadro-coluna {
+  margin: 0 0 14px;
+  break-inside: avoid;
+}
+/* No cartão da sala, a etiqueta da sala em cada item só repete o nome do cartão. */
+.quadro-cartoes .etiqueta:not(.etiqueta-atrasada) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.quadro-cartoes .sala-dia-titulo {
+  margin-top: 6px;
+  font-size: 0.74rem;
+}
+.quadro-cartoes .cal-titulo {
+  font-size: 0.9rem;
+}
+.quadro-cartoes .quadro-topo {
+  padding: 6px 16px 10px;
+}
+.quadro-cartoes .quadro-nome {
+  font-size: 1.35rem;
+}
+.quadro-cartoes .quadro-conta {
+  font-size: 0.84rem;
+}
+.quadro-cartoes .quadro-corpo {
+  gap: 10px;
+  padding: 10px 14px 14px;
+  font-size: 0.92rem;
+}
+.quadro-cartoes .cal-hora {
+  min-width: 2.8rem;
+  font-size: 1.25rem;
+}
+
+.quadro-coluna {
   flex: 0 0 min(19rem, 85%);
   scroll-snap-align: start;
 }

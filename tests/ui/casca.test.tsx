@@ -63,7 +63,7 @@ describe('computador (1280 px): menu à esquerda, página, painel direito', () =
       g.getAllByRole('link').map((a: HTMLElement) => a.textContent);
 
     expect(nomesDe(grupo('Calendário'))).toEqual(['Esta semana', 'Novembro', '2026']);
-    expect(nomesDe(grupo('Ver'))).toEqual(['Salas', 'Caixa', 'Quadro', 'Atividades', 'Sem prazo']);
+    expect(nomesDe(grupo('Ver'))).toEqual(['Salas', 'Caixa', 'Quadro', 'Atividades']);
     expect(href('Esta semana', menu)).toBe('#/semana');
     expect(href('Novembro', menu)).toBe('#/mes');
     expect(href('2026', menu)).toBe('#/ano');
@@ -71,7 +71,6 @@ describe('computador (1280 px): menu à esquerda, página, painel direito', () =
     expect(href('Caixa', menu)).toBe('#/caixa');
     expect(href('Quadro', menu)).toBe('#/quadro');
     expect(href('Atividades', menu)).toBe('#/atividades');
-    expect(href('Sem prazo', menu)).toBe('#/sem-prazo');
   });
 
   it('lista as salas guardadas, na ordem delas, cada uma com o seu endereço', async () => {
@@ -163,7 +162,7 @@ describe('celular (390 px): barra inferior com Mais', () => {
     expect(within(barra).getAllByRole('link').map((a) => a.textContent)).toEqual([
       'Painel',
       'Atividades',
-      'Sem prazo',
+      'Agora',
       'Salas',
       'Chat',
     ]);
@@ -172,7 +171,7 @@ describe('celular (390 px): barra inferior com Mais', () => {
     expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('o Mais leva a Esta semana, mês, ano, Agora, Quadro, Atividades, Sem prazo e Cores do Google, e Conectar e IA local', async () => {
+  it('o Mais leva a Esta semana, mês, ano, Agora, Quadro, Atividades e Cores do Google, e Conectar e IA local', async () => {
     await mostrar('#/', 390);
     const botao = screen.getByRole('button', { name: 'Mais' });
     expect(botao.getAttribute('aria-expanded')).toBe('false');
@@ -188,7 +187,6 @@ describe('celular (390 px): barra inferior com Mais', () => {
       ['Agora', '#/agora'],
       ['Quadro', '#/quadro'],
       ['Atividades', '#/atividades'],
-      ['Sem prazo', '#/sem-prazo'],
       ['Cores do Google', '#/cores'],
       ['Conectar aparelho', '#/conectar'],
       ['IA local', '#/ia'],
@@ -279,7 +277,7 @@ describe('tablet (800 px): trilho', () => {
     expect(within(trilho).getAllByRole('link').map((a) => a.textContent)).toEqual([
       'Painel',
       'Atividades',
-      'Sem prazo',
+      'Agora',
       'Salas',
       'Chat',
     ]);
@@ -316,7 +314,6 @@ describe('páginas', () => {
       ['#/caixa', 'Caixa'],
       ['#/quadro', 'Quadro'],
       ['#/atividades', 'Atividades'],
-      ['#/sem-prazo', 'Sem prazo'],
       ['#/chat', 'Chat'],
     ]) {
       navegar(hash);
@@ -326,7 +323,7 @@ describe('páginas', () => {
   });
 
   it('as telas que existem não dizem "Em breve"', async () => {
-    for (const hash of ['#/', '#/agora', '#/semana', '#/mes', '#/ano', '#/atividades', '#/sem-prazo', '#/salas', '#/chat', '#/caixa', '#/quadro']) {
+    for (const hash of ['#/', '#/agora', '#/semana', '#/mes', '#/ano', '#/atividades', '#/salas', '#/chat', '#/caixa', '#/quadro']) {
       const { unmount } = render(<App />);
       navegar(hash);
       expect(within(document.querySelector('main') as HTMLElement).queryByText('Esta tela chega numa próxima versão.')).toBeNull();
@@ -622,7 +619,7 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
   it('no menu do computador: nenhuma tela tem a marca, o Quadro já existe (Tarefa 20)', async () => {
     await mostrar('#/', 1280);
     const menu = principal();
-    for (const nome of ['Quadro', 'Esta semana', 'Novembro', '2026', 'Salas', 'Caixa', 'Atividades', 'Sem prazo']) {
+    for (const nome of ['Quadro', 'Esta semana', 'Novembro', '2026', 'Salas', 'Caixa', 'Atividades']) {
       expect(emBreve(itemDe(nome, menu))).toBeNull();
     }
   });
@@ -649,19 +646,19 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
     await mostrar('#/', 390);
     fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
     const folha = screen.getByRole('dialog', { name: 'Mais' });
-    for (const nome of ['Quadro', 'Esta semana', 'Novembro', '2026', 'Atividades', 'Sem prazo', 'Conectar aparelho']) {
+    for (const nome of ['Quadro', 'Esta semana', 'Novembro', '2026', 'Atividades', 'Conectar aparelho']) {
       expect(emBreve(itemDe(nome, folha))).toBeNull();
     }
   });
 
-  it('a barra do celular só leva a telas que existem: Painel, Atividades, Sem prazo, Salas e Chat', async () => {
+  it('a barra do celular só leva a telas que existem: Painel, Atividades, Agora, Salas e Chat', async () => {
     await mostrar('#/', 390);
     const barra = screen.getByRole('navigation', { name: 'Principal' });
     expect(barra.querySelector('.em-breve')).toBeNull();
     expect(within(barra).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
       '#/',
       '#/atividades',
-      '#/sem-prazo',
+      '#/agora',
       '#/salas',
       '#/chat',
     ]);

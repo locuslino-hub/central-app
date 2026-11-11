@@ -93,11 +93,22 @@ describe('Quadro (computador)', () => {
     await waitFor(() => expect(ori.getByText('2 tarefas · 1 compromisso · 1 e-mail')).toBeTruthy());
   });
 
-  it('coluna sem nada diz isso', async () => {
+  it('sala sem nada vira pílula "Em dia", que leva à sala; não ganha cartão', async () => {
+    await cenario();
+    mostrar();
+    const emDia = within(await screen.findByRole('list', { name: 'Em dia:' }));
+    await waitFor(() => expect(emDia.getAllByRole('link').map((a) => a.textContent)).toEqual(['Investigação', 'MBA', 'Pessoal', 'Casa']));
+    expect(emDia.getByRole('link', { name: 'Casa' }).getAttribute('href')).toBe('#/sala/sala-casa');
+    expect(screen.queryByRole('region', { name: 'Casa' })).toBeNull();
+    const cartoes = screen.getByRole('region', { name: 'Salas com algo em aberto' });
+    expect([...cartoes.querySelectorAll('h2 .quadro-nome')].map((n) => n.textContent)).toEqual(['Doutoramento', 'Aulas', 'Orientações']);
+  });
+
+  it('sem nada em nenhuma sala, diz que está tudo em dia', async () => {
     await scriptDeTeste();
     mostrar();
-    const casa = await coluna('Casa');
-    await waitFor(() => expect(casa.getByText('Nada nesta sala.')).toBeTruthy());
+    expect(await screen.findByText('Tudo em dia: nada em aberto nas salas.')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Salas com algo em aberto' })).toBeNull();
   });
 
   it('Tudo é o filtro de partida e os filtros dizem qual está ligado', async () => {
@@ -125,9 +136,10 @@ describe('Quadro (computador)', () => {
     expect(ori.getByText('Reunião de orientação')).toBeTruthy();
     expect(ori.getByText('Revisão do capítulo 2')).toBeTruthy();
 
-    // Aula do dia 12 e tarefa sem prazo ficam para fora.
-    expect(aulas.queryByText('Aula de Modelagem')).toBeNull();
-    expect(aulas.queryByText('Preparar aula de Modelagem')).toBeNull();
+    // Aula do dia 12 e tarefa sem prazo ficam para fora: Aulas fica em dia, sem cartão.
+    expect(screen.queryByText('Aula de Modelagem')).toBeNull();
+    expect(screen.queryByText('Preparar aula de Modelagem')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Aulas' })).toBeNull();
 
     // Doutoramento: tarefa atrasada e seminário de terça (da semana) entram; e-mail de 28/10 não.
     const dout = await coluna('Doutoramento');
@@ -192,21 +204,21 @@ describe('Quadro (celular e tablet)', () => {
     expect(screen.queryByText('Nada nesta sala.')).toBeNull();
   });
 
-  it('no tablet as colunas ficam lado a lado, numa área que rola, com nome e teclado', async () => {
-    await scriptDeTeste();
+  it('no tablet, como no computador: cartões das salas com algo e pílulas das em dia', async () => {
+    await cenario();
     mostrar(800);
-    const area = screen.getByRole('region', { name: 'Colunas das salas' });
-    expect(area.getAttribute('tabindex')).toBe('0');
-    await coluna('Casa');
-    expect([...area.querySelectorAll('h2 .quadro-nome')].map((n) => n.textContent)).toEqual(NOMES);
+    const area = await screen.findByRole('region', { name: 'Salas com algo em aberto' });
+    await waitFor(() => expect([...area.querySelectorAll('h2 .quadro-nome')].map((n) => n.textContent)).toEqual(['Doutoramento', 'Aulas', 'Orientações']));
+    expect(screen.getByRole('list', { name: 'Em dia:' })).toBeTruthy();
   });
 
   it('girar o aparelho troca a pilha pelas colunas', async () => {
     await scriptDeTeste();
     mostrar(390);
-    expect(screen.queryByRole('region', { name: 'Colunas das salas' })).toBeNull();
+    expect(await screen.findAllByRole('button', { name: /Casa/ })).toHaveLength(1);
     larguraDaJanela(1280);
     act(() => void window.dispatchEvent(new Event('resize')));
-    expect(screen.getByRole('region', { name: 'Colunas das salas' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Casa/ })).toBeNull();
+    expect(await screen.findByText('Tudo em dia: nada em aberto nas salas.')).toBeTruthy();
   });
 });
