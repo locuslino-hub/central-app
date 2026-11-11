@@ -1,4 +1,10 @@
 // @vitest-environment node
+// Guardas do repositório público: nada de módulo de CDN sem versão, nada de segredo no git, nenhum
+// e-mail pessoal nos arquivos (nem no histórico).
+//
+// Como rodar: `npx vitest run tests/repositorio.test.ts`. A conferência do histórico do Git faz parte
+// dela (cerca de 2 s); fica de fora sozinha em clone raso (`git clone --depth`, como o do CI), que não
+// tem o histórico inteiro. Para refazer só ela: `npx vitest run tests/repositorio.test.ts -t histórico`.
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -92,4 +98,134 @@ describe('.gitignore', () => {
       expect(ignorado(caminho)).toBe(false);
     },
   );
+});
+
+// ---- Segredos e e-mails pessoais (Tarefa 23) ----
+
+/** E-mail: texto@domínio.letras (`pacote@1.2.3` e `@escopo/pacote` não casam). */
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+
+/**
+ * Só vale: noreply (GitHub e a assinatura das contribuições) e endereços inventados: os domínios de exemplo
+ * dos testes (exemplo.invalid, exemplo.com), qualquer `.invalid` e `example.com/org/net` (reservados, nunca de uma pessoa de verdade).
+ */
+function emailPermitido(email: string): boolean {
+  const [local, dominio] = email.toLowerCase().split('@');
+  const ficticio = /(?:^|\.)(?:exemplo\.(?:invalid|com)|example\.(?:com|org|net))$|\.invalid$/.test(dominio);
+  return ficticio || local === 'noreply' || local.endsWith('+noreply') || dominio === 'users.noreply.github.com';
+}
+
+/** `https://usuario:senha@host` e `https://usuario@host` não são e-mail: a parte antes do @ é dado de endereço. */
+const SEM_USUARIO_DE_URL = /\/\/[^\s/@]*@/g;
+
+function emailsDeFora(texto: string): string[] {
+  return (texto.replace(SEM_USUARIO_DE_URL, '//').match(EMAIL) ?? []).filter((email) => !emailPermitido(email));
+}
+
+/** Formatos de chave, token e credencial. O que o app guarda no aparelho nunca aparece escrito no código. */
+const SEGREDOS: [nome: string, padrao: RegExp][] = [
+  ['token do GitHub', /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})/],
+  ['chave de API do Google', /\bAIza[0-9A-Za-z_-]{30,}/],
+  ['segredo de cliente do Google', /\bGOCSPX-[0-9A-Za-z_-]{20,}/],
+  ['token de acesso do Google', /\bya29\.[0-9A-Za-z_-]{30,}/],
+  ['token de atualização do Google', /\b1\/\/0[0-9A-Za-z_-]{40,}/],
+  ['id de implantação do Apps Script', /\/macros\/s\/AKfycb[0-9A-Za-z_-]{20,}/],
+  ['chave privada', /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY/],
+  ['chave da AWS', /\bAKIA[0-9A-Z]{16}\b/],
+  ['token do Slack', /\bxox[abposr]-[0-9A-Za-z-]{10,}/],
+  ['chave sk-', /\bsk-[A-Za-z0-9_-]{32,}/],
+  // Os códigos dos testes dizem "ficticio" ou "teste" no próprio texto.
+  ['código do aparelho preenchido', /["']?codigo["']?\s*[:=]\s*["'](?![^"']*(?:ficticio|teste|exemplo))[A-Za-z0-9_-]{32,}["']/],
+];
+
+function segredosEm(texto: string): string[] {
+  return SEGREDOS.filter(([, padrao]) => padrao.test(texto)).map(([nome]) => nome);
+}
+
+const BINARIOS = /\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|eot|gguf|bin|zip|gz|pdf|wasm|mp3|mp4|webm)$/i;
+
+/**
+ * Este arquivo traz, de propósito, um exemplo de cada segredo e e-mail que procura. O package-lock.json
+ * leva o e-mail de contato de quem mantém cada pacote de terceiros.
+ */
+const FORA_DA_VARREDURA = new Set(['tests/repositorio.test.ts', 'package-lock.json']);
+
+function arquivosDoGit(): string[] {
+  const saida = spawnSync('git', ['ls-files', '-z'], { encoding: 'utf8' });
+  return saida.stdout.split('\0').filter((caminho) => caminho !== '' && !BINARIOS.test(caminho) && !FORA_DA_VARREDURA.has(caminho));
+}
+
+describe('e-mails e segredos: as próprias verificações', () => {
+  it.each([
+    ['e-mail pessoal', 'fale com ana.silva@gmail.com hoje', ['ana.silva@gmail.com']],
+    ['e-mail institucional', 'prof@universidade.edu.pt', ['prof@universidade.edu.pt']],
+    ['noreply do GitHub', '290137166+locuslino-hub@users.noreply.github.com', []],
+    ['noreply da assinatura', 'Co-Authored-By: Claude <noreply@anthropic.com>', []],
+    ['domínio de exemplo', 'marina@exemplo.invalid e souza@exemplo.invalid', []],
+    ['versão de pacote', 'vite@8.3.6 e @preact/preset-vite', []],
+  ])('e-mail: %s', (_nome, texto, esperado) => {
+    expect(emailsDeFora(texto)).toEqual(esperado);
+  });
+
+  it.each([
+    ['token do GitHub', `ghp_${'a1B2'.repeat(9)}`],
+    ['chave de API do Google', `AIza${'Sy-x9'.repeat(8)}`],
+    ['id de implantação do Apps Script', `https://script.google.com/macros/s/AKfycb${'x1_-'.repeat(10)}/exec`],
+    ['chave privada', '-----BEGIN PRIVATE KEY-----'],
+    ['chave da AWS', 'AKIAABCDEFGHIJKLMNOP'],
+    ['código do aparelho preenchido', `{ codigo: '${'a1b2c3d4'.repeat(5)}' }`],
+  ])('segredo: pega %s', (nome, texto) => {
+    expect(segredosEm(texto)).toContain(nome);
+  });
+
+  it.each([
+    ['id fictício dos testes', 'https://script.google.com/macros/s/ID-FICTICIO/exec'],
+    ['código fictício curto', "codigo: 'abc'"],
+    ['texto comum', 'A chave de API fica fora do código.'],
+  ])('segredo: aceita %s', (_nome, texto) => {
+    expect(segredosEm(texto)).toEqual([]);
+  });
+});
+
+describe('arquivos versionados', () => {
+  const arquivos = arquivosDoGit();
+
+  it('a lista de arquivos do git não está vazia', () => {
+    expect(arquivos.length).toBeGreaterThan(50);
+  });
+
+  it('nenhum tem e-mail que não seja noreply ou @exemplo.invalid', () => {
+    const problemas = arquivos.flatMap((arquivo) =>
+      emailsDeFora(readFileSync(arquivo, 'utf8')).map((email) => `${arquivo}: ${email}`),
+    );
+    expect(problemas).toEqual([]);
+  });
+
+  it('nenhum tem chave, token ou credencial', () => {
+    const problemas = arquivos.flatMap((arquivo) =>
+      segredosEm(readFileSync(arquivo, 'utf8')).map((nome) => `${arquivo}: ${nome}`),
+    );
+    expect(problemas).toEqual([]);
+  });
+});
+
+describe('histórico do Git', () => {
+  const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 512 });
+  const raso = git('rev-parse', '--is-shallow-repository').stdout.trim() === 'true';
+
+  // Clone raso (CI) não tem o histórico inteiro: não há o que conferir.
+  it.skipIf(raso)('nenhum autor, mensagem ou linha já adicionada tem e-mail de fora ou segredo', () => {
+    const autores = git('log', '--all', '--format=%an <%ae> / %cn <%ce>%n%B').stdout;
+    expect(emailsDeFora(autores)).toEqual([]);
+    expect(segredosEm(autores)).toEqual([]);
+
+    // Só as linhas acrescentadas: o que já foi retirado também ficou no histórico.
+    const adicionadas = git('log', '--all', '-p', '--no-color', '--format=', '--', '.', ...[...FORA_DA_VARREDURA].map((caminho) => `:(exclude)${caminho}`))
+      .stdout.split('\n')
+      .filter((linha) => linha.startsWith('+') && !linha.startsWith('+++'))
+      .join('\n');
+    expect(adicionadas.length).toBeGreaterThan(0);
+    expect(emailsDeFora(adicionadas)).toEqual([]);
+    expect(segredosEm(adicionadas)).toEqual([]);
+  });
 });

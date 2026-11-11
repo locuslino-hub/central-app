@@ -39,7 +39,7 @@ function email(id: string, data: string, extra: Partial<Email> = {}): Email {
   return {
     id,
     remetente: 'Marina',
-    enderecoRemetente: 'marina@exemplo.com',
+    enderecoRemetente: 'marina@exemplo.invalid',
     assunto: `Assunto ${id}`,
     trecho: 'Olá, tudo bem?',
     data,
