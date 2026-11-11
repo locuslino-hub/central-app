@@ -106,6 +106,20 @@ describe('chamar', () => {
     await expect(chamar('ping')).rejects.toBeInstanceOf(ErroConexao);
   });
 
+  it('ok sem dados é resposta inválida: lança ErroConexao com motivo claro, não devolve undefined', async () => {
+    await salvarConexao(CONEXAO);
+    respondeCom('{"ok":true}');
+    const lancado = await chamar('puxar').catch((e: unknown) => e);
+    expect(lancado).toBeInstanceOf(ErroConexao);
+    expect((lancado as Error).message).toBe('O script respondeu sem os dados');
+  });
+
+  it('dados nulos ainda são uma resposta (quem chamou confere a forma)', async () => {
+    await salvarConexao(CONEXAO);
+    respondeCom('{"ok":true,"dados":null}');
+    await expect(chamar('ping')).resolves.toBeNull();
+  });
+
   it.each(['codigo-invalido', 'ocupado', 'interno'])(
     'resposta recusada lança ErroScript com erro %s',
     async (erro) => {
