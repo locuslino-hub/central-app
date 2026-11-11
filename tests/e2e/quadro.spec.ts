@@ -170,14 +170,18 @@ test.describe('computador, 1280 px', () => {
     const erros = vigiarErros(page);
     const acoes = await abrirQuadro(page);
     const principal = page.getByRole('main');
-    const area = principal.getByRole('region', { name: 'Colunas das salas' });
+    const area = principal.getByRole('region', { name: 'Salas com algo em aberto' });
     const ori = area.getByRole('region', { name: 'Orientações' });
 
     await expect(ori.getByText('Revisão do capítulo 2')).toBeVisible();
     await expect(ori.getByText('Reunião de orientação')).toBeVisible();
     await expect(ori.getByText('Revisar parágrafo do relatório')).toBeVisible();
     await expect(area.getByRole('region', { name: 'Aulas' }).getByText('Aula de Modelagem')).toBeVisible();
-    await expect(area.getByRole('heading', { level: 2 })).toHaveCount(8); // 7 salas + Sem sala (e-mail da Aurora)
+    // Só as salas com algo viram cartão; as outras ficam em pílulas "Em dia". Sem sala: e-mail da Aurora.
+    await expect(area.getByRole('region', { name: 'Sem sala' })).toBeVisible();
+    const cartoes = await area.getByRole('heading', { level: 2 }).count();
+    const pilulas = await principal.getByRole('list', { name: 'Em dia:' }).getByRole('listitem').count();
+    expect(cartoes + pilulas).toBe(8);
     expect(await semRolagemDeLado(page)).toBe(true);
     await capturar(page, 'quadro-1280');
 

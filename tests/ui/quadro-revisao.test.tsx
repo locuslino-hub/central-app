@@ -47,9 +47,9 @@ describe('Quadro: Só e-mails conta só e-mails', () => {
     expect(ori.getByText('1 e-mail')).toBeTruthy();
     expect(ori.queryByText(/^d+ tarefas?/)).toBeNull();
     expect(ori.queryByText('Revisar capítulo 2')).toBeNull();
-    const aulas = await coluna('Aulas');
-    expect(aulas.getByText('Nenhum e-mail nesta sala.')).toBeTruthy();
-    expect(aulas.getByText('Nada')).toBeTruthy();
+    // Aulas só tem tarefa: em Só e-mails vira pílula "Sem e-mail".
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Aulas' })).toBeNull());
+    expect(within(screen.getByRole('list', { name: 'Sem e-mail:' })).getByRole('link', { name: 'Aulas' })).toBeTruthy();
   });
 });
 
