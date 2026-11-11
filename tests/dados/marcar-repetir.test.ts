@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { colocarNaAgenda } from '../../src/dados/marcar';
-import { listar, semear } from '../../src/dados/loja';
+import { colocarNaAgenda, concluirSemAgenda } from '../../src/dados/marcar';
+import { listar, listarPendentes, semear } from '../../src/dados/loja';
 import * as tarefas from '../../src/dados/tarefas';
 import { agendaEscrita } from '../apoio/agenda-escrita';
 import { criar } from '../apoio/tarefas';
@@ -65,5 +65,62 @@ describe('colocarNaAgenda: tentar de novo depois de falhar ao concluir', () => {
     agenda.modo('ok');
     expect(agenda.eventos.size).toBe(1);
     expect(agenda.de('criarEvento')).toHaveLength(1);
+  });
+});
+
+describe('Concluir sem agenda depois de uma tentativa que criou o evento', () => {
+  const daAgenda = async () => (await listarPendentes()).filter((p) => p.tipo === 'agenda');
+
+  it('o evento da tentativa anterior sai do Google e a tarefa conclui', async () => {
+    const { agenda, tarefa } = await preparar();
+    await expect(colocarNaAgenda(tarefa, marcacao)).rejects.toThrow('disco cheio');
+    expect(agenda.eventos.size).toBe(1);
+
+    const entrada = await concluirSemAgenda(tarefa.id);
+
+    expect(entrada).toBeDefined();
+    expect(agenda.eventos.size).toBe(0);
+    expect((await listar('tarefas'))[0].feito).toBe(true);
+    // Uma vez só: tentar Colocar na agenda depois cria um evento novo, não reaproveita o removido.
+    expect(await daAgenda()).toEqual([]);
+  });
+
+  it('sem internet na primeira tentativa: o pedido de criar sai da fila e nada chega ao Google', async () => {
+    const { agenda, tarefa } = await preparar();
+    agenda.modo('rede');
+    await expect(colocarNaAgenda(tarefa, marcacao)).rejects.toThrow('disco cheio');
+    expect(await daAgenda()).toHaveLength(1);
+
+    await concluirSemAgenda(tarefa.id);
+
+    expect(await daAgenda()).toEqual([]);
+    agenda.modo('ok');
+    expect(agenda.eventos.size).toBe(0);
+    expect((await listar('tarefas'))[0].feito).toBe(true);
+  });
+
+  it('o Google recusa a remoção agora: a remoção vai para a fila e a tarefa conclui mesmo assim', async () => {
+    const { agenda, tarefa } = await preparar();
+    await expect(colocarNaAgenda(tarefa, marcacao)).rejects.toThrow('disco cheio');
+    const [id] = [...agenda.eventos.keys()];
+    agenda.modo('recusar');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await concluirSemAgenda(tarefa.id);
+
+    expect(await daAgenda()).toMatchObject([{ acao: 'removerEvento', id }]);
+    expect((await listar('tarefas'))[0].feito).toBe(true);
+  });
+
+  it('sem tentativa anterior, só conclui (nada vai para a agenda nem para a fila)', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    const tarefa = await criar('Marcar banca com o Prof. Souza', { marcar: true });
+
+    await concluirSemAgenda(tarefa.id);
+
+    expect(agenda.pedidos).toEqual([]);
+    expect(await daAgenda()).toEqual([]);
+    expect((await listar('tarefas'))[0].feito).toBe(true);
   });
 });

@@ -3,8 +3,7 @@
 // errado, um aviso em palavras simples. O Desfazer é o da pilha do app.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Desfazivel } from '../dados/desfazer';
-import { colocarNaAgenda } from '../dados/marcar';
-import { concluirTarefa } from '../dados/tarefas';
+import { colocarNaAgenda, concluirSemAgenda } from '../dados/marcar';
 import type { Tarefa } from '../dados/tipos';
 import { CaixaMarcar } from './CaixaMarcar';
 import './tarefas.css';
@@ -119,7 +118,7 @@ export function useMarcar(hoje: string, acoes: Acoes, base: { current: HTMLEleme
         return agenda;
       }}
       aoConcluirSemAgenda={async () => {
-        const entrada = await concluirTarefa(tarefa.id);
+        const entrada = await concluirSemAgenda(tarefa.id);
         if (entrada) {
           concluiu.current = true;
           await acoes.agir(async () => ({ texto: entrada.rotulo, entrada }), 'Não consegui concluir. Tente de novo.');

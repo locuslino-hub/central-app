@@ -130,6 +130,28 @@ describe('concluir uma tarefa de marcar', () => {
     expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toEqual([]);
   });
 
+  it('Colocar na agenda falha ao concluir, e o dono escolhe Concluir sem agenda: o evento criado não fica no Google', async () => {
+    const { caixa, agenda } = await abrir();
+    preencher(caixa, '15:30');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = IDBObjectStore.prototype.put;
+    // O evento é criado; gravar a tarefa concluída falha uma vez.
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args) {
+      if (this.name === 'tarefas') throw new Error('disco cheio');
+      return original.apply(this, args);
+    });
+    fireEvent.click(caixa.getByRole('button', { name: 'Colocar na agenda' }));
+    expect((await caixa.findByRole('alert')).textContent).toBe('Não consegui salvar. Tente de novo.');
+    expect(agenda.eventos.size).toBe(1);
+    put.mockRestore();
+
+    fireEvent.click(caixa.getByRole('button', { name: 'Concluir sem agenda' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await feita()).toBe(true);
+    expect(agenda.eventos.size).toBe(0);
+  });
+
   it('Ainda não marquei fecha a caixa e a tarefa segue aberta', async () => {
     const { caixa, agenda } = await abrir();
 

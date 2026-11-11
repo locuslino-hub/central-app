@@ -3,6 +3,7 @@
 // que não é tela: sugerir o fim, conferir os campos e colocar na agenda.
 import { desfazerCompromisso, criarCompromisso, type SituacaoDaAgenda } from './compromisso';
 import type { Desfazivel } from './desfazer';
+import { enfileirarAgenda } from './loja';
 import { concluirTarefa } from './tarefas';
 import type { Tarefa } from './tipos';
 
@@ -98,6 +99,30 @@ export async function colocarNaAgenda(
   });
   criadosSemConcluir.delete(tarefa.id);
   return { entrada, agenda: situacao };
+}
+
+/**
+ * O dono desistiu da agenda para esta tarefa ("Concluir sem agenda"): o
+ * compromisso de uma tentativa anterior que criou o evento e não concluiu sai
+ * do Google (ou da fila, se ainda não tinha saído). Se o Google recusa agora,
+ * a remoção entra na fila e a sincronia a leva depois: concluir não fica preso.
+ */
+export async function descartarTentativaDeMarcar(tarefaId: string): Promise<void> {
+  const previo = criadosSemConcluir.get(tarefaId);
+  if (!previo) return;
+  try {
+    await desfazerCompromisso(previo.eventoId);
+  } catch (erro) {
+    console.error('Não consegui remover o compromisso da tentativa anterior; a remoção fica na fila', erro);
+    await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: previo.eventoId });
+  }
+  criadosSemConcluir.delete(tarefaId);
+}
+
+/** "Concluir sem agenda": tira o que uma tentativa anterior deixou na agenda e conclui. */
+export async function concluirSemAgenda(tarefaId: string): Promise<Desfazivel | undefined> {
+  await descartarTentativaDeMarcar(tarefaId);
+  return concluirTarefa(tarefaId);
 }
 
 /** Esquece o que ficou criado sem concluir (testes). */

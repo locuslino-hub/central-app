@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { segundaDaSemana } from '../chat/datas';
 import type { Desfazivel } from '../dados/desfazer';
 import type { SituacaoDaAgenda } from '../dados/compromisso';
-import { colocarNaAgenda, type Marcacao } from '../dados/marcar';
+import { colocarNaAgenda, descartarTentativaDeMarcar, type Marcacao } from '../dados/marcar';
 import { apagarTarefa, concluirTarefa, darCiencia, editarTarefa, reabrirTarefa, type Edicao } from '../dados/tarefas';
 import type { Sala, Tarefa } from '../dados/tipos';
 import { CaixaMarcar } from './CaixaMarcar';
@@ -498,7 +498,11 @@ export function LinhaDeTarefa({ tarefa, salas, hoje, conclusoes, prepararFoco, c
             dia={tarefa.data}
             hoje={hoje}
             aoColocar={(marcacao) => conclusoes.colocarNaAgenda(tarefa, marcacao)}
-            aoConcluirSemAgenda={() => conclusoes.alternar(tarefa)}
+            aoConcluirSemAgenda={async () => {
+              // Uma tentativa anterior que criou o evento e não concluiu: o evento sai.
+              await descartarTentativaDeMarcar(tarefa.id);
+              await conclusoes.alternar(tarefa);
+            }}
             aoFechar={fecharMarcar}
           />
         )}
