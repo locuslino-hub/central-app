@@ -433,7 +433,7 @@
 }
 .atalhos a:hover,
 .atalhos button.mais:hover {
-  background: var(--poco);
+  background: rgb(var(--som-rgb) / 0.08);
 }
 .atalhos a:focus-visible,
 .atalhos button.mais:focus-visible {

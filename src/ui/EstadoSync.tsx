@@ -43,6 +43,19 @@ function useAparelhoConectado(estado: EstadoSync): boolean | undefined {
   return conectado;
 }
 
+/** Já em Conectar aparelho? Ali o chip só diz o estado: um link para a própria página não leva a lugar nenhum. */
+function useEmConectar(): boolean {
+  const ler = () => typeof location !== 'undefined' && /^#\/conectar(?:[/?]|$)/.test(location.hash);
+  const [em, setEm] = useState(ler);
+  useEffect(() => {
+    const atualizar = () => setEm(ler());
+    atualizar();
+    window.addEventListener('hashchange', atualizar);
+    return () => window.removeEventListener('hashchange', atualizar);
+  }, []);
+  return em;
+}
+
 export function EstadoDaSincronia() {
   const [estado, setEstado] = useState<EstadoSync>(estadoAtual);
   useEffect(() => {
@@ -50,6 +63,7 @@ export function EstadoDaSincronia() {
     return assinarEstado(setEstado);
   }, []);
   const conectado = useAparelhoConectado(estado);
+  const emConectar = useEmConectar();
 
   const mostrado: Mostrado = conectado === false && estado !== 'atualizando' ? 'nao-conectado' : estado;
   const texto = TEXTO[mostrado];
@@ -58,7 +72,7 @@ export function EstadoDaSincronia() {
       <div class="sync" data-estado={mostrado}>
         <span class="ponto" aria-hidden="true" />
         <span class="so-leitor">Sincronização: </span>
-        {LEVAM_A_CONECTAR.has(mostrado) ? <a href="#/conectar">{texto}</a> : <span>{texto}</span>}
+        {LEVAM_A_CONECTAR.has(mostrado) && !emConectar ? <a href="#/conectar">{texto}</a> : <span>{texto}</span>}
       </div>
       {/* Região viva à parte: o leitor recebe só o texto, e só nos estados que pedem atenção. */}
       <p class="so-leitor" role="status">
