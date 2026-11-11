@@ -8,6 +8,7 @@ import { Chat } from './Chat';
 import { Conectar } from './Conectar';
 import { CoresDoGoogle } from './CoresDoGoogle';
 import { ConfigIA } from './ConfigIA';
+import { Exportar } from './Exportar';
 import { useTituloDaAba } from './hooks';
 import { Mes } from './Mes';
 import { Painel } from './Painel';
@@ -44,6 +45,7 @@ function ConectarNaCasca({ titulo }: { titulo: string }) {
     <div class="ajustes-do-aparelho">
       <Conectar />
       <SeuNome />
+      <Exportar />
     </div>
   );
 }

@@ -625,12 +625,21 @@
   display: grid;
   gap: 18px;
 }
-.seu-nome {
+.seu-nome,
+.exportar {
   max-width: 44rem;
 }
-.seu-nome-nota {
+.seu-nome-nota,
+.exportar-nota {
   margin: 0 0 12px;
   color: var(--tinta2);
+}
+.exportar-restaurar {
+  margin: 18px 0 6px;
+}
+.exportar .campo {
+  min-height: var(--toque);
+  max-width: 100%;
 }
 .seu-nome-linha {
   display: flex;
