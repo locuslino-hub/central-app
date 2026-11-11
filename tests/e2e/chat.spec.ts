@@ -214,3 +214,31 @@ test.describe('computador, 1280 px', () => {
     await expect(page.getByRole('main').getByRole('textbox', { name: 'Escreva ou dite' })).toBeVisible();
   });
 });
+
+test.describe('computador 1280×800, conversa longa', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test('depois de várias mensagens só o log rola: nada mais da janela desloca', async ({ page }) => {
+    await page.goto('/central-app/');
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
+    await painel.getByRole('button', { name: 'Chat' }).click();
+    const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
+    const frases = ['Comprar pão', 'Mandar mensagem para Renata', 'Preciso parafusar o apoio do banheiro', 'asdf qwer', 'Ligar para a Aurora amanhã às 15h', 'Comprar leite'];
+    for (const frase of frases) {
+      await campo.fill(frase);
+      await campo.press('Enter');
+    }
+    await expect(painel.getByRole('article')).toHaveCount(frases.length);
+    // Nada fora do log desloca: nem a página, nem a casca, nem a coluna da direita.
+    const rolagens = await page.evaluate(() => ({
+      pagina: document.scrollingElement?.scrollTop ?? 0,
+      corpo: document.body.scrollTop,
+      casca: document.querySelector('.casca')?.scrollTop ?? 0,
+      coluna: document.querySelector('.painel-direito')?.scrollTop ?? 0,
+    }));
+    expect(rolagens).toEqual({ pagina: 0, corpo: 0, casca: 0, coluna: 0 });
+    await expect(campo).toBeInViewport();
+    // A mensagem mais nova fica à vista, com o botão dela.
+    await expect(painel.getByRole('article').last().getByRole('button', { name: 'Desfazer' })).toBeInViewport();
+  });
+});
