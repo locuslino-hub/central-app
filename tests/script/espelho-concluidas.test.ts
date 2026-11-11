@@ -23,7 +23,7 @@ const AGORA = Date.parse('2026-11-11T12:00:00Z');
 const servico = (g: TarefasGoogleFalso) => g.servico as unknown as ServicoDeTarefas;
 
 function item(extra: Partial<ItemDoEspelho> = {}): ItemDoEspelho {
-  return { id: 'tarefa-1', titulo: 'Revisar parágrafo do relatório', data: '2026-11-10', feito: false, apagado: false, ...extra };
+  return { id: 'tarefa-1', titulo: 'Revisar parágrafo do relatório', data: '2026-11-10', feito: false, feitoEm: 0, apagado: false, ...extra };
 }
 
 const espelhar = (g: TarefasGoogleFalso, ...itens: ItemDoEspelho[]) => espelharTarefas({ tarefas: itens }, servico(g)).resultados;
@@ -45,12 +45,12 @@ describe('concluidasNoEspelho (ação lerEspelhos)', () => {
     const g = tarefasGoogleFalso();
     const outra = g.lista('Minhas tarefas');
     const c = central(g);
-    g.tarefa(c, { id: 'g1', title: 'Ligar para a Renata', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T21:00:00.000Z' });
+    g.tarefa(c, { id: 'g1', title: 'Ligar para a Renata', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T21:00:00.000Z', updated: '2026-11-10T21:00:00.000Z' });
     g.tarefa(c, { id: 'g2', title: 'Aberta', notes: marcadorDaTarefa('tarefa-2') });
-    g.tarefa(c, { id: 'g3', title: 'Sem marcador', status: 'completed', completed: '2026-11-10T21:00:00.000Z' });
-    g.tarefa(c, { id: 'g4', notes: marcadorDaTarefa('tarefa-4'), status: 'completed', completed: '2026-11-10T21:00:00.000Z', deleted: true });
-    g.tarefa(c, { id: 'g5', notes: marcadorDaTarefa('tarefa-5'), status: 'completed', completed: '2026-11-10T22:00:00.000Z', hidden: true });
-    g.tarefa(outra, { id: 'g6', notes: marcadorDaTarefa('tarefa-6'), status: 'completed', completed: '2026-11-10T21:00:00.000Z' });
+    g.tarefa(c, { id: 'g3', title: 'Sem marcador', status: 'completed', completed: '2026-11-10T21:00:00.000Z', updated: '2026-11-10T21:00:00.000Z' });
+    g.tarefa(c, { id: 'g4', notes: marcadorDaTarefa('tarefa-4'), status: 'completed', completed: '2026-11-10T21:00:00.000Z', updated: '2026-11-10T21:00:00.000Z', deleted: true });
+    g.tarefa(c, { id: 'g5', notes: marcadorDaTarefa('tarefa-5'), status: 'completed', completed: '2026-11-10T22:00:00.000Z', updated: '2026-11-10T22:00:00.000Z', hidden: true });
+    g.tarefa(outra, { id: 'g6', notes: marcadorDaTarefa('tarefa-6'), status: 'completed', completed: '2026-11-10T21:00:00.000Z', updated: '2026-11-10T21:00:00.000Z' });
 
     const resposta = concluidasNoEspelho({ desde: Date.parse('2026-11-10T00:00:00Z') }, servico(g), AGORA);
     expect(resposta).toEqual({
@@ -65,19 +65,20 @@ describe('concluidasNoEspelho (ação lerEspelhos)', () => {
     for (const proibido of ['Renata', 'central:', 'g1', 'g5']) expect(texto).not.toContain(proibido);
   });
 
-  it('pede ao Google só as concluídas desde `desde`, com as escondidas, e só os campos necessários', () => {
+  it('pede ao Google só as mudadas desde `desde` (updatedMin), filtra as concluídas aqui, com as escondidas e só os campos necessários', () => {
     const g = tarefasGoogleFalso();
     const c = central(g);
-    g.tarefa(c, { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-01T09:00:00.000Z' });
-    g.tarefa(c, { id: 'g2', notes: marcadorDaTarefa('tarefa-2'), status: 'completed', completed: '2026-11-10T09:00:00.000Z' });
+    g.tarefa(c, { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-01T09:00:00.000Z', updated: '2026-11-01T09:00:00.000Z' });
+    g.tarefa(c, { id: 'g2', notes: marcadorDaTarefa('tarefa-2'), status: 'completed', completed: '2026-11-10T09:00:00.000Z', updated: '2026-11-10T09:00:00.000Z' });
     const desde = Date.parse('2026-11-09T00:00:00Z');
     const { concluidas } = concluidasNoEspelho({ desde }, servico(g), AGORA);
     expect(concluidas.map((c) => c.id)).toEqual(['tarefa-2']);
     const [lista] = g.de('Tasks.list');
+    expect(lista.args[1]).not.toHaveProperty('completedMin');
     expect(lista.args[1]).toMatchObject({
       showCompleted: true,
       showHidden: true,
-      completedMin: new Date(desde).toISOString(),
+      updatedMin: new Date(desde).toISOString(),
       fields: 'items(notes,status,completed,deleted),nextPageToken',
     });
   });
@@ -86,7 +87,7 @@ describe('concluidasNoEspelho (ação lerEspelhos)', () => {
     const g = tarefasGoogleFalso();
     central(g);
     concluidasNoEspelho({}, servico(g), AGORA);
-    expect(g.de('Tasks.list')[0].args[1]).toMatchObject({ completedMin: new Date(AGORA - JANELA_SEM_DESDE_MS).toISOString() });
+    expect(g.de('Tasks.list')[0].args[1]).toMatchObject({ updatedMin: new Date(AGORA - JANELA_SEM_DESDE_MS).toISOString() });
     expect(JANELA_SEM_DESDE_MS).toBe(30 * 24 * 60 * 60 * 1000);
   });
 
@@ -102,7 +103,7 @@ describe('concluidasNoEspelho (ação lerEspelhos)', () => {
     const g = tarefasGoogleFalso({ paginaMaxima: 100 });
     const c = central(g);
     for (let i = 0; i < CONCLUIDAS_NO_MAXIMO + 50; i++) {
-      g.tarefa(c, { id: `g${i}`, notes: marcadorDaTarefa(`tarefa-${i}`), status: 'completed', completed: '2026-11-10T09:00:00.000Z' });
+      g.tarefa(c, { id: `g${i}`, notes: marcadorDaTarefa(`tarefa-${i}`), status: 'completed', completed: '2026-11-10T09:00:00.000Z', updated: '2026-11-10T09:00:00.000Z' });
     }
     const { concluidas } = concluidasNoEspelho({}, servico(g), AGORA);
     expect(concluidas).toHaveLength(CONCLUIDAS_NO_MAXIMO);
@@ -112,8 +113,8 @@ describe('concluidasNoEspelho (ação lerEspelhos)', () => {
   it('a mesma tarefa da Central em duas espelhas: vale a conclusão mais nova, uma vez só', () => {
     const g = tarefasGoogleFalso();
     const c = central(g);
-    g.tarefa(c, { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T09:00:00.000Z' });
-    g.tarefa(c, { id: 'g2', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T11:00:00.000Z' });
+    g.tarefa(c, { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T09:00:00.000Z', updated: '2026-11-10T09:00:00.000Z' });
+    g.tarefa(c, { id: 'g2', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T11:00:00.000Z', updated: '2026-11-10T11:00:00.000Z' });
     expect(concluidasNoEspelho({}, servico(g), AGORA).concluidas).toEqual([{ id: 'tarefa-1', em: Date.parse('2026-11-10T11:00:00.000Z') }]);
   });
 
@@ -137,7 +138,7 @@ describe('concluidasNoEspelho (ação lerEspelhos)', () => {
 
     it('responde as concluídas', () => {
       const g = tarefasGoogleFalso();
-      g.tarefa(central(g), { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T21:00:00.000Z' });
+      g.tarefa(central(g), { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T21:00:00.000Z', updated: '2026-11-10T21:00:00.000Z' });
       expect(tratar({ codigo: CODIGO, acao: 'lerEspelhos', dados: {} }, ambiente(g))).toEqual({
         ok: true,
         dados: { concluidas: [{ id: 'tarefa-1', em: Date.parse('2026-11-10T21:00:00.000Z') }], agora: AGORA },
@@ -239,5 +240,84 @@ describe('espelharTarefas não desmarca o que o dono concluiu no Google', () => 
     const g = tarefasGoogleFalso();
     expect(() => espelharTarefas({ tarefas: [tarefa] }, servico(g))).toThrow(PedidoInvalido);
     expect(g.chamadas).toEqual([]);
+  });
+});
+
+describe('revisão 11/11: a conclusão feita pelo próprio app não passa por conclusão do dono', () => {
+  it('feita: manda a hora de conclusão = feitoEm, e a resposta leva a hora que o Google gravou (conclusaoPropria)', () => {
+    const g = tarefasGoogleFalso();
+    const feitoEm = Date.parse('2026-11-10T08:00:00Z');
+    const [resultado] = espelhar(g, item({ feito: true, feitoEm }));
+    expect(g.de('Tasks.insert')[0].args[0]).toMatchObject({ status: 'completed', completed: '2026-11-10T08:00:00.000Z' });
+    expect(g.vivas()[0].completed).toBe('2026-11-10T08:00:00.000Z');
+    expect(resultado).toEqual({ id: 'tarefa-1', ok: true, googleId: g.vivas()[0].id, conclusaoPropria: feitoEm });
+  });
+
+  it('feita sem hora conhecida (feitoEm 0): só o status', () => {
+    const g = tarefasGoogleFalso();
+    espelhar(g, item({ feito: true }));
+    expect(g.de('Tasks.insert')[0].args[0]).not.toHaveProperty('completed');
+  });
+
+  it('Google que grava a hora de chegada: concluir e desfazer antes de a resposta voltar reabre lá no envio seguinte', () => {
+    // O Google está 5 min adiantado e ignora a hora enviada.
+    const g = tarefasGoogleFalso({ ignorarCompleted: true, agora: () => Date.parse('2026-11-10T08:05:00Z') });
+    const [{ googleId }] = espelhar(g, item());
+    const [conclusao] = espelhar(g, item({ feito: true, feitoEm: Date.parse('2026-11-10T08:00:00Z'), googleId: googleId! }));
+    expect(conclusao.conclusaoPropria).toBe(Date.parse('2026-11-10T08:05:00Z'));
+    // Desfeita às 08:01 (antes da hora que o Google gravou): sem conclusaoPropria, pareceria conclusão do dono.
+    const [reaberta] = espelhar(
+      g,
+      item({ feitoEm: Date.parse('2026-11-10T08:01:00Z'), conclusaoPropria: conclusao.conclusaoPropria!, googleId: googleId! }),
+    );
+    expect(reaberta).toEqual({ id: 'tarefa-1', ok: true, googleId });
+    expect(g.vivas()[0].status).toBe('needsAction');
+  });
+
+  it('conclusão do dono depois da do app (mais nova que conclusaoPropria): fica concluída', () => {
+    const g = tarefasGoogleFalso();
+    const [{ googleId }] = espelhar(g, item());
+    concluirNoGoogle(g, googleId!, '2026-11-10T21:00:00.000Z');
+    const [resultado] = espelhar(g, item({ feitoEm: Date.parse('2026-11-10T08:01:00Z'), conclusaoPropria: Date.parse('2026-11-10T08:05:00Z'), googleId: googleId! }));
+    expect(resultado.concluidaEm).toBe(Date.parse('2026-11-10T21:00:00.000Z'));
+    expect(g.vivas()[0].status).toBe('completed');
+  });
+
+  it('cliente antigo (sem feitoEm): como antes, a tarefa aberta vai com needsAction, num patch só', () => {
+    const g = tarefasGoogleFalso();
+    const [{ googleId }] = espelhar(g, item());
+    concluirNoGoogle(g, googleId!, '2026-11-10T21:00:00.000Z');
+    g.chamadas.length = 0;
+    const { feitoEm: _sem, ...antigo } = item({ googleId: googleId! });
+    const [resultado] = espelhar(g, antigo);
+    expect(resultado).toEqual({ id: 'tarefa-1', ok: true, googleId });
+    expect(g.de('Tasks.patch')).toHaveLength(1);
+    expect(g.de('Tasks.patch')[0].args[0]).toMatchObject({ status: 'needsAction', completed: null });
+    expect(g.vivas()[0].status).toBe('needsAction');
+  });
+
+  it.each([
+    ['conclusaoPropria texto', { ...item(), conclusaoPropria: 'ontem' }],
+    ['conclusaoPropria negativa', { ...item(), conclusaoPropria: -1 }],
+  ])('pedido inválido (%s): recusado antes de chamar o Google', (_nome, tarefa) => {
+    const g = tarefasGoogleFalso();
+    expect(() => espelharTarefas({ tarefas: [tarefa] }, servico(g))).toThrow(PedidoInvalido);
+    expect(g.chamadas).toEqual([]);
+  });
+
+  it('com o cache do script, o id da lista "Central" vem do cache; lista sumida (404) limpa o cache e devolve nada', () => {
+    const valores = new Map<string, string>();
+    const guarda = { get: (k: string) => valores.get(k) ?? null, put: (k: string, v: string) => void valores.set(k, v), remove: (k: string) => void valores.delete(k) };
+    const g = tarefasGoogleFalso();
+    const c = central(g);
+    g.tarefa(c, { id: 'g1', notes: marcadorDaTarefa('tarefa-1'), status: 'completed', completed: '2026-11-10T21:00:00.000Z', updated: '2026-11-10T21:00:00.000Z' });
+    concluidasNoEspelho({}, servico(g), AGORA, guarda);
+    g.chamadas.length = 0;
+    expect(concluidasNoEspelho({}, servico(g), AGORA, guarda).concluidas).toHaveLength(1);
+    expect(g.de('Tasklists.list')).toEqual([]);
+
+    g.listas.delete(c.id);
+    expect(concluidasNoEspelho({}, servico(g), AGORA, guarda)).toEqual({ concluidas: [], agora: AGORA });
+    expect([...valores.keys()].some((k) => k.includes('listas'))).toBe(false);
   });
 });

@@ -43,7 +43,13 @@ function dueDaApi(valor: unknown, metodo: string): string | undefined {
 export function tarefasGoogleFalso({
   paginaMaxima = 100,
   agora = () => Date.parse('2026-11-05T12:00:00Z'),
-}: { paginaMaxima?: number; agora?: () => number } = {}) {
+  ignorarCompleted = false,
+}: {
+  paginaMaxima?: number;
+  agora?: () => number;
+  /** Google que não aceita a hora de conclusão enviada: grava a hora em que o pedido chegou. */
+  ignorarCompleted?: boolean;
+} = {}) {
   const listas = new Map<string, ListaGuardada>();
   const chamadas: Chamada[] = [];
   let proximo = 0;
@@ -68,6 +74,9 @@ export function tarefasGoogleFalso({
         t.status = valor;
       } else if (campo === 'completed' && valor === null) {
         delete t.completed;
+      } else if (campo === 'completed' && !ignorarCompleted) {
+        if (typeof valor !== 'string' || !Number.isFinite(Date.parse(valor))) throw erroDaApi(metodo, 'Invalid Value', 400);
+        t.completed = new Date(Date.parse(valor)).toISOString();
       }
     }
     if (t.status === 'completed') t.completed ??= new Date(agora()).toISOString();
@@ -105,7 +114,9 @@ export function tarefasGoogleFalso({
         .filter((t) => typeof args.dueMin !== 'string' || (t.due !== undefined && Date.parse(t.due) >= Date.parse(args.dueMin)))
         .filter((t) => typeof args.dueMax !== 'string' || (t.due !== undefined && Date.parse(t.due) < Date.parse(args.dueMax)))
         // completedMin: só as concluídas a partir dessa hora (incluída).
-        .filter((t) => typeof args.completedMin !== 'string' || (t.completed !== undefined && Date.parse(t.completed) >= Date.parse(args.completedMin)));
+        .filter((t) => typeof args.completedMin !== 'string' || (t.completed !== undefined && Date.parse(t.completed) >= Date.parse(args.completedMin)))
+        // updatedMin: só as mudadas a partir dessa hora (incluída).
+        .filter((t) => typeof args.updatedMin !== 'string' || (t.updated !== undefined && Date.parse(t.updated) >= Date.parse(args.updatedMin)));
       const tamanho = Math.min(typeof args.maxResults === 'number' ? args.maxResults : 20, paginaMaxima);
       const desde = typeof args.pageToken === 'string' ? Number(args.pageToken) : 0;
       const seguinte = desde + tamanho < todas.length ? String(desde + tamanho) : undefined;
