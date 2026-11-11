@@ -173,7 +173,7 @@ test.describe('celular, 390 px', () => {
 
     // A barra leva ao que existe; o Quadro já não é "Em breve".
     const barra = page.getByRole('navigation', { name: 'Principal' });
-    await expect(barra.getByRole('link')).toHaveText(['Painel', 'Atividades', 'Sem prazo', 'Salas', 'Chat']);
+    await expect(barra.getByRole('link')).toHaveText(['Painel', 'Atividades', 'Agora', 'Salas', 'Chat']);
     await barra.getByRole('button', { name: 'Mais' }).click();
     const folha = page.getByRole('dialog', { name: 'Mais' });
     await expect(folha.getByText('Em breve')).toHaveCount(0);
@@ -197,7 +197,7 @@ test.describe('celular, 390 px', () => {
           return { texto: span.textContent, linhas: Math.round(span.getBoundingClientRect().height / altura) };
         }),
       );
-      expect(linhas.map((l) => l.texto)).toEqual(['Painel', 'Atividades', 'Sem prazo', 'Salas', 'Chat', 'Mais']);
+      expect(linhas.map((l) => l.texto)).toEqual(['Painel', 'Atividades', 'Agora', 'Salas', 'Chat', 'Mais']);
       for (const { texto, linhas: n } of linhas) expect(n, `${texto} em uma linha`).toBe(1);
       expect(await pequenos(page)).toEqual([]);
     });
@@ -205,10 +205,11 @@ test.describe('celular, 390 px', () => {
 
   test('Esta semana deixa a tarefa na semana, sem dia', async ({ page }) => {
     await dizerAoChat(page, 'Preciso parafusar o apoio do banheiro');
-    await page.goto('/central-app/#/sem-prazo');
+    await page.goto('/central-app/#/');
     const principal = page.getByRole('main');
-    await principal.getByRole('button', { name: 'Esta semana' }).click();
-    await expect(principal.getByText('Nada sem prazo.')).toBeVisible();
+    const semPrazo = principal.getByRole('region', { name: 'Sem prazo' });
+    await semPrazo.getByRole('button', { name: 'Esta semana' }).click();
+    await expect(semPrazo.getByText('Nada sem prazo.')).toBeVisible();
     const [tarefa] = await tarefasGuardadas(page);
     expect(tarefa.semana).toBe('2026-11-02');
     expect(tarefa.data).toBeUndefined();

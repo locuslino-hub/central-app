@@ -225,11 +225,11 @@ for (const [nome, viewport, sufixo] of [
       await page.reload();
       await expect(caixa.getByRole('listitem')).toHaveCount(4); // continua escondido depois de recarregar
 
-      // Virar tarefa: o e-mail fica, com a marca; a tarefa está em Sem prazo.
+      // Virar tarefa: o e-mail fica, com a marca; a tarefa está em Sem prazo (Atividades).
       await item('Resumo do congresso').getByRole('button', { name: /^Virar tarefa/ }).click();
       await expect(item('Resumo do congresso').getByText('Virou tarefa')).toBeVisible();
-      await page.goto('/central-app/#/sem-prazo');
-      await expect(page.getByRole('main').getByText('Responder: Resumo do congresso')).toBeVisible();
+      await page.goto('/central-app/#/atividades');
+      await expect(page.getByRole('main').getByRole('region', { name: 'Sem prazo' }).getByText('Responder: Resumo do congresso')).toBeVisible();
       await page.goto('/central-app/#/caixa');
 
       // Responder: abre o Gmail em outra aba; ao voltar, o foco vai ao Responder do próximo item.

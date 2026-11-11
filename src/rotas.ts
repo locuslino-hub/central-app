@@ -18,7 +18,6 @@ export type IdDaRota =
   | 'caixa'
   | 'quadro'
   | 'atividades'
-  | 'sem-prazo'
   | 'chat'
   | 'conectar'
   | 'ia'
@@ -83,11 +82,13 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
   caixa: { caminho: 'caixa', titulo: fixo('Caixa') },
   quadro: { caminho: 'quadro', titulo: fixo('Quadro') },
   atividades: { caminho: 'atividades', titulo: fixo('Atividades') },
-  'sem-prazo': { caminho: 'sem-prazo', titulo: fixo('Sem prazo') },
   chat: { caminho: 'chat', titulo: fixo('Chat') },
   conectar: { caminho: 'conectar', titulo: fixo('Conectar aparelho'), voltarPara: '#/' },
   ia: { caminho: 'ia', titulo: fixo('IA local'), voltarPara: '#/' },
 };
+
+/** Páginas que deixaram de existir e para onde levam agora. */
+const ENDERECOS_ANTIGOS = new Map<string, string>([['sem-prazo', 'atividades']]);
 
 const NAO_ENCONTRADA: RotaAtual = { id: 'nao-encontrada', titulo: 'Página não encontrada' };
 
@@ -129,7 +130,9 @@ export function resolverRota(hash: string, agora: Date = new Date()): RotaAtual 
   const resto = semConsulta.slice(2);
   if (resto.startsWith('/')) return NAO_ENCONTRADA; // `#//semana`
   // Uma barra no fim é aceita (`#/semana/`); duas não.
-  const caminho = resto.replace(/\/$/, '');
+  const semBarra = resto.replace(/\/$/, '');
+  // Endereços antigos: a página Sem prazo virou o grupo "Sem prazo" de Atividades.
+  const caminho = ENDERECOS_ANTIGOS.get(semBarra) ?? semBarra;
 
   for (const [id, definicao] of Object.entries(ROTAS) as [Exclude<IdDaRota, 'nao-encontrada'>, Definicao][]) {
     if (!definicao.caminho.endsWith(':id')) {

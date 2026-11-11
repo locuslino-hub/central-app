@@ -219,11 +219,4 @@ describe('Sem prazo', () => {
     expect(await screen.findByText('Nada sem prazo.')).toBeTruthy();
     expect(screen.getByText('O que você anotar sem dia aparece aqui.')).toBeTruthy();
   });
-
-  it('sem o cabeçalho (na página própria), não repete o título', async () => {
-    await criar('Escrever o resumo');
-    render(<SemPrazo semCabecalho />);
-    await aparecer('Escrever o resumo');
-    expect(screen.queryByRole('heading', { name: 'Sem prazo' })).toBeNull();
-  });
 });

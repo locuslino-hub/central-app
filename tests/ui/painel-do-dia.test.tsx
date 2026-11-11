@@ -81,14 +81,12 @@ describe('Painel do dia', () => {
 });
 
 describe('Sem prazo e Atividades como páginas', () => {
-  it('#/sem-prazo: o título da página é o h1 e a seção não o repete', async () => {
+  it('#/sem-prazo (endereço antigo) abre Atividades, com o grupo Sem prazo', async () => {
     await criar('Comprar café');
     mostrar('#/sem-prazo', 1280);
     expect(await principal().findByRole('checkbox', { name: 'Comprar café' })).toBeTruthy();
-    expect(principal().getByRole('heading', { level: 1, name: 'Sem prazo' })).toBeTruthy();
-    expect(principal().queryByRole('heading', { level: 2, name: 'Sem prazo' })).toBeNull();
-    const grupo = within(principal().getByRole('group', { name: 'Quando fazer: Comprar café' }));
-    expect(grupo.getAllByRole('button').map((b) => b.textContent)).toEqual(['Hoje', 'Esta semana', 'Escolher dia']);
+    expect(principal().getByRole('heading', { level: 1, name: 'Atividades' })).toBeTruthy();
+    expect(principal().getByRole('heading', { level: 2, name: 'Sem prazo' })).toBeTruthy();
   });
 
   it('#/atividades: lista agrupada', async () => {

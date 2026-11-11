@@ -662,3 +662,111 @@ a.documento-link:focus-visible {
     grid-column: auto;
   }
 }
+
+/*
+ * Salas no tablet e no computador: as sete salas numa coluna estreita à esquerda,
+ * em cartões baixos; ao lado, Cores do Google e o cadastro de pessoas. Tudo cabe
+ * na janela sem rolar. No celular segue como era (cartões em grade, um embaixo do outro).
+ */
+.casca:not([data-tela='celular']) .salas-pagina {
+  grid-template-columns: 14rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  gap: 14px 22px;
+  max-width: 62rem;
+}
+.casca:not([data-tela='celular']) .salas-cartoes {
+  grid-row: 1 / span 2;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.casca:not([data-tela='celular']) .sala-cartao {
+  gap: 0;
+  min-height: 0;
+  padding: 6px 14px 9px;
+}
+.casca:not([data-tela='celular']) .sala-cartao-nome {
+  font-size: 1.3rem;
+}
+.casca:not([data-tela='celular']) .sala-cartao-conta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 0.84rem;
+}
+.casca:not([data-tela='celular']) .sala-cartao-pessoas::before {
+  content: '· ';
+}
+.casca:not([data-tela='celular']) .salas-cores {
+  margin: 0;
+}
+/* O cadastro em uma linha (nome, sala, papel); o aviso de erro e o botão embaixo. */
+.casca:not([data-tela='celular']) .salas-pagina .pessoas .formulario {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 10px 12px;
+  max-width: none;
+}
+.casca:not([data-tela='celular']) .salas-pagina .pessoas .formulario > :not(.formulario-campo) {
+  grid-column: 1 / -1;
+}
+/* Sem aviso nem Desfazer, a linha do aviso não guarda espaço vazio. */
+.casca:not([data-tela='celular']) .salas-pagina .pessoas-aviso:not(:has(button)):has(.pessoas-aviso-texto:empty) {
+  min-height: 0;
+  margin: 0;
+}
+.casca:not([data-tela='celular']) .salas-pagina .pessoas h2 {
+  font-size: 1.5rem;
+}
+.casca:not([data-tela='celular']) .salas-pagina .pessoas-dica {
+  margin-bottom: 10px;
+}
+
+/*
+ * Página de uma sala (e de uma pessoa) no computador: letra menor e cartões mais
+ * justos, para o principal caber na janela. A faixa do resumo fica baixa, logo abaixo do nome.
+ */
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) {
+  gap: 12px;
+  font-size: 0.9rem;
+}
+.casca[data-tela='computador'] .sala-faixa {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+}
+.casca[data-tela='computador'] :is(.sala-grade, .sala-coluna) {
+  gap: 12px;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) .painel {
+  padding: 14px 18px 16px;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) .painel h2 {
+  margin-bottom: 8px;
+  font-size: 1.35rem;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) :is(.botao, .botao-link) {
+  padding: 0 16px;
+  font-size: 0.88rem;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) .campo {
+  font-size: 0.9rem;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) .notas-campo {
+  min-height: 5rem;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) .cal-hora {
+  min-width: 2.8rem;
+  font-size: 1.25rem;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) .sala-dia-titulo {
+  margin-top: 8px;
+  font-size: 0.74rem;
+}
+.casca[data-tela='computador'] :is(.sala-pagina, .pessoa-pagina) :is(.lista-vazia-titulo, .lista-vazia-texto) {
+  font-size: 0.88rem;
+}
+.casca:not([data-tela='celular']) .salas-pagina .pessoas .lista-vazia {
+  margin-top: 12px;
+}

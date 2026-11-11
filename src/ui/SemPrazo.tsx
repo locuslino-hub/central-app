@@ -112,8 +112,7 @@ function Acoes({ tarefa, hoje, prepararFoco }: AcoesProps) {
   );
 }
 
-/** `semCabecalho`: na página própria o título da página já diz "Sem prazo". */
-export function SemPrazo({ semCabecalho = false }: { semCabecalho?: boolean }) {
+export function SemPrazo() {
   const hoje = useDia();
   const tarefas = useTarefas();
   const salas = useSalas();
@@ -149,15 +148,12 @@ export function SemPrazo({ semCabecalho = false }: { semCabecalho?: boolean }) {
   return (
     <section
       class="painel semprazo"
-      aria-labelledby={semCabecalho ? undefined : 'titulo-sem-prazo'}
-      aria-label={semCabecalho ? 'Tarefas sem prazo' : undefined}
+      aria-labelledby="titulo-sem-prazo"
       aria-busy={tarefas === undefined}
     >
-      {!semCabecalho && (
-        <h2 id="titulo-sem-prazo" ref={titulo} tabIndex={-1}>
-          Sem prazo
-        </h2>
-      )}
+      <h2 id="titulo-sem-prazo" ref={titulo} tabIndex={-1}>
+        Sem prazo
+      </h2>
       <NovaTarefa rotulo="Nova tarefa sem prazo" />
       <AvisoDeApagada conclusoes={conclusoes} />
       {tarefas !== undefined && linhas.length === 0 && (
