@@ -58,6 +58,8 @@ export const ESQUEMAS = {
     duracaoMin: 'numero?',
     duracaoConfirmada: 'booleano?',
     feito: 'booleano?',
+    /** Hora da última mudança do feito (ampliação 11/11). */
+    feitoEm: 'numero?',
     fixada: 'booleano?',
     marcar: 'booleano?',
     emailId: 'texto?',

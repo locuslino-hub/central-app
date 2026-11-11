@@ -74,3 +74,33 @@ test('compromisso feito ganha "✓ " no Google; convite aparece e fica feito só
   expect(script.tarefasGoogle.vivas()).toHaveLength(1);
   expect(erros).toEqual([]);
 });
+
+// Ampliação 11/11: concluir direto no Google Tarefas (lista "Central") conta na
+// Central, e a Central não desmarca lá depois.
+test('tarefa concluída direto no Google Tarefas fica feita na Central, e continua concluída no Google', async ({ page }) => {
+  const erros: string[] = [];
+  page.on('pageerror', (erro) => erros.push(erro.message));
+  const script = scriptFalso();
+  await script.ligarA(page);
+  await abrirConectado(page);
+
+  const checklist = page.getByRole('main').getByRole('region', { name: 'Checklist do dia' });
+  await checklist.getByLabel('Nova tarefa para hoje').fill('Comprar pilhas');
+  await checklist.getByRole('button', { name: 'Adicionar' }).click();
+  await expect.poll(() => script.tarefasGoogle.vivas().length, { timeout: 15_000 }).toBe(1);
+  await expect(checklist.getByRole('checkbox', { name: 'Comprar pilhas' })).toHaveAttribute('aria-checked', 'false');
+
+  // O dono conclui no Google Tarefas e, minutos depois, abre a Central de novo.
+  // (O relógio do script falso está em 13:00; a leitura anterior pede a partir de 12:50.)
+  const [espelho] = script.tarefasGoogle.vivas();
+  espelho.status = 'completed';
+  espelho.completed = '2026-11-05T12:55:00.000Z';
+  await page.clock.setFixedTime('2026-11-05T12:30:00+00:00');
+  await page.reload();
+
+  const caixa = page.getByRole('main').getByRole('region', { name: 'Checklist do dia' }).getByRole('checkbox', { name: 'Comprar pilhas' });
+  await expect(caixa).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 });
+  expect(script.pedidos).toContain('lerEspelhos');
+  expect(script.tarefasGoogle.vivas()).toMatchObject([{ status: 'completed', completed: '2026-11-05T12:55:00.000Z' }]);
+  expect(erros).toEqual([]);
+});

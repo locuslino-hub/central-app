@@ -7,15 +7,19 @@ import { dataValida } from '../../script/agenda';
 import { LOTE_NO_MAXIMO } from '../../script/tarefas-google';
 import {
   ErroAgenda,
+  concluidaValida,
   criarEvento,
   espelharTarefas,
+  lerConcluidasNoGoogle,
   marcarEventoFeito,
   marcarTarefaGoogle,
   removerEvento,
+  type ConcluidaNoGoogle,
   type ItemDoEspelho,
 } from './agenda';
 import { marcarEventosObsoletos } from './eventos';
 import { concluirMarcaDeTarefa } from './eventos-feitos';
+import { aplicarConcluidasNoGoogle } from './feito-no-google';
 import {
   assinar as assinarLoja,
   concluirEnvio,
@@ -26,6 +30,9 @@ import {
   guardarIdDoEspelho,
   lerIdsDoEspelho,
   lerDesde,
+  lerLeituraDoGoogle,
+  listar,
+  salvarLeituraDoGoogle,
   agendaEsgotada,
   concluirMigracao,
   lerPendente,
@@ -301,6 +308,8 @@ function itemDoEspelho(tarefa: Tarefa, googleId: string | undefined): ItemDoEspe
   const item: ItemDoEspelho = { id: tarefa.id, titulo: String(tarefa.titulo ?? '').slice(0, 2000), feito: !!tarefa.feito, apagado: !!tarefa.apagado };
   // Dia que não existe nem sai: o script recusaria o lote inteiro.
   if (dataValida(tarefa.data)) item.data = tarefa.data;
+  // A hora do feito decide, no script, se uma reabertura desmarca o Google.
+  if (typeof tarefa.feitoEm === 'number' && Number.isFinite(tarefa.feitoEm) && tarefa.feitoEm >= 0) item.feitoEm = tarefa.feitoEm;
   if (googleId !== undefined && /^[A-Za-z0-9_-]{1,256}$/.test(googleId)) item.googleId = googleId;
   return item;
 }
@@ -374,6 +383,7 @@ async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
       continue;
     }
     const porId = new Map(resultados.map((r) => [r.id, r]));
+    const concluidasLa: ConcluidaNoGoogle[] = [];
     for (const { tarefa, seqs, googleId } of lote) {
       const resultado = porId.get(tarefa.id);
       if (!resultado?.ok) {
@@ -383,9 +393,44 @@ async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
       await removerPendentes(seqs);
       if (tarefa.apagado || !resultado.googleId) await esquecerIdDoEspelho(tarefa.id);
       else if (resultado.googleId !== googleId) await guardarIdDoEspelho(tarefa.id, resultado.googleId);
+      // Aberta aqui, concluída pelo dono no Google: conclui aqui também.
+      const concluida = { id: tarefa.id, em: resultado.concluidaEm };
+      if (!tarefa.apagado && concluidaValida(concluida)) concluidasLa.push(concluida);
     }
+    if ((await aplicarConcluidasNoGoogle(concluidasLa)) > 0) registrosMudaram = true;
   }
   return registrosMudaram;
+}
+
+/** Uma leitura das conclusões no Google a cada 45 s, no máximo (as rodadas vêm a cada minuto e a cada escrita). */
+export const LEITURA_DO_GOOGLE_A_CADA_MS = 45_000;
+/** A próxima leitura começa um pouco antes da anterior: conclusão que o Google ainda não mostrava não se perde. */
+export const MARGEM_DA_LEITURA_MS = 10 * 60_000;
+
+/**
+ * Ampliação 11/11: as tarefas que o dono concluiu direto no Google Tarefas
+ * (lista "Central") são concluídas aqui (`aplicarConcluidasNoGoogle`). Só lê
+ * se há tarefa aberta que vai ao Google, e no máximo a cada 45 s. Falha nesta
+ * leitura (script antigo, sem o Google Tarefas, sem rede) não muda a rodada:
+ * tenta de novo depois. Devolve `true` se concluiu alguma (há registros a enviar).
+ */
+async function lerConclusoesDoGoogle(chamar: Chamar): Promise<boolean> {
+  const agora = Date.now();
+  const anterior = await lerLeituraDoGoogle();
+  if (anterior && Math.abs(agora - anterior.em) < LEITURA_DO_GOOGLE_A_CADA_MS) return false;
+  const abertas = (await listar('tarefas')).some((t) => !t.feito && espelhoDaTarefa(t) !== null);
+  if (!abertas) return false;
+  const desde = anterior?.desde ?? null;
+  let resposta;
+  try {
+    resposta = await lerConcluidasNoGoogle(desde, { chamar });
+  } catch (erro) {
+    if (!(erro instanceof ErroAgenda)) throw erro;
+    await salvarLeituraDoGoogle({ desde, em: agora });
+    return false;
+  }
+  await salvarLeituraDoGoogle({ desde: Math.max(0, resposta.agora - MARGEM_DA_LEITURA_MS), em: agora });
+  return (await aplicarConcluidasNoGoogle(resposta.concluidas)) > 0;
 }
 
 /**
@@ -422,6 +467,8 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
     await enviar(chamar, esperar);
     // A migração apaga tarefas antigas: esses registros saem já nesta rodada.
     if (await enviarAgenda(chamar)) await enviar(chamar, esperar);
+    // Antes do espelho: o que o dono concluiu no Google já vai concluído.
+    if (await lerConclusoesDoGoogle(chamar)) await enviar(chamar, esperar);
     // O resultado dos blocos do Google Tarefas muda registros: saem já nesta rodada.
     if (await enviarEspelhos(chamar)) await enviar(chamar, esperar);
     final = (await temPendentes()) ? 'por-enviar' : 'atualizado';

@@ -40,6 +40,13 @@ export type Tarefa = Base & {
   duracaoMin: number;
   duracaoConfirmada: boolean;
   feito: boolean;
+  /**
+   * Hora (ms) da última mudança do `feito` (ampliação 11/11 do feito
+   * espelhado). A loja marca ao concluir ou reabrir; a conclusão vinda do
+   * Google Tarefas traz a hora de lá. Entre a Central e o Google vale a
+   * mudança mais nova: a conclusão no Google só conta se for depois desta.
+   */
+  feitoEm?: number;
   fixada: boolean;
   marcar: boolean;
   emailId?: string;
