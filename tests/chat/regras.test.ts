@@ -514,6 +514,24 @@ describe('decisões do dono (11/11): dia padrão, "sem prazo" e tarefa com hora'
     expect(r.certeza).toBe('alta');
   });
 
+  it.each([
+    ['Adicione uma atividade amanhã às 9h: ler o artigo', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Tarefas: ler o artigo amanhã às 9h', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Atividade: ler o artigo amanhã às 9h', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Adicione nas minhas tarefas ler o artigo amanhã às 9h', 'Ler o artigo', '2026-11-06', '09:00'],
+  ])('forma de lista ou de comando também pede tarefa (%s)', (frase, titulo, data, inicio) => {
+    expect(um(frase)).toMatchObject({ tipo: 'tarefa', titulo, data, inicio });
+  });
+
+  it.each([
+    ['Reunião sobre as atividades do projeto sexta às 10h', '2026-11-06', '10:00'],
+    ['atividade física amanhã às 8h', '2026-11-06', '08:00'],
+    ['Revisar a tarefa 3 com a Renata sexta às 10h', '2026-11-06', '10:00'],
+    ['Aula sobre tarefas de casa amanhã às 9h', '2026-11-06', '09:00'],
+  ])('"tarefa/atividade" no meio do assunto não pede tarefa: segue compromisso (%s)', (frase, data, inicio) => {
+    expect(um(frase)).toMatchObject({ tipo: 'compromisso', data, inicio });
+  });
+
   it('tarefa com faixa de horas guarda o fim (a duração)', () => {
     expect(um('Tarefa sexta das 14h às 16h: revisar capítulo')).toMatchObject({
       tipo: 'tarefa', titulo: 'Revisar capítulo', data: '2026-11-06', inicio: '14:00', fim: '16:00',

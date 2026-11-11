@@ -83,10 +83,19 @@ const RE_LISTA_HOJE = new RegExp(`${L}${LISTA}(?:d[aoe]s?\\s+)?(?:dia|hoje)${R}(
 
 /** "sem prazo", "nas tarefas sem prazo", "para sem prazo": a tarefa fica Sem prazo, e o trecho sai do título. */
 const RE_SEM_PRAZO = new RegExp(`${L}(?:${LISTA}|(?:em|no|na|para|pra)\\s+(?:o\\s+)?)?sem\\s+prazos?${R}`, 'g');
-/** "tarefa" ou "atividade" na frase: com dia e hora, é tarefa com hora, não compromisso. */
-const RE_PEDE_TAREFA = /(?<![a-z])(?:tarefas?|atividades?)(?![a-z])/;
-/** "Tarefa:", "Atividade amanhã...", "Tarefa para hoje..." no começo: a palavra sai do título. */
-const RE_TAREFA_NO_INICIO = /^\s*(?:uma\s+)?(?:tarefa|atividade)(?![a-z])\s*:?/;
+/**
+ * "tarefa" ou "atividade" como pedido, não como assunto ("Reunião sobre as
+ * atividades do projeto", "atividade física" seguem compromisso). Valem: no
+ * comando ("Adicione uma tarefa..."), no começo da frase ("Tarefa ..."; "Atividade"
+ * só com ":", "para" ou o dia logo depois) e na forma de lista ("nas tarefas",
+ * "em atividades do dia", "atividades do dia" no começo).
+ */
+const RE_PALAVRA_TAREFA = /(?<![a-z])(?:tarefas?|atividades?)(?![a-z])/;
+const RE_PREFIXO_DE_LISTA = /^(?:em|nas?|nos?|para\s+(?:as?|os?)|pra)\s/;
+/** "nas tarefas", "em atividades", "nas minhas tarefas": a lista sai do título. */
+const RE_LISTA_DE_TAREFAS = new RegExp(`${L}(?:em|nas|nos)\\s+(?:minhas\\s+)?(?:tarefas|atividades)${R}`, 'g');
+/** "Tarefa:", "Atividade amanhã...", "Tarefa para hoje..." no começo: a palavra sai do título (quando é pedido). */
+const RE_TAREFA_NO_INICIO = /^\s*(?:uma\s+)?(tarefas?|atividades?)(?![a-z])\s*:?/;
 
 const RE_PRAZO = /(?<![a-z])(?:entregar?|entregas|entregue|prazos?)(?![a-z])/g;
 /** "até" só é prazo quando começa um dia ou uma hora ("até sexta", "até 17h"), não em "até tarde". */
@@ -181,8 +190,8 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   const comando = n.match(RE_COMANDO);
   if (comando) tirar.push({ ini: 0, fim: comando[0].length });
   const palavraNoInicio = comando ? null : n.match(RE_TAREFA_NO_INICIO);
-  if (palavraNoInicio) tirar.push({ ini: 0, fim: palavraNoInicio[0].length });
-  const pedeTarefa = RE_PEDE_TAREFA.test(n);
+  const listasDeTarefas: Trecho[] = [...n.matchAll(RE_LISTA_DE_TAREFAS)].map((m) => ({ ini: m.index!, fim: m.index! + m[0].length }));
+  tirar.push(...listasDeTarefas);
   const semPrazos: Trecho[] = [...n.matchAll(RE_SEM_PRAZO)].map((m) => ({ ini: m.index!, fim: m.index! + m[0].length }));
   const dentroDeSemPrazo = (i: number) => semPrazos.some((x) => i >= x.ini && i < x.fim);
   tirar.push(...semPrazos);
@@ -199,6 +208,30 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   const { horas, ligacoes, invalidas } = acharHoras(n, [...datas, ...listasSala]);
   if (invalidas > 0) baixa = true; // "25h", "15:60": o dono quis dizer uma hora
   tirar.push(...datas, ...horas);
+
+  // "tarefa"/"atividade" como pedido (RE_PALAVRA_TAREFA): comando, começo ou lista.
+  const depoisDoComando = comando ? comando[0].length : 0;
+  const listaPede = (t: Trecho) => {
+    const texto = n.slice(t.ini, t.fim);
+    return RE_PALAVRA_TAREFA.test(texto) && (RE_PREFIXO_DE_LISTA.test(texto) || n.slice(depoisDoComando, t.ini).trim() === '');
+  };
+  let inicioPede = false;
+  if (palavraNoInicio) {
+    const fim = palavraNoInicio[0].length;
+    const proximo = fim + (n.slice(fim).match(/^\s*/)?.[0].length ?? 0);
+    inicioPede =
+      palavraNoInicio[1].startsWith('taref') ||
+      palavraNoInicio[0].trimEnd().endsWith(':') ||
+      /^(?:para|pra)(?![a-z])/.test(n.slice(proximo)) ||
+      [...datas, ...horas].some((x) => x.ini === proximo);
+    // "Atividade física": a palavra é o assunto e fica no título.
+    if (inicioPede) tirar.push({ ini: 0, fim });
+  }
+  const pedeTarefa =
+    (!!comando && RE_PALAVRA_TAREFA.test(comando[0])) ||
+    inicioPede ||
+    listasDeTarefas.length > 0 ||
+    [...listasSala, ...listasHoje].some(listaPede);
 
   const fortes = datas.filter((d) => d.forca === 'forte' && (d.data || d.invalida));
   if (fortes.some((d) => d.invalida)) baixa = true;
