@@ -8,7 +8,7 @@ import { limparConversa } from '../../src/chat/conversa';
 import { criarPagina, novoBloco, novoPainel, removerBloco } from '../../src/dados/caderno';
 import { gravarDoServidor, lerRegistros, listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
 import type { Bloco, Pagina, Tarefa } from '../../src/dados/tipos';
-import { Caderno } from '../../src/ui/Caderno';
+import { Caderno, avisoDoItem } from '../../src/ui/Caderno';
 import { scriptDeTeste } from '../apoio/script-ui';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
@@ -393,4 +393,15 @@ describe('Caderno: toque mínimo de 44 px', () => {
       expect(regras).toMatch(/(min-)?height:\s*var\(--toque\)/);
     },
   );
+});
+
+describe('avisoDoItem', () => {
+  const base = { itemId: 'x', titulo: 'Ligar para a Renata', desfazer: async () => {} };
+  it('tarefa com hora diz a hora', () => {
+    expect(avisoDoItem({ ...base, tipo: 'tarefa', data: '2026-11-06', inicio: '18:00' }, 'MBA', '2026-11-05'))
+      .toBe('Virou tarefa em MBA, para sexta, 6/11, às 18:00.');
+  });
+  it('tarefa sem hora não muda', () => {
+    expect(avisoDoItem({ ...base, tipo: 'tarefa', data: '2026-11-06' }, 'MBA', '2026-11-05')).toBe('Virou tarefa em MBA, para sexta, 6/11.');
+  });
 });

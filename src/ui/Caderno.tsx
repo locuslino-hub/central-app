@@ -59,7 +59,8 @@ export function avisoDoItem(item: ItemDaLinha, nomeDaSala: string, hoje: string)
     return `Virou compromisso no Google Agenda: ${minuscula(nomeDoDia(item.data ?? hoje, hoje))}${item.inicio ? `, às ${item.inicio}` : ''}.`;
   }
   const quando = item.data ? minuscula(nomeDoDia(item.data, hoje)) : item.semana ? minuscula(nomeDaSemana(item.semana, hoje)) : '';
-  return `Virou tarefa em ${nomeDaSala}${quando ? `, para ${quando}` : ''}.`;
+  const hora = item.data && item.inicio ? `, às ${item.inicio}` : '';
+  return `Virou tarefa em ${nomeDaSala}${quando ? `, para ${quando}` : ''}${hora}.`;
 }
 
 /**
