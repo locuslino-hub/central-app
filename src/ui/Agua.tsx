@@ -12,7 +12,6 @@ import {
   garrafaDaVez,
   goleDeHoje,
   situacao,
-  totalDoDia,
   type Fracao,
   type Situacao,
 } from '../dados/agua';
@@ -78,6 +77,11 @@ export type AguaDoDia = {
   total: number;
   /** Todos os registros guardados (de todos os dias, apagados fora do alcance de `goleDeHoje`). Vazio enquanto lê. */
   registros: readonly AguaRegistro[];
+  /**
+   * A loja ainda está lendo. Os números valem 0, mas "Atrás", a dica, o botão sugerido e o histórico seriam falsos:
+   * quem desenha esconde isso (guardando a altura) até os dados chegarem.
+   */
+  carregando: boolean;
   /** Os goles de hoje, por hora crescente. */
   doDia: readonly AguaRegistro[];
   /** O último gole de hoje (o que o Desfazer tira). */
@@ -101,7 +105,7 @@ export function useAguaDoDia(): AguaDoDia {
   const minuto = minutoEmLisboa(instante);
   const lista = registros ?? [];
   const doDia = goleDeHoje(lista, dia);
-  const total = totalDoDia(lista, dia);
+  const total = doDia.reduce((soma, gole) => soma + gole.ml, 0);
 
   const agir = (acao: () => Promise<void>, falha: string) => {
     setErro('');
@@ -113,6 +117,7 @@ export function useAguaDoDia(): AguaDoDia {
     minuto,
     total,
     registros: lista,
+    carregando: registros === undefined,
     doDia,
     ultimo: doDia[doDia.length - 1],
     sit: situacao(total, minuto),
@@ -136,14 +141,28 @@ const SELO = {
   'em-dia': { classe: 'ok', texto: () => 'No ritmo' },
 } as const;
 
-/** O selo do título: "No ritmo", "Atrás N mL" ou "Meta batida ✓". */
-export function SeloDaAgua({ sit }: { sit: Situacao }) {
+/** O selo do título: "No ritmo", "Atrás N mL" ou "Meta batida ✓". Enquanto a loja lê, só guarda o lugar. */
+export function SeloDaAgua({ sit, carregando = false }: { sit: Situacao; carregando?: boolean }) {
+  if (carregando) {
+    return (
+      <span class="agua-selo carregando" aria-hidden="true">
+        {'\u00a0'}
+      </span>
+    );
+  }
   const selo = SELO[sit.estado];
   return <span class={`agua-selo ${selo.classe}`}>{selo.texto(sit)}</span>;
 }
 
 /** O quadro de dica: o que beber para alcançar (com garrafinhas coral), a folga e o próximo gole, ou a meta batida. */
-export function QuadroDaDica({ sit, minuto }: { sit: Situacao; minuto: number }) {
+export function QuadroDaDica({ sit, minuto, carregando = false }: { sit: Situacao; minuto: number; carregando?: boolean }) {
+  if (carregando) {
+    return (
+      <div class="agua-dica ok carregando" aria-hidden="true">
+        <span class="agua-dica-texto">{'\u00a0'}</span>
+      </div>
+    );
+  }
   return (
     <div class={`agua-dica ${sit.estado === 'meta' ? 'meta' : sit.estado === 'atras' ? 'atras' : 'ok'}`}>
       <span class="agua-dica-texto">
@@ -161,8 +180,8 @@ export function QuadroDaDica({ sit, minuto }: { sit: Situacao; minuto: number })
 }
 
 /** Os quatro botões ¼ ½ ¾ Toda; o sugerido sai em azul cheio, com a etiqueta "sugerido". */
-export function BotoesDeFracao({ sit, registrar }: { sit: Situacao; registrar: (ml: number) => void }) {
-  const sugerida = sit.estado === 'atras' ? sit.sugestao.botao : null;
+export function BotoesDeFracao({ sit, registrar, carregando = false }: { sit: Situacao; registrar: (ml: number) => void; carregando?: boolean }) {
+  const sugerida = sit.estado === 'atras' && !carregando ? sit.sugestao.botao : null;
   return (
     <div class="agua-fracoes" role="group" aria-label="Quanto você bebeu">
       {BOTOES.map(({ fracao, nome }) => {
@@ -186,7 +205,7 @@ export function BotoesDeFracao({ sit, registrar }: { sit: Situacao; registrar: (
 
 export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
   const idTitulo = useId();
-  const { total, minuto, sit, porcento, ultimo, registrar, desfazer, erro } = useAguaDoDia();
+  const { total, minuto, sit, porcento, ultimo, registrar, desfazer, erro, carregando } = useAguaDoDia();
   const garrafa = garrafaDaVez(total);
 
   return (
@@ -196,7 +215,7 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
           <Icone nome="gota" />
           Água
         </h2>
-        <SeloDaAgua sit={sit} />
+        <SeloDaAgua sit={sit} carregando={carregando} />
       </header>
 
       <button type="button" class="agua-resumo" aria-label={`${n(total)} mL de ${n(META_ML)} mL, ${porcento}%. Abrir a página da água`} onClick={aoAbrir}>
@@ -214,9 +233,9 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
         </span>
       </button>
 
-      <Trilha total={total} minuto={minuto} sit={sit} />
+      <Trilha total={total} minuto={minuto} sit={sit} carregando={carregando} />
 
-      <QuadroDaDica sit={sit} minuto={minuto} />
+      <QuadroDaDica sit={sit} minuto={minuto} carregando={carregando} />
 
       <p class="agua-vez">
         <Garrafinha fracao={garrafa.fracao} />
@@ -228,11 +247,11 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
         </span>
       </p>
 
-      <BotoesDeFracao sit={sit} registrar={registrar} />
+      <BotoesDeFracao sit={sit} registrar={registrar} carregando={carregando} />
 
       <div class="agua-rodape">
         <span role="status">{ultimo ? `Último: ${ultimo.hora} · ${n(ultimo.ml)} mL` : 'Nada registrado ainda'}</span>
-        <button type="button" disabled={!ultimo} onClick={desfazer}>
+        <button type="button" aria-label="Desfazer o último gole" disabled={!ultimo} onClick={desfazer}>
           Desfazer
         </button>
       </div>
@@ -246,7 +265,7 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
 }
 
 /** A barra: azul é o bebido, o trecho listrado é o que falta até a marca do esperado. */
-function Trilha({ total, minuto, sit }: { total: number; minuto: number; sit: Situacao }) {
+function Trilha({ total, minuto, sit, carregando }: { total: number; minuto: number; sit: Situacao; carregando: boolean }) {
   const bebido = Math.min(100, (total / META_ML) * 100);
   const esperado = sit.estado === 'meta' ? 0 : Math.min(100, (sit.esperado / META_ML) * 100);
   const comMarca = sit.estado !== 'meta' && minuto >= INICIO_MIN;
@@ -258,7 +277,9 @@ function Trilha({ total, minuto, sit }: { total: number; minuto: number; sit: Si
   return (
     <div class="agua-trilha" role="img" aria-label={nome}>
       <div class="agua-bebido" style={`width:${bebido}%`} />
-      {sit.estado === 'atras' && <div class="agua-falta" style={`left:${bebido}%;width:${Math.max(0, esperado - bebido)}%`} />}
+      {sit.estado === 'atras' && (
+        <div class={`agua-falta${carregando ? ' carregando' : ''}`} style={`left:${bebido}%;width:${Math.max(0, esperado - bebido)}%`} />
+      )}
       {comMarca && (
         <div class={`agua-alvo ${lado}`} style={`left:${esperado}%`}>
           <span>
@@ -303,11 +324,11 @@ function TextoDaDica({ sit, minuto }: { sit: Situacao; minuto: number }) {
 // ---- A versão curta (chat aberto) ----
 
 export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
-  const { total, sit, porcento, registrar, erro } = useAguaDoDia();
+  const { total, sit, porcento, registrar, erro, carregando } = useAguaDoDia();
   const estado =
     sit.estado === 'meta' ? 'meta batida ✓' : sit.estado === 'atras' ? `atrás ${n(sit.falta)} mL` : 'no ritmo';
-  // Atrás: a garrafa sugerida (destacada). Em dia ou meta batida: ¼, sem destaque.
-  const sugerida = sit.estado === 'atras';
+  // Atrás: a garrafa sugerida (destacada). Em dia, meta batida ou ainda lendo: ¼, sem destaque.
+  const sugerida = sit.estado === 'atras' && !carregando;
   const fracao: Fracao = sugerida ? sit.sugestao.botao : 0.25;
   const nome = fracao === 1 ? 'Toda' : BOTOES.find((b) => b.fracao === fracao)!.nome;
   const ml = GARRAFA_ML * fracao;
@@ -315,14 +336,21 @@ export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
   return (
     <section class="cartao-agua curto" aria-label="Água">
       <div class="agua-linha">
-        <button type="button" class="agua-resumo" aria-label={`Água: ${n(total)} mL, ${porcento}%, ${estado}. Abrir a página da água`} onClick={aoAbrir}>
+        <button type="button" class="agua-resumo" aria-label={`Água: ${n(total)} mL, ${porcento}%${carregando ? '' : `, ${estado}`}. Abrir a página da água`} onClick={aoAbrir}>
           <span class="agua-anel" style={`--p:${porcento}`} aria-hidden="true">
             <Icone nome="gota" />
           </span>
           <span class="agua-texto">
             <b class="agua-total-curto">Água: {n(total)} mL</b>
             <span class="agua-sub">
-              {porcento}% · <b class={sit.estado === 'atras' ? 'atras' : 'ok'}>{estado}</b>
+              {porcento}% ·{' '}
+              {carregando ? (
+                <b class="carregando" aria-hidden="true">
+                  {'\u00a0'}
+                </b>
+              ) : (
+                <b class={sit.estado === 'atras' ? 'atras' : 'ok'}>{estado}</b>
+              )}
             </span>
           </span>
         </button>
@@ -332,7 +360,8 @@ export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
           aria-label={`+${nome}, ${n(ml)} mL${sugerida ? ', sugerido' : ''}`}
           onClick={() => registrar(ml)}
         >
-          +{nome}
+          {/* Uma garrafa inteira cabe melhor escrita assim; o nome falado continua "Toda". */}
+          {fracao === 1 ? '+1 garrafa' : `+${nome}`}
           <small>{n(ml)} mL</small>
         </button>
       </div>

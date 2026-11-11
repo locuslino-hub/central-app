@@ -142,7 +142,7 @@ describe('computador (1280 px): menu à esquerda, página, painel direito', () =
 
   it('o painel direito tem Agora, Água e Chat', async () => {
     await mostrar('#/', 1280);
-    const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = screen.getByRole('complementary', { name: 'Agora, água e chat' });
     const titulos = within(painel).getAllByRole('heading').map((h: HTMLElement) => h.textContent);
     // Um cartão para cada painel que a rota diz aceitar, na mesma ordem.
     expect(titulos).toEqual(PAINEIS_DIREITOS.map((p) => (p === 'agora' ? 'Agora' : p === 'agua' ? 'Água' : 'Chat')));
@@ -640,7 +640,7 @@ describe('"Em breve": o que ainda não existe diz isso', () => {
 
   it('o cartão Agora do painel direito já é o de verdade (Tarefa 16): sem "Em breve", com o caminho para o Agora', async () => {
     await mostrar('#/', 1280);
-    const agora = within(screen.getByRole('complementary', { name: 'Agora e chat' }).querySelector('.cartao-agora') as HTMLElement);
+    const agora = within(screen.getByRole('complementary', { name: 'Agora, água e chat' }).querySelector('.cartao-agora') as HTMLElement);
     expect(agora.queryByText('Em breve')).toBeNull();
     expect(agora.getByRole('link', { name: 'Abrir o Agora' }).getAttribute('href')).toBe('#/agora');
   });

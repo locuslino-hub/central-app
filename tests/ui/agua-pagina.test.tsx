@@ -128,9 +128,31 @@ describe('o alto da página: total, selo e falta', () => {
 
   it('o quadro de dica é o mesmo do cartão', async () => {
     await abrir();
-    await waitFor(() => expect(pagina().querySelector('.agua-dica')).toBeTruthy());
-    expect(pagina().querySelector('.agua-dica')!.textContent).toBe('Para alcançar o ritmo, beba 1 garrafa e ¼ (625 mL).');
+    await waitFor(() =>
+      expect(pagina().querySelector('.agua-dica')!.textContent).toBe('Para alcançar o ritmo, beba 1 garrafa e ¼ (625 mL).'),
+    );
     expect(pagina().querySelectorAll('.agua-dica .garrafinhas svg')).toHaveLength(2);
+  });
+});
+
+describe('enquanto a loja ainda lê', () => {
+  it('a página não mostra "Atrás", dica, botão sugerido, traço do que falta nem histórico (e mostra tudo depois)', async () => {
+    render(<Conjunto />);
+    fireEvent.click(anel());
+    const caixa = pagina(); // sem esperar: a loja ainda não respondeu
+    expect(caixa.textContent).not.toMatch(/atrás/i);
+    expect(caixa.textContent).not.toContain('Para alcançar o ritmo');
+    expect(caixa.textContent).not.toContain('0 dias');
+    expect(caixa.textContent).not.toContain('0,0 L');
+    expect(caixa.querySelector('.agua-historico')).toBeNull();
+    expect(caixa.querySelectorAll('.sugerido')).toHaveLength(0);
+    expect(caixa.querySelector('.agua-grafico-falta')).toBeNull();
+    expect(caixa.querySelector('.agua-legenda')!.textContent).not.toContain('o que falta');
+    expect(caixa.querySelector('.agua-selo')!.classList.contains('carregando')).toBe(true);
+    await waitFor(() => expect(pagina().querySelector('.agua-selo')!.textContent).toBe('Atrás 619 mL'));
+    expect(pagina().querySelector('.agua-historico')).toBeTruthy();
+    expect(pagina().querySelectorAll('button.sugerido')).toHaveLength(1);
+    expect(pagina().querySelector('.agua-grafico-falta')).toBeTruthy();
   });
 });
 
@@ -148,6 +170,33 @@ describe('gráfico "Ritmo do dia"', () => {
     expect(titulos()).toEqual(['08:30 · 250 mL', '10:50 · 375 mL', '12:00 · 500 mL']);
     expect(grafico().querySelectorAll('circle.agua-grafico-gole')).toHaveLength(3);
     expect(horas()).toEqual(['08:30', '10:50', '12:00']);
+  });
+
+  it('as horas ficam depois de todas as bolinhas (por cima delas), e o traço do que falta vem depois das bolinhas dos goles', async () => {
+    await goles([250, '08:30'], [125, '08:50'], [125, '12:00']);
+    await abrir();
+    await waitFor(() => expect(titulos()).toHaveLength(3));
+    const ordem = Array.from(grafico().querySelectorAll('circle.agua-grafico-gole, text.agua-grafico-hora, line.agua-grafico-falta')).map((e) =>
+      e.tagName === 'circle' ? 'bolinha' : e.tagName === 'text' ? 'hora' : 'falta',
+    );
+    expect(ordem).toEqual(['bolinha', 'bolinha', 'bolinha', 'falta', 'hora', 'hora']);
+  });
+
+  it('com pouca diferença (550 contra 619 mL) o traço do que falta passa 3 pontos além das duas bolinhas e continua visível', async () => {
+    await goles([500, '08:30'], [50, '10:00']);
+    await abrir();
+    await waitFor(() => expect(grafico().querySelector('.agua-grafico-falta')).toBeTruthy());
+    const num = (e: Element | null, nome: string) => Number(e!.getAttribute(nome));
+    const traco = grafico().querySelector('.agua-grafico-falta');
+    const agora = grafico().querySelector('.agua-grafico-agora');
+    const esperado = grafico().querySelector('.agua-grafico-esperado');
+    // O "esperado" fica mais alto na tela (y menor) que o "agora"; o traço vai de 3 abaixo de uma até 3 acima da outra.
+    expect(num(esperado, 'cy')).toBeLessThan(num(agora, 'cy'));
+    expect(num(traco, 'y1')).toBeCloseTo(num(agora, 'cy') + num(agora, 'r') + 3, 5);
+    expect(num(traco, 'y2')).toBeCloseTo(num(esperado, 'cy') - num(esperado, 'r') - 3, 5);
+    // Mesmo com as bolinhas quase encostadas, sobra traço fora delas dos dois lados.
+    expect(num(traco, 'y1') - (num(agora, 'cy') + num(agora, 'r'))).toBeGreaterThanOrEqual(3);
+    expect(num(esperado, 'cy') - num(esperado, 'r') - num(traco, 'y2')).toBeGreaterThanOrEqual(3);
   });
 
   it('o <title> usa o separador de milhar do Brasil', async () => {
@@ -441,7 +490,7 @@ describe('na casca', () => {
 
   it('no computador, o anel do cartão da coluna direita abre a página e o foco volta a ele', async () => {
     mostrar('#/', 1280);
-    const lado = await screen.findByRole('complementary', { name: 'Agora e chat' });
+    const lado = await screen.findByRole('complementary', { name: 'Agora, água e chat' });
     const aneis = await waitFor(() => {
       const el = lado.querySelector('.agua-resumo') as HTMLElement;
       expect(el).toBeTruthy();
@@ -457,7 +506,7 @@ describe('na casca', () => {
   it('com o chat aberto, o anel da versão curta também abre a página', async () => {
     localStorage.setItem('central-chat-aberto', '1');
     mostrar('#/', 1280);
-    const lado = await screen.findByRole('complementary', { name: 'Agora e chat' });
+    const lado = await screen.findByRole('complementary', { name: 'Agora, água e chat' });
     await waitFor(() => expect(lado.querySelector('.cartao-agua.curto')).not.toBeNull());
     fireEvent.click(lado.querySelector('.cartao-agua.curto .agua-resumo')!);
     await screen.findByRole('dialog', { name: 'Água' });

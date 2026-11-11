@@ -83,7 +83,7 @@ describe('#/agora', () => {
   it('o painel direito não repete o Agora quando a página já é ele', async () => {
     await diaComum();
     mostrar('#/agora', 1280);
-    const lado = within(screen.getByRole('complementary', { name: 'Agora e chat' }));
+    const lado = within(screen.getByRole('complementary', { name: 'Agora, água e chat' }));
     expect(lado.queryByRole('heading', { name: 'Agora' })).toBeNull();
     expect(lado.getByRole('heading', { name: 'Chat' })).toBeTruthy();
   });
@@ -224,7 +224,7 @@ describe('abas do Agora: Agora, Triagem e Fechar o dia', () => {
 });
 
 describe('cartão Agora no painel direito (computador)', () => {
-  const lado = () => within(screen.getByRole('complementary', { name: 'Agora e chat' }).querySelector('.cartao-agora') as HTMLElement);
+  const lado = () => within(screen.getByRole('complementary', { name: 'Agora, água e chat' }).querySelector('.cartao-agora') as HTMLElement);
 
   it('tempo livre, destaque com ação e o caminho para o Agora; sem "Em breve" nem os próximos', async () => {
     await diaComum();

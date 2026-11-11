@@ -20,7 +20,7 @@ async function abrir(page: Page, hash: string) {
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 
-const coluna = (page: Page) => page.getByRole('complementary', { name: 'Agora e chat' });
+const coluna = (page: Page) => page.getByRole('complementary', { name: 'Agora, água e chat' });
 const cartao = (page: Page) => page.getByRole('region', { name: 'Água' });
 
 /** O cartão e cada botão dele cabem: nada é cortado nem sai pelos lados. */
@@ -71,9 +71,9 @@ test.describe('computador, 1280 × 800', () => {
     await expect(agua.getByText('Atrás 119 mL')).toBeVisible();
 
     // Desfazer tira só o gole de hoje.
-    await agua.getByRole('button', { name: 'Desfazer' }).click();
+    await agua.getByRole('button', { name: 'Desfazer o último gole' }).click();
     await expect(agua.locator('.agua-total')).toHaveText('0 mL');
-    await expect(agua.getByRole('button', { name: 'Desfazer' })).toBeDisabled();
+    await expect(agua.getByRole('button', { name: 'Desfazer o último gole' })).toBeDisabled();
     await agua.getByRole('button', { name: /^Toda, 500 mL/ }).click();
     await expect(agua.locator('.agua-total')).toHaveText('500 mL');
 

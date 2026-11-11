@@ -124,9 +124,9 @@ describe('CartaoAgua: estados às 12:20 (esperado 619 mL)', () => {
   it('antes das 08:00 não há marca do esperado; depois das 22:00 o próximo gole não é prometido', async () => {
     vi.setSystemTime(Date.parse('2026-11-05T07:00:00Z'));
     const { unmount } = render(<CartaoAgua aoAbrir={() => {}} />);
-    await waitFor(() => expect(total()).toBe('0 mL'));
+    await waitFor(() => expect(cartao().querySelector('.agua-selo')!.textContent).toBe('No ritmo')); // já leu
+    expect(total()).toBe('0 mL');
     expect(cartao().querySelector('.agua-alvo')).toBeNull();
-    expect(cartao().querySelector('.agua-selo')!.textContent).toBe('No ritmo');
     expect(dica().textContent).toBe('Em dia. Próximo ¼ de garrafa por volta das 07:20.');
     unmount();
 
@@ -168,7 +168,7 @@ describe('CartaoAgua: registrar e desfazer', () => {
     await goles([250, '08:30'], [125, '10:00'], [375, '11:45']);
     render(<CartaoAgua aoAbrir={() => {}} />);
     await waitFor(() => expect(total()).toBe('750 mL'));
-    fireEvent.click(botao('Desfazer'));
+    fireEvent.click(botao('Desfazer o último gole'));
     await waitFor(() => expect(total()).toBe('375 mL'));
     expect(cartao().textContent).toContain('Último: 10:00 · 125 mL');
     const restantes = (await vivos()).map((g) => [g.data, g.hora, g.ml]);
@@ -185,16 +185,38 @@ describe('CartaoAgua: registrar e desfazer', () => {
   it('Desfazer fica desabilitado sem goles hoje, mesmo com goles de ontem', async () => {
     await salvar('agua', gole(500, '20:00', '2026-11-04'));
     render(<CartaoAgua aoAbrir={() => {}} />);
-    await waitFor(() => expect(botao('Desfazer')).toBeTruthy());
-    await waitFor(() => expect((botao('Desfazer') as HTMLButtonElement).disabled).toBe(true));
+    await waitFor(() => expect(botao('Desfazer o último gole')).toBeTruthy());
+    await waitFor(() => expect((botao('Desfazer o último gole') as HTMLButtonElement).disabled).toBe(true));
     // Mesmo chamado de fora, não apaga o de ontem.
     await desfazerUltimoGole(HOJE);
     expect(await vivos()).toHaveLength(1);
   });
 
+  it('com a loja ainda lendo: sem "Atrás" falso, sem dica, sem botão sugerido nem trecho que falta; depois que lê, aparecem', async () => {
+    render(<CartaoAgua aoAbrir={() => {}} />);
+    expect(cartao().textContent).not.toMatch(/atrás/i);
+    expect(cartao().textContent).not.toContain('Para alcançar o ritmo');
+    expect(cartao().querySelectorAll('.sugerido')).toHaveLength(0);
+    expect(cartao().querySelector('.agua-selo')!.classList.contains('carregando')).toBe(true);
+    expect(cartao().querySelector('.agua-dica')!.classList.contains('carregando')).toBe(true);
+    expect(cartao().querySelector('.agua-dica .garrafinhas')).toBeNull();
+    expect(cartao().querySelector('.agua-falta')?.classList.contains('carregando') ?? true).toBe(true);
+    // O lugar do selo e da dica fica guardado (nada de texto, mas os elementos existem).
+    expect(cartao().querySelector('.agua-selo')).toBeTruthy();
+    await waitFor(() => expect(cartao().querySelector('.agua-selo')!.textContent).toBe('Atrás 619 mL'));
+    expect(cartao().querySelectorAll('button.sugerido')).toHaveLength(1);
+    expect(cartao().querySelector('.agua-falta')!.classList.contains('carregando')).toBe(false);
+  });
+
+  it('o Desfazer do cartão se chama "Desfazer o último gole" (há outro "Desfazer" no Agora)', async () => {
+    render(<CartaoAgua aoAbrir={() => {}} />);
+    expect(within(cartao()).queryByRole('button', { name: 'Desfazer' })).toBeNull();
+    expect(botao('Desfazer o último gole').textContent).toBe('Desfazer');
+  });
+
   it('com a loja ainda lendo, o Desfazer também está desabilitado', () => {
     render(<CartaoAgua aoAbrir={() => {}} />);
-    expect((botao('Desfazer') as HTMLButtonElement).disabled).toBe(true);
+    expect((botao('Desfazer o último gole') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('tocar no total abre a página', async () => {
@@ -225,7 +247,7 @@ describe('CartaoAgua: virada do dia', () => {
     expect(cartao().textContent).toContain('Nada registrado ainda');
     expect(cartao().querySelector('.agua-selo')!.textContent).toBe('No ritmo');
     // Desfazer não pega no gole de ontem.
-    expect((botao('Desfazer') as HTMLButtonElement).disabled).toBe(true);
+    expect((botao('Desfazer o último gole') as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -262,9 +284,21 @@ describe('AguaCurta', () => {
     expect(curta().querySelectorAll('button.sugerido')).toHaveLength(0);
   });
 
-  it('sugerindo uma garrafa inteira ou mais, o botão é "+Toda"', async () => {
+  it('sugerindo uma garrafa inteira ou mais, o botão diz "+1 garrafa" (e se chama "+Toda" para o leitor de tela)', async () => {
     render(<AguaCurta aoAbrir={() => {}} />); // 0 mL, falta 619
-    await waitFor(() => expect(botao('+Toda, 500 mL, sugerido', curta())).toBeTruthy());
+    const botaoToda = await waitFor(() => botao('+Toda, 500 mL, sugerido', curta()));
+    expect(botaoToda.textContent).toBe('+1 garrafa500 mL');
+    expect(botaoToda.classList.contains('sugerido')).toBe(true);
+  });
+
+  it('com a loja ainda lendo: sem "atrás" falso e sem botão sugerido; depois que lê, aparecem', async () => {
+    render(<AguaCurta aoAbrir={() => {}} />);
+    expect(curta().textContent).not.toMatch(/atrás/i);
+    expect(curta().querySelectorAll('.sugerido')).toHaveLength(0);
+    expect(curta().querySelector('.agua-sub .carregando')).toBeTruthy();
+    expect(botao(/^\+¼, 125 mL$/, curta())).toBeTruthy();
+    await waitFor(() => expect(curta().textContent).toContain('atrás 619 mL'));
+    expect(curta().querySelectorAll('button.sugerido')).toHaveLength(1);
   });
 
   it('o anel e o total abrem a página', () => {
@@ -281,7 +315,7 @@ describe('na casca', () => {
     history.replaceState(null, '', `/${hash}`);
     render(<App />);
   }
-  const lado = () => screen.getByRole('complementary', { name: 'Agora e chat' });
+  const lado = () => screen.getByRole('complementary', { name: 'Agora, água e chat' });
   const alternar = () => within(lado()).getByRole('button', { name: /^Chat/ });
 
   it('com o chat recolhido: Agora, Água e Chat, nessa ordem, e o cartão completo', async () => {
@@ -303,7 +337,7 @@ describe('na casca', () => {
     await waitFor(() => expect(lado().querySelector('.cartao-agua.curto')).not.toBeNull());
     expect(lado().querySelectorAll('.cartao-agua')).toHaveLength(1);
     expect(within(lado()).queryByRole('button', { name: /^¼, 125 mL$/ })).toBeNull();
-    const mais = within(lado()).getByRole('button', { name: /^\+Toda, 500 mL/ });
+    const mais = await within(lado()).findByRole('button', { name: /^\+Toda, 500 mL/ });
     expect(mais.classList.contains('sugerido')).toBe(true);
     // Recolher volta ao cartão completo.
     fireEvent.click(alternar());

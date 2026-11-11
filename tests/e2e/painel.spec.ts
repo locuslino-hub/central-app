@@ -197,7 +197,7 @@ for (const [nome, viewport, sufixo] of [
       const seguir = regiao(/^A seguir/);
       // O primeiro da fila (Ler artigo) é o destaque do Agora: no painel direito ou, no celular, no alto.
       const agoraNoLado =
-        sufixo === '1280' ? page.getByRole('complementary', { name: 'Agora e chat' }) : principal.getByRole('region', { name: 'Agora' });
+        sufixo === '1280' ? page.getByRole('complementary', { name: 'Agora, água e chat' }) : principal.getByRole('region', { name: 'Agora' });
       await expect(agoraNoLado.getByText('Ler artigo da Renata')).toBeVisible();
       await expect(agoraNoLado.getByText('Cabe agora')).toBeVisible();
       await expect(seguir.getByText('Ler artigo da Renata')).toHaveCount(0);
@@ -366,7 +366,7 @@ test.describe('computador, 1280 px: o Agora no painel direito', () => {
 
   test('cartão Agora com destaque e ação; Abrir o Agora leva à página e o painel não o repete', async ({ page }) => {
     await abrir(page, '#/');
-    const lado = page.getByRole('complementary', { name: 'Agora e chat' });
+    const lado = page.getByRole('complementary', { name: 'Agora, água e chat' });
     await expect(lado.getByText('Livre até 14:00 · 1 h 40')).toBeVisible();
     await expect(lado.getByRole('button', { name: 'Concluir: Ler artigo da Renata' })).toBeVisible();
     await expect(lado.getByText('Em breve')).toHaveCount(0);

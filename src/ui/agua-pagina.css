@@ -1,0 +1,470 @@
+/*
+ * Água (Tarefa 27): a página expandida (diálogo). Usa também as peças de agua.css (selo, dica, garrafinhas, botões ¼ ½ ¾ Toda).
+ * Modelo: prototipo-esbocos/agua-combinado.html.
+ */
+
+.agua-pagina button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/*
+ * O <dialog> não tem aparência própria: a folha (.agua-pag) é quem tem fundo, cantos e rolagem. Assim o clique no
+ * fundo (::backdrop) cai no próprio <dialog>, e a barra de rolagem fica dentro da folha.
+ * Cabe em 1280 × 800 sem rolar; abaixo de 900 px as colunas empilham e a folha rola por dentro.
+ */
+
+.agua-pagina {
+  width: min(57.33rem, calc(100vw - 1.5rem));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tinta);
+  overflow: visible;
+}
+.agua-pagina::backdrop {
+  background: rgb(38 43 38 / 0.35);
+}
+.agua-pag {
+  max-height: calc(100dvh - 1.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--r-g);
+  background: var(--folha);
+  box-shadow: var(--relevo);
+}
+
+/* Cabeça: título, selo e fechar. Fica à vista quando a folha rola (celular). */
+.agua-pag-cabeca {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.9rem 1.2rem 0.4rem 1.47rem;
+  background: var(--folha);
+}
+.agua-pag-cabeca .agua-selo {
+  margin-left: 0;
+}
+/* Empilhado (celular), a folha rola por baixo da cabeça: uma linha fina marca a borda. */
+@media (max-width: 899px) {
+  .agua-pag-cabeca {
+    border-bottom: 1px solid var(--linha);
+  }
+}
+.agua-x {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--toque);
+  height: var(--toque);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--poco);
+  color: var(--tinta);
+}
+.agua-x:hover {
+  background: var(--azul-f);
+}
+
+/* Colunas: esquerda até "Somar", direita o histórico. */
+.agua-cols {
+  display: grid;
+  padding: 0 1.47rem 1.47rem;
+}
+.agua-col1,
+.agua-col2 {
+  min-width: 0;
+}
+.agua-col2 {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--linha);
+}
+/* O histórico só desenha depois da leitura; enquanto isso fica um vão, sem "0 dias" nem "0,0 L" falsos. */
+.agua-historico-vazio {
+  min-height: 12rem;
+}
+@media (min-width: 900px) {
+  .agua-cols {
+    grid-template-columns: 31rem minmax(0, 1fr);
+  }
+  .agua-col1 {
+    padding-right: 1.73rem;
+  }
+  .agua-col2 {
+    margin-top: 0;
+    padding: 0 0 0 1.73rem;
+    border-top: 0;
+    border-left: 1px solid var(--linha);
+  }
+}
+
+/* Títulos de bloco, em letras pequenas e maiúsculas. */
+.agua-pag h3 {
+  margin: 1.07rem 0 0.47rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tinta3);
+}
+.agua-pag h3.agua-primeiro {
+  margin-top: 0;
+}
+.agua-rot-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 1.07rem 0 0.47rem;
+}
+.agua-rot-linha h3 {
+  margin: 0;
+}
+.agua-desfazer {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: var(--toque);
+  margin: -0.6rem -0.6rem -0.6rem 0; /* a área de toque é de 44 px, sem esticar a linha */
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--acao);
+  font-size: 0.83rem;
+  font-weight: 500;
+}
+.agua-desfazer .icone {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.agua-desfazer:hover:not(:disabled) {
+  background: var(--poco);
+}
+.agua-desfazer:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Copo e total */
+.agua-pag-topo {
+  display: flex;
+  align-items: center;
+  gap: 1.07rem;
+}
+.agua-copo {
+  display: block;
+  flex: none;
+  width: 5.07rem;
+  height: 6.4rem;
+}
+.agua-copo-vidro {
+  fill: var(--folha);
+  stroke: var(--azul-m);
+  stroke-width: 2.5;
+}
+.agua-copo-liquido {
+  fill: var(--azul-e);
+  transition: y 0.5s;
+}
+.agua-grande {
+  font-size: 2.53rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.agua-grande small {
+  margin-left: 3px;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--tinta3);
+}
+.agua-pag-sub {
+  margin-top: 3px;
+  font-size: 0.9rem;
+  color: var(--tinta3);
+}
+
+/* Gráfico */
+.agua-grafico {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+  background: var(--poco);
+}
+.agua-grafico-grade {
+  stroke: var(--linha);
+}
+.agua-grafico-eixo {
+  font-size: 10px;
+  fill: var(--tinta3);
+}
+.agua-grafico-ritmo {
+  stroke: var(--agua2);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+.agua-grafico-falta {
+  stroke: var(--coral2);
+  stroke-width: 5;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+.agua-grafico-linha {
+  fill: none;
+  stroke: var(--azul);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.agua-grafico-gole {
+  fill: var(--folha);
+  stroke: var(--azul);
+  stroke-width: 2;
+}
+.agua-grafico-hora {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--azul);
+  paint-order: stroke;
+  stroke: var(--poco);
+  stroke-width: 3px;
+}
+.agua-grafico-agora {
+  fill: var(--azul);
+}
+.agua-grafico-esperado {
+  fill: var(--folha);
+  stroke: var(--tinta);
+  stroke-width: 1.5;
+}
+.agua-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--tinta3);
+}
+.agua-legenda i {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.agua-legenda-voce {
+  background: var(--azul);
+}
+.agua-legenda-ritmo {
+  background: var(--agua2);
+}
+.agua-legenda-falta {
+  background: var(--coral2);
+}
+
+/* Garrafas do dia */
+.agua-garrafas {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 0.4rem;
+  padding: 0 0.93rem;
+  list-style: none;
+}
+.agua-garrafa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.agua-garrafa .garrafinha {
+  width: 2.1rem;
+  height: 3.6rem;
+}
+.agua-garrafa small {
+  font-size: 0.8rem;
+  color: var(--tinta3);
+}
+.agua-garrafa.agora small {
+  font-weight: 600;
+  color: var(--azul);
+}
+
+/* Botões ¼ ½ ¾ Toda: os mesmos do cartão (.agua-fracoes). */
+.agua-pag .agua-fracoes {
+  margin-top: 0.3rem;
+}
+
+/* Outro valor */
+.agua-outro {
+  margin-top: 0.6rem;
+}
+.agua-outro-linha {
+  display: flex;
+  gap: 6px;
+}
+.agua-outro .campo {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.agua-somar {
+  min-width: var(--toque);
+  min-height: var(--toque);
+  padding: 0 1.1rem;
+  border: 0;
+  border-radius: 99px;
+  background: var(--coral);
+  color: var(--coral-t);
+  font-weight: 600;
+}
+.agua-somar:hover {
+  background: var(--coral2);
+}
+.agua-invalido {
+  margin: 6px 0 0 4px;
+  font-size: 0.83rem;
+  color: var(--alerta);
+}
+.agua-invalido b {
+  margin-right: 4px;
+}
+.agua-pag .agua-erro {
+  margin-top: 8px;
+}
+
+/* Histórico */
+.agua-estats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.agua-estat {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: var(--poco);
+}
+.agua-estat b {
+  display: block;
+  font-size: 1.13rem;
+  letter-spacing: -0.02em;
+}
+.agua-estat span {
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: var(--tinta3);
+}
+.agua-semana {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.agua-semana li {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.agua-barra-trilho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 2.67rem;
+}
+.agua-barra {
+  display: block;
+  width: 100%;
+  max-width: 1.73rem;
+  border-radius: 6px 6px 3px 3px;
+  background: var(--agua);
+  transition: height 0.4s;
+}
+.agua-barra.meta {
+  background: var(--acao);
+}
+.agua-barra.hoje {
+  background: var(--azul-m);
+}
+.agua-semana small {
+  font-size: 0.8rem;
+  color: var(--tinta3);
+}
+.agua-mapa-dias,
+.agua-mapa {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.agua-mapa-dias {
+  margin-bottom: 3px;
+  font-size: 0.8rem;
+  text-align: center;
+  color: var(--tinta3);
+}
+.agua-dia {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1.25;
+  border-radius: 7px;
+  background: var(--poco);
+  color: var(--tinta);
+  font-size: 0.78rem;
+}
+.agua-dia.n1,
+.agua-escala .n1 {
+  background: #e3eef2;
+}
+.agua-dia.n2,
+.agua-escala .n2 {
+  background: #b5d3df;
+}
+.agua-dia.n3,
+.agua-escala .n3 {
+  background: var(--azul-e);
+}
+.agua-dia.n4,
+.agua-escala .n4 {
+  background: var(--azul);
+  color: #fff;
+  font-weight: 600;
+}
+.agua-dia.hoje {
+  outline: 2px solid var(--coral2);
+  outline-offset: 1px;
+}
+.agua-escala {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--tinta3);
+}
+.agua-escala i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}

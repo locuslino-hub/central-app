@@ -132,7 +132,7 @@ test.describe('computador, 1280 px', () => {
   test('o chat do painel começa recolhido no pé da coluna; abre, recolhe com Esc e o aparelho lembra', async ({ page }) => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/');
-    const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
     const botao = painel.getByRole('button', { name: 'Chat' });
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
 
@@ -170,7 +170,7 @@ test.describe('computador, 1280 px', () => {
   test('o chat do painel direito funciona e todo toque tem 44 px', async ({ page }) => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/');
-    const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
     await painel.getByRole('button', { name: 'Chat' }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
 
@@ -190,7 +190,7 @@ test.describe('computador, 1280 px', () => {
 
   test('conversa longa no painel: a conversa rola dentro do cartão e o campo fica à vista', async ({ page }) => {
     await page.goto('/central-app/');
-    const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
     await painel.getByRole('button', { name: 'Chat' }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
     for (const frase of ['Comprar pão', 'Mandar mensagem para Renata', 'Preciso parafusar o apoio do banheiro', 'asdf qwer']) {

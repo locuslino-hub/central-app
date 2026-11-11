@@ -7,7 +7,7 @@ import { FIM_MIN, GARRAFA_ML, INICIO_MIN, META_ML, esperadoAgora, historico, ler
 import type { AguaRegistro } from '../dados/tipos';
 import { BotoesDeFracao, QuadroDaDica, SeloDaAgua, hm, n, useAguaDoDia, Garrafinha } from './Agua';
 import { Icone } from './icones';
-import './agua.css';
+import './agua-pagina.css';
 
 // ---- Pequenas peças ----
 
@@ -46,7 +46,7 @@ function PaginaAberta({ aoFechar }: { aoFechar: () => void }) {
   /** O mouse foi apertado dentro da página (arrastar para fora, ao selecionar texto, não é tocar no fundo). */
   const apertouDentro = useRef(false);
   const dados = useAguaDoDia();
-  const { dia, minuto, total, doDia, ultimo, sit, porcento, registrar, desfazer, erro } = dados;
+  const { dia, minuto, total, doDia, ultimo, sit, porcento, registrar, desfazer, erro, carregando } = dados;
 
   useEffect(() => {
     const dialogo = caixa.current;
@@ -91,7 +91,7 @@ function PaginaAberta({ aoFechar }: { aoFechar: () => void }) {
             <Icone nome="gota" />
             Água
           </h2>
-          <SeloDaAgua sit={sit} />
+          <SeloDaAgua sit={sit} carregando={carregando} />
           <button type="button" class="agua-x" aria-label="Fechar" onClick={fechar}>
             <Icone nome="fechar" />
           </button>
@@ -113,13 +113,13 @@ function PaginaAberta({ aoFechar }: { aoFechar: () => void }) {
               </div>
             </div>
 
-            <GraficoDoRitmo goles={doDia} total={total} minuto={minuto} sit={sit} podeDesfazer={Boolean(ultimo)} aoDesfazer={desfazer} />
+            <GraficoDoRitmo goles={doDia} total={total} minuto={minuto} sit={sit} carregando={carregando} podeDesfazer={Boolean(ultimo)} aoDesfazer={desfazer} />
 
-            <QuadroDaDica sit={sit} minuto={minuto} />
+            <QuadroDaDica sit={sit} minuto={minuto} carregando={carregando} />
 
             <GarrafasDoDia total={total} />
 
-            <BotoesDeFracao sit={sit} registrar={registrar} />
+            <BotoesDeFracao sit={sit} registrar={registrar} carregando={carregando} />
             <OutroValor registrar={registrar} />
             {erro && (
               <p class="agua-erro" role="alert">
@@ -129,7 +129,7 @@ function PaginaAberta({ aoFechar }: { aoFechar: () => void }) {
           </div>
 
           <div class="agua-col2">
-            <HistoricoDaAgua registros={dados.registros} hoje={dia} />
+            {carregando ? <div class="agua-historico-vazio" aria-hidden="true" /> : <HistoricoDaAgua registros={dados.registros} hoje={dia} />}
           </div>
         </div>
       </div>
@@ -167,6 +167,10 @@ const W = 360,
 const TETO_ML = META_ML * 1.1;
 /** Duas bolinhas a menos disto (em unidades do `viewBox`) mostram só a primeira hora. */
 const DISTANCIA_DA_HORA = 24;
+/** Raio das bolinhas de "agora" (o que você bebeu) e do "esperado", e a sobra do traço laranja além delas. */
+const R_AGORA = 4;
+const R_ESPERADO = 3.5;
+const SOBRA = 3;
 
 const x = (minuto: number) => ESQ + ((Math.max(INICIO_MIN, Math.min(FIM_MIN, minuto)) - INICIO_MIN) / (FIM_MIN - INICIO_MIN)) * (W - ESQ - DIR);
 const y = (ml: number) => H - BAIXO - (Math.min(ml, TETO_ML) / TETO_ML) * (H - TOPO - BAIXO);
@@ -181,6 +185,7 @@ export function GraficoDoRitmo({
   total,
   minuto,
   sit,
+  carregando = false,
   podeDesfazer,
   aoDesfazer,
 }: {
@@ -188,6 +193,8 @@ export function GraficoDoRitmo({
   total: number;
   minuto: number;
   sit: Situacao;
+  /** A loja ainda lê: o traço "o que falta" seria falso, então não aparece. */
+  carregando?: boolean;
   podeDesfazer: boolean;
   aoDesfazer: () => void;
 }) {
@@ -217,6 +224,7 @@ export function GraficoDoRitmo({
     `Ritmo do dia: ${n(total)} mL bebidos, esperado às ${hm(minuto)}: ${n(esperado)} mL. ` +
     (goles.length ? `Goles: ${goles.map((g) => `${g.hora} · ${n(g.ml)} mL`).join('; ')}.` : 'Nenhum gole ainda.');
 
+  const faltando = sit.estado === 'atras' && !carregando;
   const horas: number[] = [];
   for (let h = INICIO_MIN / 60; h <= FIM_MIN / 60; h += 2) horas.push(h);
 
@@ -244,14 +252,23 @@ export function GraficoDoRitmo({
           </text>
         ))}
         <line class="agua-grafico-ritmo" x1={x(INICIO_MIN)} y1={y(0)} x2={x(FIM_MIN)} y2={y(META_ML)} />
-        {sit.estado === 'atras' && <line class="agua-grafico-falta" x1={x(agora)} x2={x(agora)} y1={y(total)} y2={y(esperado)} />}
         <path class="agua-grafico-linha" d={`M${pontos.join(' L')}`} />
         {bolinhas.map((b) => (
-          <g key={b.chave}>
+          <circle key={b.chave} class="agua-grafico-gole" cx={b.cx} cy={b.cy} r="4.5">
             <title>{`${b.hora} · ${n(b.ml)} mL`}</title>
-            <circle class="agua-grafico-gole" cx={b.cx} cy={b.cy} r="4.5" />
-            {b.mostraHora && (
+          </circle>
+        ))}
+        {/* O traço do que falta vem depois das bolinhas dos goles e passa uns 3 pontos além das duas bolinhas de agora:
+            com pouca diferença elas se encostam, e sem essa sobra o traço sumiria. */}
+        {faltando && (
+          <line class="agua-grafico-falta" x1={x(agora)} x2={x(agora)} y1={y(total) + R_AGORA + SOBRA} y2={y(esperado) - R_ESPERADO - SOBRA} />
+        )}
+        {/* As horas por último: ficam por cima das bolinhas e do traço (o contorno claro mantém a leitura). */}
+        {bolinhas.map(
+          (b) =>
+            b.mostraHora && (
               <text
+                key={b.chave}
                 class="agua-grafico-hora"
                 x={b.cx}
                 y={b.cy - 9 < 9 ? b.cy + 17 : b.cy - 9}
@@ -259,11 +276,10 @@ export function GraficoDoRitmo({
               >
                 {b.hora}
               </text>
-            )}
-          </g>
-        ))}
-        <circle class="agua-grafico-agora" cx={x(agora)} cy={y(total)} r="4" />
-        <circle class="agua-grafico-esperado" cx={x(agora)} cy={y(esperado)} r="3.5" />
+            ),
+        )}
+        <circle class="agua-grafico-agora" cx={x(agora)} cy={y(total)} r={R_AGORA} />
+        <circle class="agua-grafico-esperado" cx={x(agora)} cy={y(esperado)} r={R_ESPERADO} />
       </svg>
       <p class="agua-legenda">
         <span>
@@ -274,7 +290,7 @@ export function GraficoDoRitmo({
           <i class="agua-legenda-ritmo" />
           ritmo ideal
         </span>
-        {sit.estado === 'atras' && (
+        {faltando && (
           <span>
             <i class="agua-legenda-falta" />o que falta
           </span>

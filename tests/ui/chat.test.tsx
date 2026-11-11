@@ -638,7 +638,7 @@ describe('o chat na casca', () => {
   it('no computador, o painel direito tem o chat (recolhido até tocar na barra)', async () => {
     irPara('#/', 1280);
     render(<App />);
-    const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = screen.getByRole('complementary', { name: 'Agora, água e chat' });
     abrirChatDoPainel(painel);
 
     dizer('Preciso parafusar o apoio do banheiro', painel);
@@ -662,14 +662,14 @@ describe('o chat na casca', () => {
     render(<App />);
     expect(screen.getAllByRole('textbox', { name: 'Escreva ou dite' })).toHaveLength(1);
     expect(within(screen.getByRole('main')).getByRole('textbox', { name: 'Escreva ou dite' })).toBeTruthy();
-    const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = screen.getByRole('complementary', { name: 'Agora, água e chat' });
     expect(within(painel).queryByRole('heading', { name: 'Chat' })).toBeNull();
   });
 
   it('a conversa continua ao trocar do painel para a página do chat', async () => {
     irPara('#/', 1280);
     render(<App />);
-    const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = screen.getByRole('complementary', { name: 'Agora, água e chat' });
     abrirChatDoPainel(painel);
     dizer('Preciso parafusar o apoio do banheiro', painel);
     await within(painel).findByRole('article');

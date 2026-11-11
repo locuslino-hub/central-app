@@ -218,7 +218,7 @@ describe('A seguir', () => {
     expect(await seguir.findByText(inteiro('Livre até 14:00, quando começa Reunião de orientação.'))).toBeTruthy();
     expect(seguir.getByText('Você tem 1 h 40.')).toBeTruthy();
     // O primeiro da fila é o destaque do Agora (painel direito): não se repete aqui.
-    const lado = within(screen.getByRole('complementary', { name: 'Agora e chat' }));
+    const lado = within(screen.getByRole('complementary', { name: 'Agora, água e chat' }));
     expect(await lado.findByText('Arquivar notas')).toBeTruthy();
     await waitFor(() => expect(linhas()).toHaveLength(3));
     expect(seguir.queryByText('Arquivar notas')).toBeNull();
@@ -324,7 +324,7 @@ describe('Painel e Sem prazo juntos', () => {
     fireEvent.click(await regiao('Sem prazo').findByRole('button', { name: 'Hoje' }));
     expect(await regiao('Checklist do dia').findByRole('checkbox', { name: 'Comprar café' })).toBeTruthy();
     // E entra na fila: sozinha, ela é o destaque do Agora.
-    expect(await within(screen.getByRole('complementary', { name: 'Agora e chat' })).findByText('Comprar café')).toBeTruthy();
+    expect(await within(screen.getByRole('complementary', { name: 'Agora, água e chat' })).findByText('Comprar café')).toBeTruthy();
     await vi.waitFor(async () => expect((await listar('tarefas'))[0].data).toBe('2026-11-05'));
   });
 });

@@ -155,7 +155,7 @@ test.describe('computador, 1280 px', () => {
     await expect(menu.getByRole('link', { name: 'Doutoramento' })).toBeVisible();
     await expect(menu.getByRole('link', { name: 'Casa' })).toBeVisible();
 
-    const painel = page.getByRole('complementary', { name: 'Agora e chat' });
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
     await expect(painel.getByRole('heading', { name: 'Agora' })).toBeVisible();
     await expect(painel.getByRole('heading', { name: 'Chat' })).toBeVisible();
     const direita = (await painel.boundingBox())!;

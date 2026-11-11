@@ -21,7 +21,7 @@ function mostrar(hash: string, largura: number) {
   render(<App />);
 }
 
-const lado = () => screen.getByRole('complementary', { name: 'Agora e chat' });
+const lado = () => screen.getByRole('complementary', { name: 'Agora, água e chat' });
 const alternar = () => within(lado()).getByRole('button', { name: /^Chat/ });
 const campo = () => within(lado()).queryByRole('textbox', { name: 'Escreva ou dite' }) as HTMLInputElement | null;
 

@@ -51,7 +51,7 @@ export function PainelDireito({ semChat = false, semAgora = false }: { semChat?:
   // A água aparece sempre (também em #/agora e #/chat, que não a repetem).
   const paineis = PAINEIS_DIREITOS.filter((painel) => !(semChat && painel === 'chat') && !(semAgora && painel === 'agora'));
   return (
-    <aside class="painel-direito" aria-label="Agora e chat" data-chat={chatAberto ? 'aberto' : 'recolhido'}>
+    <aside class="painel-direito" aria-label="Agora, água e chat" data-chat={chatAberto ? 'aberto' : 'recolhido'}>
       {paineis.map((painel) =>
         painel === 'agora' ? (
           <section key={painel} class="cartao-agora" aria-labelledby="painel-agora">
