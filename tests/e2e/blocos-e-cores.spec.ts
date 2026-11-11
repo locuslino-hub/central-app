@@ -83,7 +83,7 @@ test('Cores do Google: ligar a cor a uma sala põe o compromisso na sala, no Qua
   await page.getByRole('link', { name: 'Cores do Google' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Cores do Google' })).toBeVisible();
   const azul = page.getByRole('group', { name: /Mirtilo/ });
-  await expect(azul.getByText('1 evento')).toBeVisible();
+  await expect(azul.getByText('1 na agenda (compromissos e atividades)')).toBeVisible();
   await expect(azul.getByText(/Escrita do capítulo 3/)).toBeVisible();
   await azul.getByLabel('Sala').selectOption({ label: 'Doutoramento' });
   await expect(azul.getByRole('button', { name: 'Sem sala' })).toBeEnabled();

@@ -47,7 +47,7 @@ describe('tela Cores do Google', () => {
     ]);
     render(<CoresDoGoogle />);
     const azul = await screen.findByRole('group', { name: /Mirtilo/ });
-    await waitFor(() => expect(within(azul).getByText('3 eventos')).toBeTruthy());
+    await waitFor(() => expect(within(azul).getByText('3 na agenda (compromissos e atividades)')).toBeTruthy());
     expect(within(azul).getByText(/Capítulo 2.*Capítulo 3/)).toBeTruthy();
     expect(within(azul).queryByText(/Leitura/)).toBeNull();
     expect((azul.querySelector('.cor-amostra') as HTMLElement).style.background).toMatch(/63, 81, 181|#3f51b5/);
@@ -70,7 +70,7 @@ describe('tela Cores do Google', () => {
     expect(await screen.findByText(/Nenhuma cor/)).toBeTruthy();
     expect(screen.getAllByRole('group')).toHaveLength(11);
     const tomate = screen.getByRole('group', { name: /Tomate/ });
-    expect(within(tomate).getByText('Nenhum evento nestes meses')).toBeTruthy();
+    expect(within(tomate).getByText('Nada com esta cor nestes meses')).toBeTruthy();
     fireEvent.change(within(tomate).getByLabelText('Sala'), { target: { value: 'sala-mba' } });
     await waitFor(async () => expect(await listar('coresDasSalas')).toMatchObject([{ chave: 'cor:11', salaId: 'sala-mba' }]));
   });
@@ -171,7 +171,7 @@ describe('revisão: cores ligadas sem eventos e feitos no Mês e na Semana', () 
     agenda.responder([]);
     render(<CoresDoGoogle />);
     const banana = await screen.findByRole('group', { name: /Banana/ });
-    expect(within(banana).getByText('Nenhum evento nestes meses')).toBeTruthy();
+    expect(within(banana).getByText('Nada com esta cor nestes meses')).toBeTruthy();
     fireEvent.click(within(banana).getByRole('button', { name: 'Sem sala' }));
     await waitFor(async () => expect(await listar('coresDasSalas')).toMatchObject([{ chave: 'cor:5', salaId: null }]));
   });

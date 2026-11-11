@@ -17,7 +17,8 @@ import './salas.css';
 /** Quantos dias para trás e para a frente a tela olha. */
 export const DIAS_DAS_CORES = 60;
 
-const nEventos = (n: number) => `${n} ${n === 1 ? 'evento' : 'eventos'}`;
+/** Compromissos e atividades (blocos do Google Tarefas) contam juntos. */
+const nNaAgenda = (n: number) => `${n} na agenda (compromissos e atividades)`;
 
 type LinhaProps = { cor: CorVista; salaId: string | null; salas: Sala[]; aoLigar: (salaId: string | null) => void };
 
@@ -33,7 +34,7 @@ function LinhaDaCor({ cor, salaId, salas, aoLigar }: LinhaProps) {
             {nome}
             <span class="so-leitor">{`, ${cor.hex}`}</span>
           </span>
-          <span class="cor-conta">{cor.quantos === 0 ? 'Nenhum evento nestes meses' : nEventos(cor.quantos)}</span>
+          <span class="cor-conta">{cor.quantos === 0 ? 'Nada com esta cor nestes meses' : nNaAgenda(cor.quantos)}</span>
           {cor.exemplos.length > 0 && <span class="cor-exemplos">{`Ex.: ${cor.exemplos.join(' · ')}`}</span>}
         </div>
         <div class="cor-escolha">
@@ -82,14 +83,14 @@ export function CoresDoGoogle() {
     <section class="painel cores-google" aria-labelledby="titulo-cores" aria-busy={!lido && leitura.falha === null}>
       <h2 id="titulo-cores">Cores da sua agenda</h2>
       <p class="cores-intro">
-        Escolha a sala de cada cor uma vez: os compromissos dessa cor passam a aparecer na sala, em todas as telas.
-        Um compromisso com sala escolhida na Central continua na dele.
+        Escolha a sala de cada cor uma vez: os compromissos e as atividades dessa cor passam a aparecer na sala, em todas as telas.
+        O que já tem sala escolhida na Central continua na dele.
       </p>
       <AvisoDaAgenda leitura={leitura} aoTentar={atualizar} />
       {lido && !vistas.some((v) => v.quantos > 0) && (
         <div>
-          <p class="lista-vazia-titulo">Nenhuma cor nos eventos destes meses.</p>
-          <p class="lista-vazia-texto">Você já pode ligar as cores do Google a salas; elas valem para os próximos eventos.</p>
+          <p class="lista-vazia-titulo">Nenhuma cor nos compromissos e atividades destes meses.</p>
+          <p class="lista-vazia-texto">Você já pode ligar as cores do Google a salas; elas valem para os próximos compromissos e atividades.</p>
         </div>
       )}
       {vistas.length > 0 && (
