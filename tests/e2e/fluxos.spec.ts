@@ -145,8 +145,11 @@ for (const [nome, janela] of TELAS) {
       await page.goto('/central-app/#/chat');
       const campo = principal.getByRole('textbox', { name: 'Escreva ou dite' });
       await campo.fill('Marcar reunião com a Marina');
+      // Conta os "Desfazer" antes: o da mensagem anterior já está na tela e não prova que esta foi gravada.
+      const desfazeres = principal.getByRole('article').getByRole('button', { name: 'Desfazer' });
+      const antes = await desfazeres.count();
       await campo.press('Enter');
-      await expect(principal.getByRole('article').last().getByRole('button', { name: 'Desfazer' })).toBeVisible();
+      await expect(desfazeres).toHaveCount(antes + 1);
       const marcar = (await guardados(page, 'tarefas')).find((t) => t.titulo === 'Marcar reunião com a Marina');
       expect(marcar).toMatchObject({ marcar: true, salaId: 'sala-orientacoes' });
       // Sem dia escolhido, fica em hoje e a virada do dia a leva para o dia seguinte até ser concluída.

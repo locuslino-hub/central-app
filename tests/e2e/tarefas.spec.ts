@@ -55,8 +55,11 @@ async function dizerAoChat(page: Page, frase: string) {
   const principal = page.getByRole('main');
   const campo = principal.getByRole('textbox', { name: 'Escreva ou dite' });
   await campo.fill(frase);
+  // Conta os "Desfazer" antes: o da mensagem anterior já está na tela e não prova que esta foi gravada.
+  const desfazeres = principal.getByRole('article').getByRole('button', { name: 'Desfazer' });
+  const antes = await desfazeres.count();
   await campo.press('Enter');
-  await expect(principal.getByRole('article').last().getByRole('button', { name: 'Desfazer' })).toBeVisible();
+  await expect(desfazeres).toHaveCount(antes + 1);
 }
 
 async function cadastrarPessoa(page: Page, nome: string, sala: string, papel = '') {
@@ -287,8 +290,11 @@ test.describe('virada do dia no navegador', () => {
     await page.goto('/central-app/#/chat');
     const campo = page.getByRole('main').getByRole('textbox', { name: 'Escreva ou dite' });
     await campo.fill('Marcar reunião com a Marina');
+    // Conta os "Desfazer" antes: o da mensagem anterior já está na tela e não prova que esta foi gravada.
+    const desfazeres = page.getByRole('main').getByRole('article').getByRole('button', { name: 'Desfazer' });
+    const antes = await desfazeres.count();
     await campo.press('Enter');
-    await expect(page.getByRole('main').getByRole('article').last().getByRole('button', { name: 'Desfazer' })).toBeVisible();
+    await expect(desfazeres).toHaveCount(antes + 1);
 
     await page.goto('/central-app/#/');
     const checklist = page.getByRole('main').getByRole('region', { name: 'Checklist do dia' });

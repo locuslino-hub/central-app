@@ -131,8 +131,11 @@ async function dizerAoChat(page: Page, frase: string) {
   const principal = page.getByRole('main');
   const campo = principal.getByRole('textbox', { name: 'Escreva ou dite' });
   await campo.fill(frase);
+  // Conta os "Desfazer" antes: o da mensagem anterior já está na tela e não prova que esta foi gravada.
+  const desfazeres = principal.getByRole('article').getByRole('button', { name: 'Desfazer' });
+  const antes = await desfazeres.count();
   await campo.press('Enter');
-  await expect(principal.getByRole('article').last().getByRole('button', { name: 'Desfazer' })).toBeVisible();
+  await expect(desfazeres).toHaveCount(antes + 1);
 }
 
 /** Abre o app já conectado ao script de mentira, na página pedida. */
