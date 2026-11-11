@@ -74,6 +74,36 @@ describe('aviso da fila da agenda', () => {
   });
 });
 
+describe('aviso da fila: compromisso antigo (migração) parado', () => {
+  it('Descartar é definitivo: reabrir o app (migração de novo) não põe o pedido de volta, e a tarefa fica', async () => {
+    const { migrarCompromissos } = await import('../../src/dados/migrar');
+    const { listar, salvar } = await import('../../src/dados/loja');
+    const tarefa = await salvar('tarefas', {
+      titulo: 'Reunião com a Marina',
+      salaId: 'sala-orientacoes',
+      data: '2026-11-06',
+      inicio: '15:30',
+      duracaoMin: 60,
+      duracaoConfirmada: true,
+      feito: false,
+      fixada: false,
+      marcar: false,
+    });
+    expect(await migrarCompromissos()).toBe(1);
+    const [{ seq }] = (await listarPendentes()).filter((p) => p.tipo === 'agenda');
+    await recusarAte(seq);
+    render(<AvisoDaFila />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Descartar' }));
+    await waitFor(() => expect(screen.queryByText('1 compromisso não entrou na agenda.')).toBeNull());
+
+    // Reabrir: a migração roda de novo ao abrir o app.
+    expect(await migrarCompromissos()).toBe(0);
+    expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toEqual([]);
+    expect((await listar('tarefas')).map((t) => t.id)).toEqual([tarefa.id]);
+  });
+});
+
 describe('aviso da fila: espelho no Google parado', () => {
   it('tarefas e "✓ " que não chegaram ao Google aparecem; Descartar não mexe nas tarefas', async () => {
     const { criarTarefa } = await import('../../src/dados/tarefas');

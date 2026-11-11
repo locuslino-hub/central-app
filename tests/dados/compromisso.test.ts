@@ -442,6 +442,28 @@ describe('migrarCompromissos (duas fases)', () => {
     expect((await listar('tarefas')).map((t) => t.id)).toEqual(expect.arrayContaining([quebrada.id, longo.id]));
   });
 
+  it('descartar o pedido da migração é definitivo: sobrevive à reabertura e não depende da fila', async () => {
+    const { descartarPendentes } = await import('../../src/dados/loja');
+    const tarefa = await salvar('tarefas', antiga());
+    const outra = await salvar('tarefas', antiga({ titulo: 'Banca da Renata' }));
+    await migrarCompromissos();
+    const doDescarte = (await criarDaFila()).find((p) => p.migrarTarefaId === tarefa.id)!;
+
+    await descartarPendentes([doDescarte.seq]);
+
+    expect((await criarDaFila()).map((p) => p.migrarTarefaId)).toEqual([outra.id]);
+    expect(await migrarCompromissos()).toBe(0);
+    expect(await migrarCompromissos()).toBe(0);
+    expect((await listar('tarefas')).map((t) => t.id).sort()).toEqual([tarefa.id, outra.id].sort());
+  });
+
+  it('descartar outras ações da fila só as tira, como antes', async () => {
+    const { descartarPendentes, enfileirarAgenda } = await import('../../src/dados/loja');
+    const seq = await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: 'b'.repeat(32) });
+    await descartarPendentes([seq, 9999]);
+    expect(await daAgenda()).toEqual([]);
+  });
+
   it('tarefa já concluída também é levada: o compromisso existiu', async () => {
     await salvar('tarefas', antiga({ feito: true }));
     expect(await migrarCompromissos()).toBe(1);
