@@ -26,17 +26,26 @@ type Tipo =
   | 'textoOuNulo?'
   | 'url'
   | 'dia'
+  | 'dia?'
   | 'hora'
   | 'hora?'
   | 'ml'
+  | 'numero?'
+  | 'listaDeTexto?'
+  | 'blocos?'
   | 'booleano'
   | 'booleano?'
   | 'chaveDeCor';
 
-/** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
+/**
+ * Campos conferidos em cada coleção: todos os que o app grava (ver
+ * src/dados/tipos.ts; tests/script/esquemas.test.ts confere que nenhum fica de
+ * fora). Campo que registros antigos podem não ter é opcional (`?`): só a forma
+ * é conferida quando ele vem.
+ */
 export const ESQUEMAS = {
-  salas: { nome: 'texto', notas: 'texto?' },
-  pessoas: { nome: 'texto', salaId: 'texto', papel: 'texto?', notas: 'texto?' },
+  salas: { nome: 'texto', ordem: 'numero?', notas: 'texto?' },
+  pessoas: { nome: 'texto', salaId: 'texto', papel: 'texto?', emails: 'listaDeTexto?', notas: 'texto?' },
   tarefas: {
     titulo: 'texto',
     salaId: 'textoOuNulo',
@@ -46,15 +55,21 @@ export const ESQUEMAS = {
     prazoHora: 'texto?',
     inicio: 'hora?',
     semanaVencida: 'texto?',
+    duracaoMin: 'numero?',
+    duracaoConfirmada: 'booleano?',
+    feito: 'booleano?',
+    fixada: 'booleano?',
+    marcar: 'booleano?',
     emailId: 'texto?',
     adiadaAte: 'texto?',
   },
   palavras: { termo: 'texto', salaId: 'texto' },
-  documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?' },
-  paginas: { salaId: 'texto', titulo: 'texto' },
-  estadosEmail: { adiadaAte: 'texto?' },
+  documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?', arquivado: 'booleano?' },
+  paginas: { salaId: 'texto', titulo: 'texto', blocos: 'blocos?' },
+  estadosEmail: { feito: 'booleano?', adiadaAte: 'texto?' },
   rascunhos: { texto: 'texto', salaId: 'textoOuNulo?' },
-  config: { fimDoDia: 'texto' },
+  /** `diaFechado`: o dia (AAAA-MM-DD) em que o dono fechou o dia (Tarefa 16). */
+  config: { fimDoDia: 'texto', diaFechado: 'dia?' },
   eventosFeitos: {
     eventoId: 'texto',
     agendaId: 'texto',
@@ -96,12 +111,24 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return typeof valor === 'string' && URL_VALIDA.test(valor);
     case 'dia':
       return typeof valor === 'string' && DIA_VALIDO.test(valor);
+    case 'dia?':
+      return valor === undefined || (typeof valor === 'string' && DIA_VALIDO.test(valor));
     case 'hora':
       return typeof valor === 'string' && HORA_VALIDA.test(valor);
     case 'hora?':
       return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
     case 'ml':
       return typeof valor === 'number' && Number.isInteger(valor) && valor >= 1 && valor <= 5000;
+    case 'numero?':
+      return valor === undefined || (typeof valor === 'number' && Number.isFinite(valor));
+    case 'listaDeTexto?':
+      return valor === undefined || (Array.isArray(valor) && valor.every((item) => typeof item === 'string'));
+    case 'blocos?':
+      // Blocos do caderno: cada um com `id` e `tipo` em texto; o resto é do app.
+      return (
+        valor === undefined ||
+        (Array.isArray(valor) && valor.every((bloco) => objeto(bloco) && typeof bloco.id === 'string' && typeof bloco.tipo === 'string'))
+      );
     case 'booleano':
       return typeof valor === 'boolean';
     case 'booleano?':
