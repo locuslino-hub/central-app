@@ -6,7 +6,9 @@
 // cada 15 minutos. Falha nunca apaga o que já estava na tela.
 import { ErroConexao, ErroScript, chamar } from '../conexao/cliente';
 import { lerConexao } from '../conexao/guarda';
+import { horaEmLisboa } from '../../script/agenda';
 import { ErroAgenda, listarEventos, type Evento, type RespostaEventos } from './agenda';
+import type { EventoPendente, Pendente } from './tipos';
 
 /**
  * - `nao-conectado`: este aparelho ainda não tem a conexão com o script.
@@ -94,11 +96,88 @@ export function assinarEventos(ouvinte: () => void): () => void {
   return () => void ouvintes.delete(ouvinte);
 }
 
+/**
+ * A fila de ações da agenda mudou sem mudar o Google (compromisso entrou na
+ * fila sem internet, saiu dela por Desfazer, trocou de sala na fila): as telas
+ * desenham de novo, sem ler o Google.
+ */
+export function avisarMudancaNaFila() {
+  avisar();
+}
+
+/** Compromisso criado neste aparelho que ainda espera na fila para ir ao Google. */
+export type EventoAEnviar = Evento & { aEnviar: true };
+
+export function estaAEnviar(evento: Evento): evento is EventoAEnviar {
+  return (evento as Partial<EventoAEnviar>).aEnviar === true;
+}
+
+/**
+ * Os compromissos da fila (`criarEvento`) do período, como eventos da tela,
+ * marcados `aEnviar`. Fora ficam: os que a leitura do Google já traz (mesmo
+ * id: o id é do cliente), os de outro dia e os pedidos antigos da migração
+ * (que nunca vão ao Google: a tarefa com hora aparece no lugar deles).
+ */
+export function eventosAEnviar(pendentes: readonly Pendente[], de: string, ate: string, lidos: readonly Evento[]): EventoAEnviar[] {
+  const jaLidos = new Set(lidos.map((evento) => evento.id));
+  const fila: EventoAEnviar[] = [];
+  for (const pendente of pendentes) {
+    if (pendente.tipo !== 'agenda' || pendente.acao !== 'criarEvento' || pendente.migrarTarefaId) continue;
+    const { id, data } = pendente.evento;
+    if (jaLidos.has(id) || data < de || data > ate) continue;
+    const evento = comoEvento(pendente.evento);
+    if (evento) fila.push({ ...evento, aEnviar: true });
+  }
+  return fila;
+}
+
+/** O pedido de evento como a tela o desenha; `null` se a hora não existe em Lisboa. */
+function comoEvento({ id, titulo, data, inicio, fim, salaId }: EventoPendente): Evento | null {
+  const inicioIso = horaEmLisboa(data, inicio);
+  const fimIso = horaEmLisboa(data, fim);
+  if (!inicioIso || !fimIso) return null;
+  return { id, agendaId: 'primary', titulo, inicio: inicioIso, fim: fimIso, diaInteiro: false, livre: false, recusado: false, salaId, link: null };
+}
+
+/**
+ * Compromissos que este aparelho acabou de criar no Google (na hora ou pela
+ * fila), por data: ficam na tela até uma leitura que dê certo os trazer. Sem
+ * isto, entre a criação e a próxima leitura (ou se ela falhar), o compromisso
+ * sumiria. Só na memória; Desfazer o tira na hora.
+ */
+const enviados = new Map<string, { data: string; evento: Evento }>();
+
+export function lembrarEnviado(pedido: EventoPendente) {
+  const evento = comoEvento(pedido);
+  if (!evento) return;
+  enviados.set(pedido.id, { data: pedido.data, evento });
+  avisar();
+}
+
+export function esquecerEnviado(id: string) {
+  if (enviados.delete(id)) avisar();
+}
+
+/** Troca a sala do compromisso enviado que ainda não voltou numa leitura. */
+export function trocarSalaDoEnviado(id: string, salaId: string | null) {
+  const guardado = enviados.get(id);
+  if (!guardado) return;
+  enviados.set(id, { ...guardado, evento: { ...guardado.evento, salaId } });
+  avisar();
+}
+
+/** Os enviados do período que a leitura `lidos` ainda não traz. */
+export function eventosEnviados(de: string, ate: string, lidos: readonly Evento[]): Evento[] {
+  const jaLidos = new Set(lidos.map((evento) => evento.id));
+  return [...enviados.values()].filter(({ data, evento }) => data >= de && data <= ate && !jaLidos.has(evento.id)).map(({ evento }) => evento);
+}
+
 /** Esquece tudo (testes). */
 export function esquecerEventos() {
   geracao++;
   leituras.clear();
   emAndamento.clear();
+  enviados.clear();
 }
 
 /**
@@ -141,6 +220,8 @@ async function ler(id: string, de: string, ate: string, dep: Dependencias): Prom
       depois = { ...antes, falha: 'nao-conectado', tentadoEm, carregando: false, obsoleta: undefined };
     } else {
       const { eventos, incompleto } = await dep.listar({ de, ate });
+      // Leitura que deu certo e traz o compromisso enviado: ele já vem do Google.
+      for (const evento of eventos) enviados.delete(evento.id);
       depois = { eventos, incompleto, falha: null, lidoEm: tentadoEm, tentadoEm, carregando: false, obsoleta: undefined };
     }
   } catch (erro) {

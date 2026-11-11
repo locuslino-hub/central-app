@@ -1,5 +1,6 @@
-// Campo para escrever uma tarefa sem passar pelo Chat. Na Checklist ela vai para
-// hoje; em Sem prazo, fica sem dia. A sala se escolhe depois, em Editar, salvo
+// Campo para escrever uma tarefa sem passar pelo Chat. Tarefa nova sem dia vai
+// para hoje (decisão de 11/11): Checklist, sala e pessoa passam `data`; só o
+// campo de Sem prazo cria sem dia. A sala se escolhe depois, em Editar, salvo
 // nas páginas de sala e de pessoa, onde ela já nasce no lugar.
 import { useRef, useState } from 'preact/hooks';
 import { criarTarefa } from '../dados/tarefas';
@@ -8,7 +9,7 @@ import './tarefas.css';
 type Props = {
   /** O nome do campo, que também o descreve: "Nova tarefa para hoje". */
   rotulo: string;
-  /** `AAAA-MM-DD` quando a tarefa nova já nasce com dia (hoje); sem isto, Sem prazo. */
+  /** `AAAA-MM-DD`: o dia da tarefa nova (hoje). Sem isto, Sem prazo (só o campo de Sem prazo). */
   data?: string;
   /** Numa página de sala ou de pessoa: a tarefa nasce já nela. */
   salaId?: string;

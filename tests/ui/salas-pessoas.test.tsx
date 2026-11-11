@@ -118,14 +118,14 @@ describe('página da sala', () => {
     expect(await (await secao('Tarefas')).findByText('Nada em aberto nesta sala.')).toBeTruthy();
   });
 
-  it('escrever uma tarefa na página cria a tarefa já na sala', async () => {
+  it('escrever uma tarefa na página cria a tarefa já na sala, para hoje (sem dia vai para hoje)', async () => {
     await scriptDeTeste();
     mostrar('#/sala/sala-aulas');
     const campo = await (await secao('Tarefas')).findByRole('textbox', { name: 'Nova tarefa em Aulas' });
     fireEvent.input(campo, { target: { value: 'Corrigir provas' } });
     fireEvent.click((await secao('Tarefas')).getByRole('button', { name: 'Adicionar' }));
     await waitFor(async () =>
-      expect((await listar('tarefas')).find((t) => t.titulo === 'Corrigir provas')).toMatchObject({ salaId: 'sala-aulas' }),
+      expect((await listar('tarefas')).find((t) => t.titulo === 'Corrigir provas')).toMatchObject({ salaId: 'sala-aulas', data: '2026-11-05' }),
     );
     expect(await (await secao('Tarefas')).findByRole('checkbox', { name: /Corrigir provas/ })).toBeTruthy();
   });
@@ -256,7 +256,7 @@ describe('página da pessoa', () => {
     expect(await (await secao('Pendências')).findByText('Nada pendente com Marina.')).toBeTruthy();
   });
 
-  it('escrever uma tarefa na página cria a tarefa com a pessoa e a sala dela', async () => {
+  it('escrever uma tarefa na página cria a tarefa com a pessoa e a sala dela, para hoje', async () => {
     await marina();
     await scriptDeTeste();
     mostrar('#/pessoa/p-marina');
@@ -267,6 +267,7 @@ describe('página da pessoa', () => {
       expect((await listar('tarefas')).find((t) => t.titulo === 'Enviar o modelo do capítulo')).toMatchObject({
         pessoaId: 'p-marina',
         salaId: 'sala-orientacoes',
+        data: '2026-11-05',
       }),
     );
   });

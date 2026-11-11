@@ -1,6 +1,14 @@
 // Regras do chat (Tarefa 7): a primeira das três camadas. Transforma uma frase
 // em item da agenda sem IA. Decide sempre tipo, data e hora; a sala, quando a
 // frase cita a sala, a memória conhece a palavra ou a pessoa citada tem sala.
+//
+// Decisões do dono (11/11):
+// - tarefa sem dia na frase é de hoje (e volta todo dia até ser concluída, pela
+//   virada); só fica Sem prazo quando a frase diz "sem prazo";
+// - dia e hora com "tarefa" ou "atividade" na frase ("nas tarefas de hoje",
+//   "atividades do dia") é tarefa com hora; sem essas palavras (reunião,
+//   consulta...) é compromisso no Google Agenda;
+// - hora sem dia é hoje, com certeza baixa.
 // Função pura: o "hoje" chega de fora e a memória é só consultada.
 
 import {
@@ -19,12 +27,18 @@ export type Item = {
   tipo: 'tarefa' | 'compromisso';
   titulo: string;
   salaId: string | null;
-  /** `AAAA-MM-DD`. Tarefa sem `data` e sem `semana` = Sem prazo. */
+  /** `AAAA-MM-DD`. Tarefa sem `data` e sem `semana` = Sem prazo (só quando a frase diz "sem prazo"). */
   data?: string;
   /** Segunda-feira da semana, `AAAA-MM-DD`. */
   semana?: string;
-  /** `HH:MM`, só em compromisso. */
+  /**
+   * A frase não disse o dia: `data` é hoje por padrão (decisão de 11/11). O
+   * Caderno usa isto para só transformar em item a linha que diz um dia.
+   */
+  diaAssumido?: true;
+  /** `HH:MM`: compromisso, ou tarefa com hora (a frase disse "tarefa" ou "atividade"). */
   inicio?: string;
+  /** `HH:MM`: sempre no compromisso; na tarefa com hora, só quando a frase diz o fim. */
   fim?: string;
   /** `HH:MM`, só em tarefa com prazo. */
   prazoHora?: string;
@@ -32,7 +46,7 @@ export type Item = {
   marcar: boolean;
   pessoaId?: string;
   /** Por que a sala foi escolhida, para o cartão mostrar. */
-  motivoSala?: 'frase' | 'memoria' | 'pessoa';
+  motivoSala?: 'frase' | 'memoria' | 'pessoa' | 'ia';
 };
 
 export type Resultado = { itens: Item[]; certeza: 'alta' | 'baixa'; vazia: boolean };
@@ -66,6 +80,22 @@ const RE_LISTA_SALA = new RegExp(
   'g');
 /** "em atividades do dia", "nas tarefas de hoje": é hoje e sai do título. */
 const RE_LISTA_HOJE = new RegExp(`${L}${LISTA}(?:d[aoe]s?\\s+)?(?:dia|hoje)${R}(?!\\s*\\d)`, 'g');
+
+/** "sem prazo", "nas tarefas sem prazo", "para sem prazo": a tarefa fica Sem prazo, e o trecho sai do título. */
+const RE_SEM_PRAZO = new RegExp(`${L}(?:${LISTA}|(?:em|no|na|para|pra)\\s+(?:o\\s+)?)?sem\\s+prazos?${R}`, 'g');
+/**
+ * "tarefa" ou "atividade" como pedido, não como assunto ("Reunião sobre as
+ * atividades do projeto", "atividade física" seguem compromisso). Valem: no
+ * comando ("Adicione uma tarefa..."), no começo da frase ("Tarefa ..."; "Atividade"
+ * só com ":", "para" ou o dia logo depois) e na forma de lista ("nas tarefas",
+ * "em atividades do dia", "atividades do dia" no começo).
+ */
+const RE_PALAVRA_TAREFA = /(?<![a-z])(?:tarefas?|atividades?)(?![a-z])/;
+const RE_PREFIXO_DE_LISTA = /^(?:em|nas?|nos?|para\s+(?:as?|os?)|pra)\s/;
+/** "nas tarefas", "em atividades", "nas minhas tarefas": a lista sai do título. */
+const RE_LISTA_DE_TAREFAS = new RegExp(`${L}(?:em|nas|nos)\\s+(?:minhas\\s+)?(?:tarefas|atividades)${R}`, 'g');
+/** "Tarefa:", "Atividade amanhã...", "Tarefa para hoje..." no começo: a palavra sai do título (quando é pedido). */
+const RE_TAREFA_NO_INICIO = /^\s*(?:uma\s+)?(tarefas?|atividades?)(?![a-z])\s*:?/;
 
 const RE_PRAZO = /(?<![a-z])(?:entregar?|entregas|entregue|prazos?)(?![a-z])/g;
 /** "até" só é prazo quando começa um dia ou uma hora ("até sexta", "até 17h"), não em "até tarde". */
@@ -159,6 +189,12 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   const tirar: Trecho[] = [];
   const comando = n.match(RE_COMANDO);
   if (comando) tirar.push({ ini: 0, fim: comando[0].length });
+  const palavraNoInicio = comando ? null : n.match(RE_TAREFA_NO_INICIO);
+  const listasDeTarefas: Trecho[] = [...n.matchAll(RE_LISTA_DE_TAREFAS)].map((m) => ({ ini: m.index!, fim: m.index! + m[0].length }));
+  tirar.push(...listasDeTarefas);
+  const semPrazos: Trecho[] = [...n.matchAll(RE_SEM_PRAZO)].map((m) => ({ ini: m.index!, fim: m.index! + m[0].length }));
+  const dentroDeSemPrazo = (i: number) => semPrazos.some((x) => i >= x.ini && i < x.fim);
+  tirar.push(...semPrazos);
   const listasSala = [...n.matchAll(RE_LISTA_SALA)].map((m) => ({
     ini: m.index!, fim: m.index! + m[0].length, sala: idDaSala(m[1]),
   }));
@@ -172,6 +208,30 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   const { horas, ligacoes, invalidas } = acharHoras(n, [...datas, ...listasSala]);
   if (invalidas > 0) baixa = true; // "25h", "15:60": o dono quis dizer uma hora
   tirar.push(...datas, ...horas);
+
+  // "tarefa"/"atividade" como pedido (RE_PALAVRA_TAREFA): comando, começo ou lista.
+  const depoisDoComando = comando ? comando[0].length : 0;
+  const listaPede = (t: Trecho) => {
+    const texto = n.slice(t.ini, t.fim);
+    return RE_PALAVRA_TAREFA.test(texto) && (RE_PREFIXO_DE_LISTA.test(texto) || n.slice(depoisDoComando, t.ini).trim() === '');
+  };
+  let inicioPede = false;
+  if (palavraNoInicio) {
+    const fim = palavraNoInicio[0].length;
+    const proximo = fim + (n.slice(fim).match(/^\s*/)?.[0].length ?? 0);
+    inicioPede =
+      palavraNoInicio[1].startsWith('taref') ||
+      palavraNoInicio[0].trimEnd().endsWith(':') ||
+      /^(?:para|pra)(?![a-z])/.test(n.slice(proximo)) ||
+      [...datas, ...horas].some((x) => x.ini === proximo);
+    // "Atividade física": a palavra é o assunto e fica no título.
+    if (inicioPede) tirar.push({ ini: 0, fim });
+  }
+  const pedeTarefa =
+    (!!comando && RE_PALAVRA_TAREFA.test(comando[0])) ||
+    inicioPede ||
+    listasDeTarefas.length > 0 ||
+    [...listasSala, ...listasHoje].some(listaPede);
 
   const fortes = datas.filter((d) => d.forca === 'forte' && (d.data || d.invalida));
   if (fortes.some((d) => d.invalida)) baixa = true;
@@ -187,7 +247,7 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   const fora = (i: number) => !ligacoes.some((x) => i >= x.ini && i < x.fim);
   const comeca = (i: number) => [...datas, ...horas].some((x) => i >= x.ini && i < x.fim);
   const prazo =
-    [...n.matchAll(RE_PRAZO)].length > 0 ||
+    [...n.matchAll(RE_PRAZO)].some((m) => !dentroDeSemPrazo(m.index!)) ||
     [...n.matchAll(RE_ATE)].some((m) => fora(m.index!) && comeca(m.index!));
   const inicios = horas.filter((h) => h.papel === 'inicio');
   const fins = horas.filter((h) => h.papel === 'fim');
@@ -210,20 +270,42 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   else if (pessoa) { salaId = pessoa.salaId; motivoSala = 'pessoa'; }
   else salaId = null;
 
+  // Dia que a frase não disse: hoje. Hora sem dia é hoje, com certeza baixa
+  // (o cartão mostra o dia entendido). "sem prazo" dito: fica sem dia.
+  const hora = inicios[0] ?? fins[0];
+  const semPrazo = semPrazos.length > 0;
+  if (semPrazo && (data || semana)) baixa = true; // "sem prazo" e um dia na mesma frase: vale o dia
+  let diaAssumido = false;
+  if (!data && !semana && !semPrazo && hora) {
+    data = hoje;
+    diaAssumido = true;
+    baixa = true;
+  }
+
   // Tipo.
   let item: Item;
-  const hora = inicios[0] ?? fins[0];
+  const marcar = RE_MARCAR.test(normalizar(titulo));
   if (!prazo && data && hora) {
     let inicio = hora.hora;
     const fimDito = inicios[0] ? fins.find((f) => f.ini >= inicios[0].fim)?.hora : undefined;
     // "das 5 às 8": a tarde do início deixaria o fim antes dele, então é de manhã.
     if (fimDito && fimDito <= inicio && hora.semTarde && fimDito > hora.semTarde) inicio = hora.semTarde;
     let fim = fimDito ?? somarMinutos(inicio, 60);
-    if (fim <= inicio) { baixa = true; fim = somarMinutos(inicio, 60); }
-    item = { tipo: 'compromisso', titulo, salaId, data, inicio, fim, marcar: false };
+    const fimValido = fim > inicio;
+    if (!fimValido) { baixa = true; fim = somarMinutos(inicio, 60); }
+    if (pedeTarefa) {
+      // Tarefa com hora: fica em Atividades e aparece como bloco na Agenda.
+      item = { tipo: 'tarefa', titulo, salaId, data, inicio, marcar };
+      if (fimDito && fimValido) item.fim = fim;
+    } else {
+      item = { tipo: 'compromisso', titulo, salaId, data, inicio, fim, marcar: false };
+    }
   } else {
-    const marcar = RE_MARCAR.test(normalizar(titulo));
-    if (marcar && !data && !semana) data = hoje;
+    if (!data && !semana && !semPrazo) {
+      data = hoje;
+      // "Marcar..." sempre foi tarefa de hoje: conta como dia dito.
+      if (!marcar) diaAssumido = true;
+    }
     // `data` vai sempre presente na tarefa, mesmo `undefined` (Sem prazo):
     // quem lê o item vê o campo explícito.
     item = { tipo: 'tarefa', titulo, salaId, data, marcar };
@@ -234,6 +316,7 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   }
   if (pessoa) item.pessoaId = pessoa.id;
   if (motivoSala) item.motivoSala = motivoSala;
+  if (diaAssumido) item.diaAssumido = true;
 
   const reconhecida =
     !!comando || datas.length > 0 || horas.length > 0 || listasSala.length > 0 || !!pessoa ||

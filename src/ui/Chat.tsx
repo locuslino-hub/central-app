@@ -29,6 +29,9 @@ export function Chat() {
 
   // A mensagem nova fica à vista, também quando a resposta chega depois do "Lendo…".
   const ultimaMensagem = conversa[conversa.length - 1];
+  // Cartão que termina de guardar sozinho ganha o Desfazer e cresce: se for um
+  // de cima, empurra a mensagem nova para baixo. Ao terminar, rola de novo.
+  const guardando = conversa.reduce((n, m) => n + (m.de === 'central' ? m.cartoes.filter((c) => c.situacao === 'salvando').length : 0), 0);
   useEffect(() => {
     const ultima = log.current?.lastElementChild as HTMLElement | null | undefined;
     // Mensagem mais alta que a conversa visível (coluna baixa, com a água e o Agora em cima): vale o pé
@@ -38,7 +41,7 @@ export function Chat() {
     // No celular a página rola e a barra de baixo é fixa: o campo (logo abaixo da mensagem nova)
     // também precisa ficar à vista, acima da barra. `scroll-margin` em chat.css reserva o espaço dela.
     if (ultima) formulario.current?.scrollIntoView?.({ block: 'end' });
-  }, [ultimaMensagem]);
+  }, [ultimaMensagem, guardando]);
 
   const aoEnviar = (evento: Event) => {
     evento.preventDefault();

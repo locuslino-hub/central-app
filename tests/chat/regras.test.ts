@@ -49,8 +49,8 @@ describe('interpretarRegras: casos do plano', () => {
   it('prazo', () => expect(um('entrega sexta 17h')).toMatchObject({tipo:'tarefa', data:'2026-11-06', prazoHora:'17:00'}));
   it('hoje', () => expect(um('Adicione em atividades do dia mandar mensagem para Renata'))
     .toMatchObject({tipo:'tarefa', titulo:'Mandar mensagem para Renata', data:'2026-11-05'}));
-  it('sem prazo', () => expect(um('Adicione Revisar paragrafo do relatório 1 nas tarefas do doutoramento'))
-    .toMatchObject({titulo:'Revisar paragrafo do relatório 1', data:undefined}));
+  it('sem dia: hoje', () => expect(um('Adicione Revisar paragrafo do relatório 1 nas tarefas do doutoramento'))
+    .toMatchObject({titulo:'Revisar paragrafo do relatório 1', data:'2026-11-05'}));
   it('marcar', () => expect(um('Marcar reunião com a Marina')).toMatchObject({tipo:'tarefa', marcar:true, data:'2026-11-05'}));
 
   it.each(['', '   ', '\n\t '])('frase em branco %j dá vazia', (frase) => {
@@ -101,16 +101,16 @@ describe('frases do dono (spec, com nomes fictícios)', () => {
     });
   });
 
-  it('nas tarefas do doutoramento: sala Doutoramento, Sem prazo', () => {
+  it('nas tarefas do doutoramento: sala Doutoramento, hoje', () => {
     expect(um('Adicione Revisar paragrafo do relatório 1 nas tarefas do doutoramento')).toMatchObject({
-      tipo: 'tarefa', salaId: 'sala-doutoramento', motivoSala: 'frase', marcar: false,
+      tipo: 'tarefa', salaId: 'sala-doutoramento', motivoSala: 'frase', marcar: false, data: '2026-11-05',
     });
   });
 
   it('palavra conhecida da memória decide a sala (banheiro → Casa)', () => {
     expect(um('Preciso parafusar o apoio do banheiro')).toEqual({
       tipo: 'tarefa', titulo: 'Preciso parafusar o apoio do banheiro', salaId: 'sala-casa',
-      data: undefined, marcar: false, motivoSala: 'memoria',
+      data: '2026-11-05', diaAssumido: true, marcar: false, motivoSala: 'memoria',
     });
   });
 
@@ -186,9 +186,9 @@ describe('dias', () => {
     expect(um('pagar conta dia 2', '2026-12-31').data).toBe('2027-01-02');
   });
 
-  it.each(['31/11', '30/02/2027', 'dia 32', '12/13'])('data que não existe (%s): sem data e certeza baixa', (d) => {
+  it.each(['31/11', '30/02/2027', 'dia 32', '12/13'])('data que não existe (%s): fica hoje, com certeza baixa', (d) => {
     const r = interpretar(`pagar conta ${d}`);
-    expect(r.itens[0].data).toBeUndefined();
+    expect(r.itens[0].data).toBe(HOJE);
     expect(r.certeza).toBe('baixa');
   });
 
@@ -205,9 +205,10 @@ describe('dias', () => {
   });
 
   it('ordinais não viram dia da semana', () => {
-    expect(um('Revisar a segunda versão do artigo')).toMatchObject({ data: undefined, titulo: 'Revisar a segunda versão do artigo' });
-    expect(um('Ler a quinta parte do livro').data).toBeUndefined();
-    expect(um('Ler da sexta página em diante').data).toBeUndefined();
+    // Sem dia dito, a tarefa é de hoje (quinta), não da segunda, quinta ou sexta que vêm.
+    expect(um('Revisar a segunda versão do artigo')).toMatchObject({ data: HOJE, titulo: 'Revisar a segunda versão do artigo' });
+    expect(um('Ler a quinta parte do livro').data).toBe(HOJE);
+    expect(um('Ler da sexta página em diante').data).toBe(HOJE);
   });
 
   it('dois dias diferentes: fica o primeiro, certeza baixa', () => {
@@ -281,12 +282,12 @@ describe('horas', () => {
   });
 
   it('fração com unidade não é data', () => {
-    expect(um('Comprar 1/2 kg de café')).toMatchObject({ data: undefined, titulo: 'Comprar 1/2 kg de café' });
+    expect(um('Comprar 1/2 kg de café')).toMatchObject({ data: HOJE, titulo: 'Comprar 1/2 kg de café' });
   });
 
   it.each(['Pagar R$ 12/11 ao banco', 'Pagar R$12/11 ao banco', 'Pagar $ 10/12 ao banco'])(
     'valor em dinheiro não é data (%s)', (frase) => {
-      expect(um(frase).data).toBeUndefined();
+      expect(um(frase).data).toBe(HOJE);
     });
 
   it.each(['às 25h', 'às 24h', '24h', 'às 25:00', '15:60', 'às 15:60'])(
@@ -318,12 +319,6 @@ describe('horas', () => {
   ])('faixa: a tarde só vale se o fim continuar depois do início (%s)', (frase, inicio, fim) => {
     expect(um(frase)).toMatchObject({ tipo: 'compromisso', inicio, fim });
     expect(interpretar(frase).certeza).toBe('alta');
-  });
-
-  it('hora sem dia: tarefa Sem prazo com certeza baixa (o cartão pergunta)', () => {
-    const r = interpretar('Reunião às 15h');
-    expect(r.itens[0]).toMatchObject({ tipo: 'tarefa', data: undefined, titulo: 'Reunião' });
-    expect(r.certeza).toBe('baixa');
   });
 
   it('fim antes do início: 1 hora e certeza baixa', () => {
@@ -368,7 +363,7 @@ describe('marcar', () => {
     expect(um('Adicione marcar consulta')).toMatchObject({ titulo: 'Marcar consulta', marcar: true, data: '2026-11-05' });
   });
   it('"marcador" não é marcar', () => {
-    expect(um('Comprar marcador de texto')).toMatchObject({ marcar: false, data: undefined });
+    expect(um('Comprar marcador de texto')).toMatchObject({ marcar: false, data: HOJE });
   });
 });
 
@@ -473,5 +468,95 @@ describe('certeza', () => {
     const m = memoriaFalsa();
     interpretarRegras('Preciso parafusar o apoio do banheiro', HOJE, m);
     expect(m.aprendidos).toEqual([]);
+  });
+});
+
+describe('decisões do dono (11/11): dia padrão, "sem prazo" e tarefa com hora', () => {
+  it('tarefa sem dia na frase vai para hoje (volta todo dia até ser concluída)', () => {
+    expect(um('Comprar pilhas')).toMatchObject({ tipo: 'tarefa', titulo: 'Comprar pilhas', data: HOJE });
+    expect(um('Preciso parafusar o apoio do banheiro')).toMatchObject({ data: HOJE, salaId: 'sala-casa' });
+    expect(um('Adicione Revisar paragrafo do relatório 1 nas tarefas do doutoramento'))
+      .toMatchObject({ titulo: 'Revisar paragrafo do relatório 1', salaId: 'sala-doutoramento', data: HOJE });
+  });
+
+  it('semana dita continua semana, sem dia', () => {
+    const item = um('revisar o capítulo esta semana');
+    expect(item).toMatchObject({ semana: '2026-11-02' });
+    expect(item.data).toBeUndefined();
+  });
+
+  it.each([
+    ['Adicione comprar pilhas sem prazo', 'Comprar pilhas'],
+    ['Sem prazo: comprar pilhas', 'Comprar pilhas'],
+    ['comprar pilhas, sem prazo', 'Comprar pilhas'],
+    ['Adicione nas tarefas sem prazo comprar pilhas', 'Comprar pilhas'],
+    ['Comprar pilhas para sem prazo', 'Comprar pilhas'],
+  ])('"sem prazo" na frase (%s): Sem prazo, e sai do título', (frase, titulo) => {
+    const r = interpretar(frase);
+    expect(r.itens[0]).toMatchObject({ tipo: 'tarefa', titulo });
+    expect(r.itens[0].data).toBeUndefined();
+    expect(r.itens[0].semana).toBeUndefined();
+    expect(r.itens[0].prazoHora).toBeUndefined();
+    expect(r.certeza).toBe('alta');
+  });
+
+  it.each([
+    ['Adicione tarefa ligar para a Renata hoje às 18:00', 'Ligar para a Renata', HOJE, '18:00'],
+    ['Adicione nas tarefas de hoje revisar o relatório às 18h', 'Revisar o relatório', HOJE, '18:00'],
+    ['Adicione em atividades do dia mandar mensagem para Renata às 15h', 'Mandar mensagem para Renata', HOJE, '15:00'],
+    ['Tarefa para hoje às 18h: enviar o relatório', 'Enviar o relatório', HOJE, '18:00'],
+    ['Atividade amanhã às 9h: ler o artigo', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Adicione revisar o capítulo nas tarefas do doutoramento sexta às 10h', 'Revisar o capítulo', '2026-11-06', '10:00'],
+  ])('"tarefa/atividade" com dia e hora vira tarefa com hora (%s)', (frase, titulo, data, inicio) => {
+    const r = interpretar(frase);
+    expect(r.itens[0]).toMatchObject({ tipo: 'tarefa', titulo, data, inicio });
+    expect(r.itens[0].prazoHora).toBeUndefined();
+    expect(r.certeza).toBe('alta');
+  });
+
+  it.each([
+    ['Adicione uma atividade amanhã às 9h: ler o artigo', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Tarefas: ler o artigo amanhã às 9h', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Atividade: ler o artigo amanhã às 9h', 'Ler o artigo', '2026-11-06', '09:00'],
+    ['Adicione nas minhas tarefas ler o artigo amanhã às 9h', 'Ler o artigo', '2026-11-06', '09:00'],
+  ])('forma de lista ou de comando também pede tarefa (%s)', (frase, titulo, data, inicio) => {
+    expect(um(frase)).toMatchObject({ tipo: 'tarefa', titulo, data, inicio });
+  });
+
+  it.each([
+    ['Reunião sobre as atividades do projeto sexta às 10h', '2026-11-06', '10:00'],
+    ['atividade física amanhã às 8h', '2026-11-06', '08:00'],
+    ['Revisar a tarefa 3 com a Renata sexta às 10h', '2026-11-06', '10:00'],
+    ['Aula sobre tarefas de casa amanhã às 9h', '2026-11-06', '09:00'],
+  ])('"tarefa/atividade" no meio do assunto não pede tarefa: segue compromisso (%s)', (frase, data, inicio) => {
+    expect(um(frase)).toMatchObject({ tipo: 'compromisso', data, inicio });
+  });
+
+  it('tarefa com faixa de horas guarda o fim (a duração)', () => {
+    expect(um('Tarefa sexta das 14h às 16h: revisar capítulo')).toMatchObject({
+      tipo: 'tarefa', titulo: 'Revisar capítulo', data: '2026-11-06', inicio: '14:00', fim: '16:00',
+    });
+  });
+
+  it('sem "tarefa/atividade", dia e hora seguem compromisso (frase real do dono)', () => {
+    expect(um('Adicione reunião sobre o projeto na sexta feira com inicio às 11:00 e termino 12:00')).toMatchObject({
+      tipo: 'compromisso', data: '2026-11-06', inicio: '11:00', fim: '12:00',
+    });
+    expect(um('Consulta no dentista amanhã às 9h')).toMatchObject({ tipo: 'compromisso', data: '2026-11-06', inicio: '09:00' });
+    expect(um('Ligar para o banco hoje às 18h')).toMatchObject({ tipo: 'compromisso', data: HOJE, inicio: '18:00' });
+  });
+
+  it('hora sem dia: é hoje, com certeza baixa (o cartão mostra o dia que entendeu)', () => {
+    const r = interpretar('Reunião às 15h');
+    expect(r.itens[0]).toMatchObject({ tipo: 'compromisso', data: HOJE, inicio: '15:00', fim: '16:00', titulo: 'Reunião' });
+    expect(r.certeza).toBe('baixa');
+    const t = interpretar('Tarefa às 15h: revisar o resumo');
+    expect(t.itens[0]).toMatchObject({ tipo: 'tarefa', data: HOJE, inicio: '15:00', titulo: 'Revisar o resumo' });
+  });
+
+  it('prazo continua prazo, mesmo com "tarefa" na frase', () => {
+    expect(um('Tarefa: entregar relatório até sexta às 18h')).toMatchObject({
+      tipo: 'tarefa', data: '2026-11-06', prazoHora: '18:00',
+    });
   });
 });

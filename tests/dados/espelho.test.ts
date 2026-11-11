@@ -10,7 +10,6 @@ import { aplicarFeitos, idDoFeito, marcarCompromissoFeito } from '../../src/dado
 import {
   INTERVALO_ENTRE_TENTATIVAS_MS,
   TENTATIVAS_NO_MAXIMO,
-  concluirMigracao,
   enfileirarEspelhosQueFaltam,
   gravarDoServidor,
   guardarIdDoEspelho,
@@ -79,9 +78,9 @@ describe('a fila do espelho de tarefas', () => {
     expect(await daTarefa(tarefa.id)).toHaveLength(6);
   });
 
-  it('compromisso antigo (tarefa com hora) não vai para o Google Tarefas', async () => {
-    const antigo = await criar('Reunião antiga', { data: '2026-11-09', inicio: '10:00' });
-    expect(await daTarefa(antigo.id)).toEqual([]);
+  it('tarefa com hora (decisão de 11/11) vai para o Google Tarefas como as outras (o Google Tarefas guarda só o dia)', async () => {
+    const comHora = await criar('Ligar para a Renata', { data: '2026-11-09', inicio: '10:00' });
+    expect(await daTarefa(comHora.id)).toHaveLength(1);
   });
 
   it('o id da espelho fica só neste aparelho: não muda a tarefa nem entra na fila', async () => {
@@ -94,15 +93,6 @@ describe('a fila do espelho de tarefas', () => {
     expect(await lerIdsDoEspelho([tarefa.id, 'outra'])).toEqual(['tarefaGoogle1', undefined]);
   });
 
-  it('migração que tira a hora de uma tarefa mudada (ela fica como tarefa): entra no espelho', async () => {
-    const antiga = await criar('Reunião antiga', { data: '2026-11-09', inicio: '10:00' });
-    await salvar('tarefas', { ...antiga, titulo: 'Reunião antiga, mudada' });
-    expect(await daTarefa(antiga.id)).toEqual([]);
-    await concluirMigracao(-1, antiga.id, { id: 'evento00001', titulo: 'Reunião antiga', data: '2026-11-09', inicio: '10:00', fim: '11:00', salaId: null });
-    expect((await lerTarefa(antiga.id)).inicio).toBeUndefined();
-    expect(await daTarefa(antiga.id)).toHaveLength(1);
-  });
-
   it('a virada do dia e o Fechar o dia mudam o dia: entram no espelho', async () => {
     const ontem = await criar('Ficou de ontem', { data: '2026-11-08' });
     const hoje = await criar('De hoje', { data: '2026-11-09' });
@@ -112,21 +102,21 @@ describe('a fila do espelho de tarefas', () => {
     expect(await daTarefa(hoje.id)).toHaveLength(2);
   });
 
-  it('tarefas antigas sem espelho entram uma vez; feitas, já espelhadas, compromissos e as que já estão na fila, não', async () => {
+  it('tarefas antigas sem espelho entram uma vez (também as com hora); feitas, já espelhadas e as que já estão na fila, não', async () => {
     const semEspelho = await criar('Antiga');
     const feita = await criar('Feita', { feito: true });
     const espelhada = await criar('Espelhada');
     await guardarIdDoEspelho(espelhada.id, 'tarefaGoogle9');
-    const compromisso = await criar('Compromisso', { data: '2026-11-09', inicio: '10:00' });
+    const comHora = await criar('Com hora', { data: '2026-11-09', inicio: '10:00' });
     // Simula o aparelho antes do espelho: a fila sem os espelhos.
     const { removerPendentes } = await import('../../src/dados/loja');
     await removerPendentes((await espelhos()).map((p) => p.seq));
 
-    expect(await enfileirarEspelhosQueFaltam()).toBe(1);
+    expect(await enfileirarEspelhosQueFaltam()).toBe(2);
     expect(await enfileirarEspelhosQueFaltam()).toBe(0);
     const ids = (await espelhos()).map((p) => (p.acao === 'espelharTarefa' ? p.tarefaId : ''));
-    expect(ids).toEqual([semEspelho.id]);
-    for (const fora of [feita, espelhada, compromisso]) expect(ids).not.toContain(fora.id);
+    expect(ids.sort()).toEqual([semEspelho.id, comHora.id].sort());
+    for (const fora of [feita, espelhada]) expect(ids).not.toContain(fora.id);
   });
 });
 
@@ -237,13 +227,13 @@ describe('sincronia com o Google Tarefas', () => {
     expect(servidor.tarefasGoogle.vivas()).toMatchObject([{ due: '2026-11-09T00:00:00.000Z' }]);
   });
 
-  it('tarefa que deixou de ser espelhável antes do envio (virou compromisso com hora): o pedido sai sem chamar o Google', async () => {
+  it('tarefa que ganhou hora antes do envio segue para o Google Tarefas, só com o dia', async () => {
     const { servidor, sincronizar } = comGoogle();
-    const tarefa = (await criarTarefa('Reunião', { data: '2026-11-09' }))!;
+    const tarefa = (await criarTarefa('Ligar para a Renata', { data: '2026-11-09' }))!;
     const atual = await lerTarefa(tarefa.id);
     await gravarDoServidor([{ colecao: 'tarefas', registro: { ...atual, inicio: '10:00', atualizadoEm: AGORA + 1000, aparelho: 'outro' } }], AGORA + 1000);
     await sincronizar();
-    expect(servidor.de('espelharTarefas')).toEqual([]);
+    expect(servidor.tarefasGoogle.vivas()).toMatchObject([{ due: '2026-11-09T00:00:00.000Z' }]);
     expect(await daTarefa(tarefa.id)).toEqual([]);
   });
 

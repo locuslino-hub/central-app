@@ -2,6 +2,7 @@
 // O que passou, o que é livre e o que está feito diz isso em palavras: a cor só reforça.
 // Com `aoMarcarFeito` (Agenda de hoje), o evento ganha a caixa de feito, igual à das tarefas.
 import { descreverHorario, formatarMinutos, type Item, type ItemDeEvento } from '../dados/calendario';
+import { estaAEnviar } from '../dados/eventos';
 import type { Sala } from '../dados/tipos';
 import { corDaSala } from './Menu';
 import type { SalaDoEvento } from './useAdivinharSala';
@@ -47,15 +48,18 @@ export function ItemDeAgenda({ item, salas, aoAbrir, salaDoEvento, aoMarcarFeito
     const simples = !item.diaInteiro && !item.continuaAntes && !item.continuaDepois;
     const feito = evento.feito === true;
     const titulo = evento.titulo === '' ? '(sem título)' : evento.titulo;
+    // Ainda na fila (sem internet): aparece, mas o feito espera o evento existir no Google.
+    const aEnviar = estaAEnviar(evento);
+    const comCaixa = !!aoMarcarFeito && !aEnviar;
     return (
       <li
-        class={`cal-item cal-evento ${cor}${aoMarcarFeito ? ' cal-com-caixa' : ''}`}
+        class={`cal-item cal-evento ${cor}${comCaixa ? ' cal-com-caixa' : ''}`}
         data-tipo="evento"
         data-passado={String(item.passado)}
         data-livre={String(evento.livre)}
         data-feito={String(feito)}
       >
-        {aoMarcarFeito && <CaixaDeFeito feito={feito} rotulo={titulo} aoTocar={() => aoMarcarFeito(item, !feito)} />}
+        {comCaixa && <CaixaDeFeito feito={feito} rotulo={titulo} aoTocar={() => aoMarcarFeito(item, !feito)} />}
         <button type="button" class="cal-botao" aria-haspopup="dialog" onClick={(e) => aoAbrir(item, e.currentTarget)}>
           {!item.diaInteiro && (
             <span class="cal-hora" aria-hidden="true">
@@ -67,6 +71,7 @@ export function ItemDeAgenda({ item, salas, aoAbrir, salaDoEvento, aoMarcarFeito
             <span class="cal-meta">
               <span class={simples ? 'cal-quando cal-quando-simples' : 'cal-quando'}>{descreverHorario(item)}</span>
               {etiqueta}
+              {aEnviar && <span class="cal-nota">a enviar</span>}
               {evento.livre && <span class="cal-nota">livre</span>}
               {feito && <span class="cal-nota">feito</span>}
               {item.passado && !feito && <span class="cal-nota">passado</span>}

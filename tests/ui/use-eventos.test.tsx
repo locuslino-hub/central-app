@@ -1,6 +1,6 @@
 import { act, configure, render, screen, waitFor } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { lerEventos, marcarEventosObsoletos } from '../../src/dados/eventos';
+import { atualizarEventos, lerEventos, marcarEventosObsoletos } from '../../src/dados/eventos';
 import { useEventos } from '../../src/ui/useEventos';
 import { agendaDeTeste, evento } from '../apoio/agenda-ui';
 
@@ -71,5 +71,42 @@ describe('useEventos', () => {
     await screen.findByText('Aula,Reunião nova');
     expect(agenda.leituras()).toHaveLength(antes + 1);
     expect(lerEventos('2026-11-05', '2026-11-05').obsoleta).toBeUndefined();
+  });
+
+  it('leitura marcada obsoleta sem tela aberta: ao abrir a tela, lê de novo mesmo dentro do intervalo mínimo', async () => {
+    // No celular o chat é outra página: quando ele cria o evento, nenhuma tela de hoje está montada.
+    // Outro dia que o dos outros testes: telas deles que ainda escutem não leem este período.
+    const agenda = await agendaDeTeste();
+    agenda.responder([evento('Aula')]);
+    // O Painel leu há menos de 30 s e saiu da tela.
+    await atualizarEventos('2026-11-06', '2026-11-06');
+    const antes = agenda.leituras().length;
+
+    agenda.responder([evento('Aula'), evento('Ligar para o banco')]);
+    marcarEventosObsoletos();
+    render(<Sonda de="2026-11-06" ate="2026-11-06" vistos={[]} />);
+
+    await screen.findByText('Aula,Ligar para o banco');
+    expect(agenda.leituras()).toHaveLength(antes + 1);
+  });
+});
+
+describe('useEventos: compromisso recém-criado', () => {
+  it('fica à vista mesmo que a leitura seguinte ainda não o traga; some quando a leitura o traz (sem duplicar)', async () => {
+    const { lembrarEnviado } = await import('../../src/dados/eventos');
+    const agenda = await agendaDeTeste();
+    agenda.responder([evento('Aula', { inicio: '2026-11-07T09:00:00+00:00', fim: '2026-11-07T10:00:00+00:00' })]);
+    render(<Sonda de="2026-11-07" ate="2026-11-07" vistos={[]} />);
+    await screen.findByText('Aula');
+
+    act(() => lembrarEnviado({ id: 'f'.repeat(32), titulo: 'Consulta', data: '2026-11-07', inicio: '15:00', fim: '16:00', salaId: null }));
+    await screen.findByText('Aula,Consulta');
+
+    agenda.responder([
+      evento('Aula', { inicio: '2026-11-07T09:00:00+00:00', fim: '2026-11-07T10:00:00+00:00' }),
+      evento('Consulta', { id: 'f'.repeat(32), inicio: '2026-11-07T15:00:00+00:00', fim: '2026-11-07T16:00:00+00:00' }),
+    ]);
+    await act(async () => void (await atualizarEventos('2026-11-07', '2026-11-07')));
+    await screen.findByText('Aula,Consulta');
   });
 });

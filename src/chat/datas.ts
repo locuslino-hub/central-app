@@ -231,9 +231,10 @@ export type AchadoHora = Trecho & { hora: string; papel: 'inicio' | 'fim'; semTa
 /**
  * Hora: "15:30", "15h", "15h30", "15 horas", "meio-dia", "3 da tarde" e, com
  * marca antes ("às", "das", "início", "término", "até", "pelas"), o número sozinho.
+ * Dois-pontos logo depois sem minutos ("às 18h: enviar...") não impedem a hora.
  */
 const RE_HORA =
-  /(?<![\d:/.,a-z])(?:(meio[\s-]dia|meia[\s-]noite)|(\d{1,2})(?:(:)(\d{2})(?:\s?h)?|\s?(h|hs|hrs?|horas?)(\d{2})?(?:\s?min)?)?)(?![\d/:a-z])(?:\s+(?:da|de|a)\s+(manha|tarde|noite|madrugada)(?![a-z]))?/g;
+  /(?<![\d:/.,a-z])(?:(meio[\s-]dia|meia[\s-]noite)|(\d{1,2})(?:(:)(\d{2})(?:\s?h)?|\s?(h|hs|hrs?|horas?)(\d{2})?(?:\s?min)?)?)(?![\d/a-z])(?!:\d)(?:\s+(?:da|de|a)\s+(manha|tarde|noite|madrugada)(?![a-z]))?/g;
 
 type TipoMarca = 'livre' | 'ambigua' | 'faixa';
 /** Marcas antes da hora, testadas nesta ordem (a mais específica primeiro). */

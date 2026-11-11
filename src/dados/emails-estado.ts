@@ -10,6 +10,7 @@
 import { somarDias } from '../chat/datas';
 import { desfazer, emLote, type Desfazivel } from './desfazer';
 import { apagar, lerRegistros, listar, salvar } from './loja';
+import { hojeEmLisboa } from './dia';
 import { criarTarefa } from './tarefas';
 import type { Email } from './emails';
 import type { EstadoEmail, Tarefa } from './tipos';
@@ -90,7 +91,7 @@ export type TarefaDoEmail = { tarefa: Tarefa; entrada: Desfazivel | undefined };
 
 /**
  * Cria a tarefa do e-mail, com `emailId` (o vínculo), a sala e a pessoa de quem
- * enviou. Sem prazo: o dono escolhe quando em Sem prazo. Se o e-mail já tem uma
+ * enviou. Para hoje (tarefa sem dia vai para hoje, 11/11): volta todo dia até ser feita. Se o e-mail já tem uma
  * tarefa viva, devolve essa, sem `entrada` (não criou nada). O Gmail não muda.
  */
 export async function virarTarefa(
@@ -100,6 +101,7 @@ export async function virarTarefa(
   const existente = (await listar('tarefas')).find((tarefa) => tarefa.emailId === email.id);
   if (existente) return { tarefa: existente, entrada: undefined };
   const tarefa = await criarTarefa(tituloDaTarefa(email), {
+    data: hojeEmLisboa(),
     salaId: contexto.salaId,
     ...(contexto.pessoaId !== undefined ? { pessoaId: contexto.pessoaId } : {}),
     emailId: email.id,

@@ -234,10 +234,20 @@ describe('editar o quando', () => {
     await waitFor(async () => expect(await unica()).toMatchObject({ titulo: 'Planejar o semestre', semana: '2026-11-23' }));
   });
 
-  it('compromisso e prazo não têm "Quando" (a hora está ligada ao dia)', async () => {
-    await criar('Reunião de grupo', { data: '2026-11-05', inicio: '14:00' });
+  it('tarefa com hora tem "Quando": Outro dia leva a tarefa para lá, com a mesma hora', async () => {
+    await criar('Ligar para a Renata', { data: '2026-11-05', inicio: '14:00' });
     render(<Checklist />);
-    const dentro = await abrir('Reunião de grupo');
+    const dentro = await abrir('Ligar para a Renata');
+    fireEvent.change(dentro.getByLabelText('Quando'), { target: { value: 'dia' } });
+    fireEvent.input(dentro.getByLabelText('Dia'), { target: { value: '2026-11-10' } });
+    fireEvent.click(dentro.getByRole('button', { name: 'Salvar' }));
+    await waitFor(async () => expect(await unica()).toMatchObject({ data: '2026-11-10', inicio: '14:00' }));
+  });
+
+  it('prazo não tem "Quando" (a hora do prazo está ligada ao dia)', async () => {
+    await criar('Entregar relatório', { data: '2026-11-05', prazoHora: '17:00' });
+    render(<Checklist />);
+    const dentro = await abrir('Entregar relatório');
     expect(dentro.queryByLabelText('Quando')).toBeNull();
     expect(dentro.getByLabelText('Título')).toBeTruthy();
   });

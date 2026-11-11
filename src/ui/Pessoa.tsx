@@ -83,7 +83,7 @@ function ConteudoDaPessoa({ pessoa }: { pessoa: PessoaDoApp }) {
         <div class="sala-coluna">
         <section class="painel pessoa-tarefas" aria-labelledby="titulo-pessoa-tarefas" aria-busy={tarefas === undefined}>
           <h2 id="titulo-pessoa-tarefas">Pendências</h2>
-          <NovaTarefa rotulo={`Nova tarefa com ${pessoa.nome}`} salaId={pessoa.salaId} pessoaId={pessoa.id} />
+          <NovaTarefa rotulo={`Nova tarefa com ${pessoa.nome}`} salaId={pessoa.salaId} pessoaId={pessoa.id} data={hoje} />
           <AvisoDeApagada conclusoes={conclusoes} />
           {tarefas !== undefined && abertas.length === 0 && (
             <div>

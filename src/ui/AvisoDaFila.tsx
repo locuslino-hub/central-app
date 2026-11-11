@@ -1,8 +1,7 @@
 // Compromissos que a sincronia desistiu de enviar (Tarefa 12): o Google Agenda
 // recusou muitas vezes ou o pedido ficou parado mais de uma semana. O pedido
 // continua guardado; aqui o dono é avisado e escolhe Tentar de novo ou Descartar.
-// Nada é apagado sozinho. Descartar é definitivo: compromisso antigo (migração)
-// descartado não volta à fila quando o app abre de novo. O espelho no Google (tarefas no Google Tarefas, "✓ "
+// Nada é apagado sozinho. O espelho no Google (tarefas no Google Tarefas, "✓ "
 // dos compromissos) que parou também aparece aqui; descartar não muda a Central.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { agendaEsgotada, descartarPendentes, listarPendentes, reiniciarAgendaParada } from '../dados/loja';

@@ -3,7 +3,9 @@
 //
 // Mesclagem com a IA: data, hora e tipo vêm sempre das regras; a IA dá o
 // título, a sala quando regras e memória não decidem, e a divisão de frases
-// longas em vários itens. Pessoa conhecida citada fica no título. A IA só é
+// longas em vários itens. Pessoa conhecida citada fica no título. A sala que a
+// IA escolhe não baixa a certeza: o item é guardado e o cartão oferece Trocar
+// sala, como na sala das regras. A IA só é
 // chamada com certeza baixa, sala indefinida ou frase com mais de 20 palavras,
 // e tem 30 s para responder; sem resposta útil, valem as regras.
 
@@ -159,10 +161,10 @@ function mesclar(frase: string, hoje: string, daIA: ItemIA[], memoria: MemoriaDo
     const trecho = trechos[i];
     const regras = trecho ? interpretarRegras(trecho, hoje, memoria) : null;
     const achado = regras && !regras.vazia ? regras.itens[0] : null;
-    // Item que não aparece na frase: sem data, e o dono confere.
+    // Item que não aparece na frase: tarefa de hoje (sem dia dito), e o dono confere.
     const item: Item = achado
       ? { ...achado, titulo: sugestao.titulo }
-      : { tipo: 'tarefa', titulo: sugestao.titulo, salaId: null, data: undefined, marcar: false };
+      : { tipo: 'tarefa', titulo: sugestao.titulo, salaId: null, data: hoje, diaAssumido: true, marcar: false };
     let certeza: ItemDoChat['certeza'] = !achado || regras!.certeza === 'baixa' || varios ? 'baixa' : 'alta';
 
     const pessoa = item.pessoaId ? memoria.pessoaPorId(item.pessoaId) : undefined;
@@ -176,8 +178,7 @@ function mesclar(frase: string, hoje: string, daIA: ItemIA[], memoria: MemoriaDo
       const sala = salaPeloNome(sugestao.sala, salas);
       if (sala) {
         item.salaId = sala;
-        delete item.motivoSala;
-        certeza = 'baixa';
+        item.motivoSala = 'ia';
       }
     }
     return paraChat(item, trecho, certeza, memoria);
@@ -207,9 +208,9 @@ const minutos = (hora: string) => {
   return h * 60 + m;
 };
 
-/** Minutos de `inicio` a `fim` do compromisso; `null` se não há as duas horas certas. */
+/** Minutos de `inicio` a `fim` (compromisso, ou tarefa com faixa de horas); `null` se não há as duas horas certas. */
 function duracaoDita(item: Item): number | null {
-  if (item.tipo !== 'compromisso' || !item.inicio || !item.fim) return null;
+  if (!item.inicio || !item.fim) return null;
   const diferenca = minutos(item.fim) - minutos(item.inicio);
   return Number.isFinite(diferenca) && diferenca > 0 ? diferenca : null;
 }
@@ -218,7 +219,9 @@ function duracaoDita(item: Item): number | null {
  * A Tarefa que o item vira: só campos da Tarefa, nenhum vazio. Compromisso com
  * dia e horas não passa por aqui: vai para o Google Agenda (`criarItem`). Um
  * compromisso sem dia ou sem as duas horas, que as regras não produzem, ainda
- * vira tarefa, sem hora de início.
+ * vira tarefa, sem hora de início. Tarefa com hora (a frase disse "tarefa" ou
+ * "atividade", 11/11) guarda `inicio`: aparece em Atividades e como bloco na
+ * Agenda; a duração vem da faixa dita, ou é a padrão, a confirmar.
  */
 export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
   const dita = duracaoDita(item);
@@ -226,7 +229,7 @@ export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
     titulo: item.titulo,
     salaId: item.salaId,
     duracaoMin: dita ?? DURACAO_PADRAO_MIN,
-    // Compromisso disse início e fim; tarefa usa o padrão, que o dono ainda confirma.
+    // Início e fim ditos dão a duração; senão vale o padrão, que o dono ainda confirma.
     duracaoConfirmada: dita !== null,
     feito: false,
     fixada: false,
@@ -236,6 +239,7 @@ export function paraTarefa(item: Item): ParaSalvar<Tarefa> {
   if (item.data) tarefa.data = item.data;
   else if (item.semana) tarefa.semana = item.semana;
   if (item.tipo === 'tarefa' && item.data && item.prazoHora) tarefa.prazoHora = item.prazoHora;
+  if (item.tipo === 'tarefa' && item.data && item.inicio && !item.prazoHora) tarefa.inicio = item.inicio;
   return tarefa;
 }
 

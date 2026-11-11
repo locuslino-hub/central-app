@@ -1,7 +1,9 @@
 // A conversa do chat (Tarefa 8): mensagens e o estado de cada cartão. Mora
 // fora dos componentes para o chat do painel direito e o da página `#/chat`
 // mostrarem a mesma conversa, e para voltar a uma tela não guardar de novo.
-// Não é guardada nem sincronizada: o que fica são os itens criados.
+// Não é guardada nem sincronizada: o que fica são os itens criados. Todo item
+// é guardado na hora, mesmo com certeza baixa (o app pode ser fechado logo
+// depois); o cartão mostra o resultado com Trocar sala e Desfazer para corrigir.
 //
 // Cada cartão tem a sua fila: guardar, trocar a sala e desfazer o mesmo
 // cartão acontecem um depois do outro, na ordem em que o dono apertou.
@@ -13,11 +15,11 @@ import { criarItem, interpretar, type ItemDoChat } from './interpretar';
 import { aprender, lembrarPessoa } from './memoria';
 
 /**
- * `confirmar`: certeza baixa, esperando o dono. `salvando`: gravação em curso.
- * `salvo`: guardado, com Desfazer. `desfazendo`: apagando. `desfeito` e
- * `descartado`: nada ficou. `erro`: não guardou; Guardar tenta de novo.
+ * `salvando`: gravação em curso. `salvo`: guardado, com Desfazer.
+ * `desfazendo`: apagando. `desfeito` e `descartado`: nada ficou. `erro`: não
+ * guardou (falha da loja); Guardar tenta de novo, Descartar desiste.
  */
-export type Situacao = 'confirmar' | 'salvando' | 'salvo' | 'desfazendo' | 'desfeito' | 'descartado' | 'erro';
+export type Situacao = 'salvando' | 'salvo' | 'desfazendo' | 'desfeito' | 'descartado' | 'erro';
 
 /** Por que a sala mudou no cartão, para dizer o que foi (ou será) aprendido. */
 export type Escolha =
@@ -26,7 +28,7 @@ export type Escolha =
   | { tipo: 'pessoa'; nome: string }
   | { tipo: 'sem-aprender' };
 
-/** O que a memória aprende com a escolha. Em cartão ainda não guardado, espera o Guardar. */
+/** O que a memória aprende com a escolha. Em cartão que não guardou (erro), espera o Guardar. */
 export type Aprendizado = { tipo: 'pessoa-nova'; nome: string } | { tipo: 'termo'; termo: string };
 
 export type EstadoCartao = {
@@ -134,7 +136,7 @@ function mudarMensagem(id: string, mudanca: Partial<Extract<Mensagem, { de: 'cen
 
 /** A resposta da Central acima dos cartões. */
 export function fala(itens: readonly ItemDoChat[]): string {
-  if (itens.some((item) => item.certeza === 'baixa')) return 'Não tenho certeza. Confira o cartão.';
+  if (itens.some((item) => item.certeza === 'baixa')) return 'Anotei. Confira o cartão.';
   const nova = itens.find((item) => item.pessoaNova)?.pessoaNova;
   return nova ? `Anotei. Ainda não conheço ${nova}.` : 'Anotei.';
 }
@@ -176,7 +178,7 @@ async function gravar(id: string) {
 
 /**
  * Manda a frase. A mensagem do dono e o lugar da resposta entram na hora, na
- * ordem em que foram ditas; com certeza alta o item já é guardado.
+ * ordem em que foram ditas, e cada item já é guardado, com qualquer certeza.
  */
 export async function enviar(frase: string): Promise<void> {
   const texto = frase.trim();
@@ -203,31 +205,29 @@ export async function enviar(frase: string): Promise<void> {
   const cartoes: EstadoCartao[] = itens.map((item) => ({
     id: novoId(),
     item,
-    situacao: item.certeza === 'baixa' ? 'confirmar' : 'salvando',
+    situacao: 'salvando',
     // Sem sala e sem pessoa nova para perguntar: as salas já ficam à vista.
     trocando: item.salaId === null && !item.pessoaNova,
     passos: 0,
   }));
   mudarMensagem(resposta, { texto: fala(itens), cartoes, esperando: false });
-  await Promise.all(
-    cartoes.filter((cartao) => cartao.situacao === 'salvando').map((cartao) => naFila(cartao.id, () => gravar(cartao.id))),
-  );
+  await Promise.all(cartoes.map((cartao) => naFila(cartao.id, () => gravar(cartao.id))));
 }
 
-/** Guardar o item de certeza baixa (ou tentar de novo depois de erro). */
+/** Guardar de novo o item que não guardou (erro da loja). */
 export function confirmar(id: string): Promise<void> {
   return naFila(id, async () => {
     const situacao = acharCartao(id)?.situacao;
-    if (situacao === 'confirmar' || situacao === 'erro') await gravar(id);
+    if (situacao === 'erro') await gravar(id);
     else concluir(id, 'guardar');
   });
 }
 
-/** Descartar o item ainda não guardado: o que esperava o Guardar também não é aprendido. */
+/** Descartar o item que não guardou: o que esperava o Guardar também não é aprendido. */
 export function descartar(id: string): Promise<void> {
   return naFila(id, async () => {
     const situacao = acharCartao(id)?.situacao;
-    if (situacao === 'confirmar' || situacao === 'erro') {
+    if (situacao === 'erro') {
       concluir(id, 'descartar', { situacao: 'descartado', pendente: undefined });
     } else concluir(id, 'descartar');
   });
@@ -283,12 +283,12 @@ export function naoEPessoa(id: string) {
  * - Trocar sala: aprende com o termo que decidiu (a palavra guardada ou a
  *   pessoa cadastrada).
  * - Sala dita na frase, item sem pista ou "Não é pessoa": só troca.
- * Em cartão ainda não guardado (certeza baixa), o aprendizado espera o Guardar.
+ * Em cartão que não guardou (erro), o aprendizado espera o Guardar.
  */
 export function escolherSala(id: string, salaId: string): Promise<void> {
   return naFila(id, async () => {
     const cartao = acharCartao(id);
-    if (!cartao || !['confirmar', 'erro', 'salvo'].includes(cartao.situacao)) {
+    if (!cartao || !['erro', 'salvo'].includes(cartao.situacao)) {
       concluir(id, 'escolher');
       return;
     }

@@ -1,6 +1,7 @@
 // Cartão do chat (Tarefa 8), conforme esboco-chat/chat.html: tipo, título,
-// sala, quando e o motivo da sala, com Trocar sala e Desfazer. Com certeza
-// baixa, pede confirmação antes de guardar. Tudo é texto: nada de HTML da frase.
+// sala, quando e o motivo da sala, com Trocar sala e Desfazer. O item já vem
+// guardado, mesmo com certeza baixa; só se a gravação falhar o cartão oferece
+// Guardar e Descartar. Tudo é texto: nada de HTML da frase.
 import { useEffect, useRef } from 'preact/hooks';
 import {
   abrirTroca,
@@ -20,11 +21,13 @@ import { minuscula, nomeDaSemana, nomeDoDia } from './quando';
 
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Quando, em palavras: "Sexta, 6/11, 11:00 às 12:00", "Até hoje, às 18:00", "Sem prazo". */
+/** Quando, em palavras: "Sexta, 6/11, 11:00 às 12:00", "Hoje, 18:00", "Até hoje, às 18:00", "Sem prazo". */
 export function descreverQuando(item: ItemDoChat, hoje: string): string {
   if (item.data) {
     const dia = nomeDoDia(item.data, hoje);
     if (item.tipo === 'compromisso' && item.inicio && item.fim) return `${dia}, ${item.inicio} às ${item.fim}`;
+    // Tarefa com hora: o fim só quando a frase disse.
+    if (item.tipo === 'tarefa' && item.inicio) return item.fim ? `${dia}, ${item.inicio} às ${item.fim}` : `${dia}, ${item.inicio}`;
     if (item.prazoHora) return `Até ${minuscula(dia)}, às ${item.prazoHora}`;
     return dia;
   }
@@ -62,6 +65,8 @@ function motivo(cartao: EstadoCartao, sala: string | undefined): string | null {
         : `Uma palavra da frase costuma ser ${onde}.`;
     case 'pessoa':
       return `${item.pessoaNome ?? 'A pessoa citada'} fica em ${onde}.`;
+    case 'ia':
+      return 'A IA escolheu a sala.';
     default:
       return null;
   }
@@ -111,7 +116,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
   const nomeDaSala = item.salaId === null ? undefined : salas.find((sala) => sala.id === item.salaId)?.nome;
   const pergunta = item.pessoaNova && item.salaId === null ? `Em que sala fica ${item.pessoaNova}?` : null;
   const mostrarSalas = cartao.trocando || !!pergunta;
-  const aConfirmar = situacao === 'confirmar' || situacao === 'erro';
+  const aConfirmar = situacao === 'erro';
   const porque = motivo(cartao, nomeDaSala);
 
   const escolher = (salaId: string) => {
@@ -132,7 +137,6 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       <p class="chat-titulo">{item.titulo}</p>
       <p class="chat-quando">{descreverQuando(item, hoje)}</p>
       {porque && <p class="chat-motivo">{porque}</p>}
-      {situacao === 'confirmar' && <p class="chat-pergunta">Confira antes de guardar.</p>}
       {situacao === 'erro' && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
       {cartao.aviso && (

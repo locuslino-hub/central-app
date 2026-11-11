@@ -50,7 +50,7 @@ test.describe('celular, 390 px', () => {
     const cartao = principal.getByRole('article');
     await expect(cartao.getByText('Casa', { exact: true })).toBeVisible();
     await expect(cartao.getByText('"Banheiro" costuma ser Casa.')).toBeVisible();
-    await expect(cartao.getByText('Sem prazo')).toBeVisible();
+    await expect(cartao.getByText('Hoje', { exact: true })).toBeVisible();
     await expect(campo).toHaveValue('');
 
     expect(await pequenos(page)).toEqual([]);
@@ -205,7 +205,7 @@ test.describe('computador, 1280 px', () => {
     const formulario = (await painel.locator('form').boundingBox())!;
     expect(formulario.y + formulario.height).toBeLessThanOrEqual(cartao.y + cartao.height);
     // A mais nova fica à vista.
-    await expect(painel.getByRole('article').last().getByRole('button', { name: 'Guardar' })).toBeInViewport();
+    await expect(painel.getByRole('article').last().getByRole('button', { name: 'Desfazer' })).toBeInViewport();
   });
 
   test('em #/chat o painel não repete o chat', async ({ page }) => {

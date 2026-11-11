@@ -87,7 +87,7 @@ test.describe('celular, 390 px', () => {
     await expect(page.getByRole('group', { name: 'Orientações' }).getByText('Marina')).toBeVisible();
 
     await dizerAoChat(page, 'Marcar reunião com a Marina');
-    await dizerAoChat(page, 'Preciso parafusar o apoio do banheiro');
+    await dizerAoChat(page, 'Preciso parafusar o apoio do banheiro sem prazo');
 
     await page.goto('/central-app/#/');
     const principal = page.getByRole('main');
@@ -207,7 +207,7 @@ test.describe('celular, 390 px', () => {
   }
 
   test('Esta semana deixa a tarefa na semana, sem dia', async ({ page }) => {
-    await dizerAoChat(page, 'Preciso parafusar o apoio do banheiro');
+    await dizerAoChat(page, 'Preciso parafusar o apoio do banheiro sem prazo');
     await page.goto('/central-app/#/');
     const principal = page.getByRole('main');
     const semPrazo = principal.getByRole('region', { name: 'Sem prazo' });
@@ -231,7 +231,7 @@ test.describe('computador, 1280 px', () => {
     const erros = vigiarErros(page);
     await cadastrarPessoa(page, 'Prof. Souza', 'Doutoramento');
     await dizerAoChat(page, 'Marcar reunião com o Prof. Souza');
-    await dizerAoChat(page, 'Revisar parágrafo do relatório 1 nas tarefas do doutoramento');
+    await dizerAoChat(page, 'Revisar parágrafo do relatório 1 nas tarefas do doutoramento sem prazo');
 
     await page.goto('/central-app/#/');
     const principal = page.getByRole('main');

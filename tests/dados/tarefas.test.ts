@@ -271,14 +271,29 @@ describe('editar tarefa', () => {
     expect((await unica()).titulo).toBe('X');
   });
 
-  it('compromisso e prazo: o dia não muda por aqui (a hora está ligada a ele)', async () => {
-    const c = await salvar('tarefas', tarefa('Reunião', { data: '2026-11-06', inicio: '11:00' }));
+  it('tarefa com hora muda de dia e mantém a hora (11/11); prazo não muda por aqui', async () => {
+    const c = await salvar('tarefas', tarefa('Ligar para a Renata', { data: '2026-11-06', inicio: '11:00' }));
     const p = await salvar('tarefas', tarefa('Entrega', { data: '2026-11-06', prazoHora: '17:00' }));
-    await editarTarefa(c.id, { titulo: 'Reunião do projeto', quando: { tipo: 'sem-prazo' } });
+    await editarTarefa(c.id, { titulo: 'Ligar para a Renata e a Marina', quando: { tipo: 'dia', dia: '2026-11-12' } });
     await editarTarefa(p.id, { quando: { tipo: 'hoje', hoje: HOJE } });
     const todas = Object.fromEntries((await listar('tarefas')).map((x) => [x.id, x]));
-    expect(todas[c.id]).toMatchObject({ titulo: 'Reunião do projeto', data: '2026-11-06', inicio: '11:00' });
+    expect(todas[c.id]).toMatchObject({ titulo: 'Ligar para a Renata e a Marina', data: '2026-11-12', inicio: '11:00' });
     expect(todas[p.id]).toMatchObject({ data: '2026-11-06', prazoHora: '17:00' });
+
+    await editarTarefa(c.id, { quando: { tipo: 'hoje', hoje: HOJE } });
+    expect((await listar('tarefas')).find((x) => x.id === c.id)).toMatchObject({ data: HOJE, inicio: '11:00' });
+  });
+
+  it('tarefa com hora para Sem prazo ou Esta semana perde a hora (sem dia não há hora)', async () => {
+    const a = await salvar('tarefas', tarefa('A', { data: '2026-11-06', inicio: '11:00' }));
+    const b = await salvar('tarefas', tarefa('B', { data: '2026-11-06', inicio: '11:00' }));
+    await editarTarefa(a.id, { quando: { tipo: 'sem-prazo' } });
+    await editarTarefa(b.id, { quando: { tipo: 'semana', hoje: HOJE } });
+    const todas = Object.fromEntries((await listar('tarefas')).map((x) => [x.id, x]));
+    expect('inicio' in todas[a.id]).toBe(false);
+    expect('data' in todas[a.id]).toBe(false);
+    expect(todas[b.id]).toMatchObject({ semana: '2026-11-02' });
+    expect('inicio' in todas[b.id]).toBe(false);
   });
 
   it('tarefa que sumiu: false, e não recria', async () => {

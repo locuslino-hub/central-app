@@ -47,21 +47,35 @@ describe('iniciarApp (o que o main.tsx liga ao abrir)', () => {
     });
   });
 
-  it('põe na fila do Google Agenda as tarefas antigas com hora de início, uma vez só', async () => {
+  it('tarefa com hora de início fica tarefa: abrir o app não a leva para o Google Agenda (decisão de 11/11)', async () => {
     const { listar, listarPendentes, salvar } = await import('../src/dados/loja');
-    await salvar('tarefas', {
-      titulo: 'Reunião com a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
-      duracaoConfirmada: true, feito: false, fixada: false, marcar: false,
+    const tarefa = await salvar('tarefas', {
+      titulo: 'Ligar para a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
+      duracaoConfirmada: false, feito: false, fixada: false, marcar: false,
     });
     const { iniciarApp } = await import('../src/inicio');
 
     iniciarApp();
-    await vi.waitFor(async () => expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toHaveLength(1));
-    expect(await listar('tarefas')).toHaveLength(1); // a tarefa só some depois de o script confirmar
+    await new Promise((pronto) => setTimeout(pronto, 150));
+    expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toEqual([]);
+    expect(await listar('tarefas')).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
+  });
+
+  it('ao abrir, tira da fila os pedidos antigos da migração (tarefa com hora → compromisso) e mantém a tarefa', async () => {
+    const { enfileirarAgenda, listar, listarPendentes, salvar } = await import('../src/dados/loja');
+    const tarefa = await salvar('tarefas', {
+      titulo: 'Reunião com a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
+      duracaoConfirmada: true, feito: false, fixada: false, marcar: false,
+    });
+    await enfileirarAgenda({
+      tipo: 'agenda', acao: 'criarEvento', migrarTarefaId: tarefa.id,
+      evento: { id: 'e'.repeat(32), titulo: tarefa.titulo, data: '2026-11-06', inicio: '15:30', fim: '16:30', salaId: null },
+    });
+    const { iniciarApp } = await import('../src/inicio');
 
     iniciarApp();
-    await new Promise((pronto) => setTimeout(pronto, 100));
-    expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toHaveLength(1);
+    await vi.waitFor(async () => expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toEqual([]));
+    expect(await listar('tarefas')).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
   });
 
   it('pede armazenamento persistente uma vez, sem mostrar nada e sem quebrar se não houver', async () => {

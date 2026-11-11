@@ -5,7 +5,6 @@ import { criarCompromisso, desfazerCompromisso, trocarSalaDoCompromisso } from '
 import { desfazer } from '../../src/dados/desfazer';
 import { assinarEventos, lerEventos } from '../../src/dados/eventos';
 import { listar, listarPendentes, salvar, semear } from '../../src/dados/loja';
-import { migrarCompromissos } from '../../src/dados/migrar';
 import { sincronizar, type Chamar } from '../../src/dados/sincronia';
 import type { PendenteAgenda } from '../../src/dados/tipos';
 import { agendaEscrita } from '../apoio/agenda-escrita';
@@ -132,6 +131,39 @@ describe('a fila da agenda, na sincronia', () => {
     expect(await sincronizarCom(agenda)).toBe('atualizado');
     expect(await daAgenda()).toEqual([]);
     expect([...agenda.eventos.keys()]).toEqual([eventoId]);
+  });
+
+  it('enviado pela fila, o compromisso segue na tela até uma leitura que dê certo o trazer', async () => {
+    const { atualizarEventos, eventosEnviados } = await import('../../src/dados/eventos');
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('rede');
+    const { eventoId } = await criarCompromisso(novo);
+    agenda.modo('ok');
+    await sincronizarCom(agenda);
+    expect(await daAgenda()).toEqual([]);
+
+    const lidos = (eventos: unknown[]) => ({ listar: async () => ({ eventos, incompleto: false }) as never, conectado: async () => true });
+    expect(eventosEnviados('2026-11-06', '2026-11-06', []).map((e) => e.id)).toEqual([eventoId]);
+    // Leitura que falha, ou que ainda não traz o evento: ele continua.
+    await atualizarEventos('2026-11-06', '2026-11-06', { listar: async () => { throw new Error('rede'); }, conectado: async () => true, pingar: async () => ({}) });
+    await atualizarEventos('2026-11-06', '2026-11-06', lidos([]));
+    expect(eventosEnviados('2026-11-06', '2026-11-06', []).map((e) => e.id)).toEqual([eventoId]);
+    // Outro dia não o mostra.
+    expect(eventosEnviados('2026-11-07', '2026-11-07', [])).toEqual([]);
+
+    await atualizarEventos('2026-11-06', '2026-11-06', lidos([agenda.eventos.get(eventoId)]));
+    expect(eventosEnviados('2026-11-06', '2026-11-06', [])).toEqual([]);
+  });
+
+  it('desfazer um compromisso já enviado o tira da tela na hora', async () => {
+    const { eventosEnviados } = await import('../../src/dados/eventos');
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    const { eventoId } = await criarCompromisso(novo);
+    expect(eventosEnviados('2026-11-06', '2026-11-06', []).map((e) => e.id)).toEqual([eventoId]);
+    await desfazerCompromisso(eventoId);
+    expect(eventosEnviados('2026-11-06', '2026-11-06', [])).toEqual([]);
   });
 
   it('repetir o envio não duplica: o script devolve o evento já criado', async () => {
@@ -318,202 +350,59 @@ describe('criarItem com compromisso (chat)', () => {
   });
 });
 
-describe('migrarCompromissos (duas fases)', () => {
-  const antiga = (extra: object = {}) => ({
-    titulo: 'Reunião com a Marina',
-    salaId: 'sala-orientacoes',
-    data: '2026-11-06',
-    inicio: '15:30',
-    duracaoMin: 90,
-    duracaoConfirmada: true,
-    feito: false,
-    fixada: false,
-    marcar: false,
-    ...extra,
-  });
-  const criarDaFila = async () =>
-    (await daAgenda()).filter((p): p is Extract<PendenteAgenda, { acao: 'criarEvento' }> => p.acao === 'criarEvento');
-
-  it('fase 1: o pedido entra na fila com migrarTarefaId e a tarefa continua à vista', async () => {
-    const tarefa = await salvar('tarefas', antiga());
-    const comum = await salvar('tarefas', { ...antiga(), titulo: 'Sem hora', inicio: undefined });
-
-    expect(await migrarCompromissos()).toBe(1);
-
-    expect((await listar('tarefas')).map((t) => t.id).sort()).toEqual([tarefa.id, comum.id].sort());
-    const [acao] = await criarDaFila();
-    expect(acao).toMatchObject({
-      migrarTarefaId: tarefa.id,
-      evento: { titulo: 'Reunião com a Marina', data: '2026-11-06', inicio: '15:30', fim: '17:00', salaId: 'sala-orientacoes' },
+describe('pedidos antigos da migração na fila (tarefa com hora fica tarefa, 11/11)', () => {
+  const comHora = () =>
+    salvar('tarefas', {
+      titulo: 'Reunião com a Marina',
+      salaId: 'sala-orientacoes',
+      data: '2026-11-06',
+      inicio: '15:30',
+      duracaoMin: 90,
+      duracaoConfirmada: true,
+      feito: false,
+      fixada: false,
+      marcar: false,
     });
-    expect(acao.evento.id).toMatch(/^[0-9a-f]{32}$/);
+  const eventoDe = (tarefaId: string) => ({
+    id: 'c'.repeat(32), titulo: 'Reunião com a Marina', data: '2026-11-06', inicio: '15:30', fim: '17:00', salaId: null, migrarTarefaId: tarefaId,
   });
 
-  it('é idempotente: rodar de novo não põe outro pedido na fila', async () => {
-    await salvar('tarefas', antiga());
-    await migrarCompromissos();
-    expect(await migrarCompromissos()).toBe(0);
-    expect(await daAgenda()).toHaveLength(1);
+  it('largarMigracoesDaFila tira só os pedidos da migração; a tarefa com hora fica, e nada mais na fila muda', async () => {
+    const { enfileirarAgenda, largarMigracoesDaFila } = await import('../../src/dados/loja');
+    const tarefa = await comHora();
+    const { migrarTarefaId, ...evento } = eventoDe(tarefa.id);
+    await enfileirarAgenda({ tipo: 'agenda', acao: 'criarEvento', evento, migrarTarefaId });
+    const outro = await enfileirarAgenda({ tipo: 'agenda', acao: 'criarEvento', evento: { ...novo, id: 'd'.repeat(32) } });
+
+    expect(await largarMigracoesDaFila()).toBe(1);
+
+    expect((await daAgenda()).map((p) => p.seq)).toEqual([outro]);
+    expect(await listar('tarefas')).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
+    expect(await largarMigracoesDaFila()).toBe(0);
   });
 
-  it('fase 2: só depois de o script confirmar, a tarefa vira lápide e o pedido sai da fila', async () => {
+  it('a sincronia não envia um pedido da migração que ainda esteja na fila: tira da fila e a tarefa segue viva, com a hora', async () => {
+    const { enfileirarAgenda } = await import('../../src/dados/loja');
     const agenda = agendaEscrita();
     await agenda.instalar();
-    const tarefa = await salvar('tarefas', antiga());
-    await migrarCompromissos();
-    const [acao] = await criarDaFila();
+    const tarefa = await comHora();
+    const { migrarTarefaId, ...evento } = eventoDe(tarefa.id);
+    await enfileirarAgenda({ tipo: 'agenda', acao: 'criarEvento', evento, migrarTarefaId });
 
     expect(await sincronizarCom(agenda)).toBe('atualizado');
 
+    expect(agenda.de('criarEvento')).toEqual([]);
     expect(await daAgenda()).toEqual([]);
-    expect([...agenda.eventos.keys()]).toEqual([acao.evento.id]);
-    expect(await listar('tarefas')).toEqual([]);
-    expect((await listar('tarefas', { comApagados: true })).find((t) => t.id === tarefa.id)?.apagado).toBe(true);
+    const guardadas = await listar('tarefas', { comApagados: true });
+    expect(guardadas).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
+    expect(guardadas[0].apagado).toBeFalsy();
   });
 
-  it('sem internet ou com o script recusando, a tarefa segue à vista (nada se perde)', async () => {
-    const agenda = agendaEscrita();
-    await agenda.instalar();
-    const tarefa = await salvar('tarefas', antiga());
-    await migrarCompromissos();
-
-    agenda.modo('rede');
-    await sincronizarCom(agenda);
-    agenda.modo('recusar');
-    await sincronizarCom(agenda);
-
-    expect((await listar('tarefas')).map((t) => t.id)).toEqual([tarefa.id]);
-    expect(await daAgenda()).toHaveLength(1);
-  });
-
-  it('dois aparelhos chegam ao mesmo id de evento, e o script não duplica', async () => {
-    const agenda = agendaEscrita();
-    await agenda.instalar();
-    const tarefa = await salvar('tarefas', antiga());
-    await migrarCompromissos();
-    const [primeira] = await criarDaFila();
-
-    globalThis.indexedDB = new (await import('fake-indexeddb')).IDBFactory();
-    await semear();
-    await salvar('tarefas', { ...tarefa });
-    await migrarCompromissos();
-    const [segunda] = await criarDaFila();
-    expect(segunda.evento.id).toBe(primeira.evento.id);
-
-    await sincronizarCom(agenda);
-    expect(agenda.eventos.size).toBe(1);
-  });
-
-  it('tarefa que o dono mudou depois do plano não é levada', async () => {
-    const tarefa = await salvar('tarefas', antiga());
-    const evento = { id: 'a'.repeat(32), titulo: tarefa.titulo, data: '2026-11-06', inicio: '15:30', fim: '17:00', salaId: null };
-    await salvar('tarefas', { ...tarefa, titulo: 'Reunião com a Marina (adiada)' });
-
-    const { levarTarefasParaAgenda } = await import('../../src/dados/loja');
-    expect(await levarTarefasParaAgenda([{ tarefaId: tarefa.id, evento }])).toBe(0);
-    expect(await daAgenda()).toEqual([]);
-  });
-
-  it('o dono muda o título entre as fases: a tarefa fica, sem a hora, e a próxima abertura não duplica', async () => {
-    const agenda = agendaEscrita();
-    await agenda.instalar();
-    const tarefa = await salvar('tarefas', antiga());
-    await migrarCompromissos();
-    await salvar('tarefas', { ...(await listar('tarefas'))[0], titulo: 'Reunião com a Marina e a Renata' });
-
-    await sincronizarCom(agenda);
-
-    const [viva] = await listar('tarefas');
-    expect(viva).toMatchObject({ id: tarefa.id, titulo: 'Reunião com a Marina e a Renata' });
-    expect('inicio' in viva).toBe(false);
-    expect(agenda.eventos.size).toBe(1);
-    expect(await migrarCompromissos()).toBe(0);
-  });
-
-  it('o fim não passa da meia-noite; hora que a agenda recusaria deixa a tarefa como está', async () => {
-    await salvar('tarefas', antiga({ titulo: 'Tarde', inicio: '23:00', duracaoMin: 180 }));
-    const quebrada = await salvar('tarefas', antiga({ titulo: 'Hora que não existe', data: '2027-03-28', inicio: '01:30' }));
-    const longo = await salvar('tarefas', antiga({ titulo: 'x'.repeat(2000) }));
-
-    expect(await migrarCompromissos()).toBe(1);
-
-    const [acao] = await criarDaFila();
-    expect(acao.evento.fim).toBe('23:59');
-    expect((await listar('tarefas')).map((t) => t.id)).toEqual(expect.arrayContaining([quebrada.id, longo.id]));
-  });
-
-  it('descartar o pedido da migração é definitivo: sobrevive à reabertura e não depende da fila', async () => {
-    const { descartarPendentes } = await import('../../src/dados/loja');
-    const tarefa = await salvar('tarefas', antiga());
-    const outra = await salvar('tarefas', antiga({ titulo: 'Banca da Renata' }));
-    await migrarCompromissos();
-    const doDescarte = (await criarDaFila()).find((p) => p.migrarTarefaId === tarefa.id)!;
-
-    await descartarPendentes([doDescarte.seq]);
-
-    expect((await criarDaFila()).map((p) => p.migrarTarefaId)).toEqual([outra.id]);
-    expect(await migrarCompromissos()).toBe(0);
-    expect(await migrarCompromissos()).toBe(0);
-    expect((await listar('tarefas')).map((t) => t.id).sort()).toEqual([tarefa.id, outra.id].sort());
-  });
-
-  it('a lista de descartadas não cresce para sempre: sai a tarefa que sumiu ou perdeu a hora', async () => {
-    const { apagar, descartarPendentes, lerMigracoesDescartadas } = await import('../../src/dados/loja');
-    const apagada = await salvar('tarefas', antiga({ titulo: 'Banca' }));
-    const semHora = await salvar('tarefas', antiga({ titulo: 'Aula extra' }));
-    const fica = await salvar('tarefas', antiga({ titulo: 'Reunião com a Renata' }));
-    await migrarCompromissos();
-    await descartarPendentes((await criarDaFila()).map((p) => p.seq));
-    expect((await lerMigracoesDescartadas()).sort()).toEqual([apagada.id, semHora.id, fica.id].sort());
-
-    await apagar('tarefas', apagada.id);
-    const { inicio: _inicio, ...resto } = (await listar('tarefas')).find((t) => t.id === semHora.id)!;
-    await salvar('tarefas', resto);
-    expect(await migrarCompromissos()).toBe(0);
-
-    expect(await lerMigracoesDescartadas()).toEqual([fica.id]);
-    expect(await daAgenda()).toEqual([]);
-  });
-
-  it('sem nenhuma tarefa com hora, a lista também é aparada', async () => {
-    const { apagar, descartarPendentes, lerMigracoesDescartadas } = await import('../../src/dados/loja');
-    const tarefa = await salvar('tarefas', antiga());
-    await migrarCompromissos();
-    await descartarPendentes((await criarDaFila()).map((p) => p.seq));
-    await apagar('tarefas', tarefa.id);
-
-    await migrarCompromissos();
-
-    expect(await lerMigracoesDescartadas()).toEqual([]);
-  });
-
-  it('concluir a migração de uma tarefa descartada a tira da lista', async () => {
-    const { descartarPendentes, enfileirarAgenda, lerMigracoesDescartadas } = await import('../../src/dados/loja');
-    const agenda = agendaEscrita();
-    await agenda.instalar();
-    const tarefa = await salvar('tarefas', antiga());
-    await migrarCompromissos();
-    const [acao] = await criarDaFila();
-    // Um pedido igual que já estava na fila (de antes do descarte) ainda chega ao Google.
-    await enfileirarAgenda({ tipo: 'agenda', acao: 'criarEvento', evento: acao.evento, migrarTarefaId: tarefa.id });
-    await descartarPendentes([acao.seq]);
-    expect(await lerMigracoesDescartadas()).toEqual([tarefa.id]);
-
-    await sincronizarCom(agenda);
-
-    expect(await lerMigracoesDescartadas()).toEqual([]);
-  });
-
-  it('descartar outras ações da fila só as tira, como antes', async () => {
+  it('descartar ações da fila só as tira', async () => {
     const { descartarPendentes, enfileirarAgenda } = await import('../../src/dados/loja');
     const seq = await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: 'b'.repeat(32) });
     await descartarPendentes([seq, 9999]);
     expect(await daAgenda()).toEqual([]);
-  });
-
-  it('tarefa já concluída também é levada: o compromisso existiu', async () => {
-    await salvar('tarefas', antiga({ feito: true }));
-    expect(await migrarCompromissos()).toBe(1);
   });
 });
 

@@ -127,7 +127,7 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
         <div class="sala-coluna">
         <section class="painel sala-tarefas" aria-labelledby="titulo-sala-tarefas" aria-busy={tarefas === undefined}>
           <h2 id="titulo-sala-tarefas">Tarefas</h2>
-          <NovaTarefa rotulo={`Nova tarefa em ${sala.nome}`} salaId={sala.id} />
+          <NovaTarefa rotulo={`Nova tarefa em ${sala.nome}`} salaId={sala.id} data={hoje} />
           <AvisoDeApagada conclusoes={conclusoes} />
           {tarefas !== undefined && abertas.length === 0 && (
             <div>
