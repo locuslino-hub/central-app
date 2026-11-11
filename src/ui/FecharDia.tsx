@@ -8,6 +8,7 @@
 //     sincronizam). O que ficar aberto volta amanhã sozinho, pela virada do dia.
 // Fica no fim do Painel do dia e numa aba do Agora.
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { somarDias } from '../chat/datas';
 import { EmParte, type Desfazivel } from '../dados/desfazer';
 import type { Email } from '../dados/emails';
 import { adiarEmail, adiarEmails, concluirEmail } from '../dados/emails-estado';
@@ -18,7 +19,7 @@ import { AvisoDasAcoes, useAcoes, useMarcar, type Acoes } from './Acoes';
 import { corDaSala } from './Menu';
 import { contar, juntar, nEmails, nTarefas } from './plural';
 import { quandoChegou } from './PorResponder';
-import { daChecklist, porOrdem, quandoNaLista } from './tarefas-lista';
+import { daChecklist, estaAtrasada, porOrdem, quandoNaLista } from './tarefas-lista';
 import type { AgoraDoDia } from './useAgoraDoDia';
 import { useVerTudo } from './VerTudo';
 import './painel.css';
@@ -128,11 +129,11 @@ function TarefaQueFicou({ tarefa, salas, hoje, acoes, aoMarcar }: ItemProps) {
   return (
     <li class="fechar-item">
       <div class="fechar-item-texto">
-        <p class="fechar-item-titulo">{tarefa.titulo || '(sem título)'}</p>
-        <p class="fechar-item-meta">
-          <span class={`etiqueta ${corDaSala(tarefa.salaId ?? '')}`}>{sala ? sala.nome : 'Sem sala'}</span>
-          {atrasada && !temPrazo && <span>Ficou de antes</span>}
-          {quando && <span>{quando}</span>}
+        <span class={`ponto-da-sala ${corDaSala(tarefa.salaId ?? '')}`} role="img" aria-label={`Sala: ${sala ? sala.nome : 'nenhuma'}`} />
+        <p class="fechar-item-titulo">
+          {tarefa.titulo || '(sem título)'}
+          {atrasada && !temPrazo && <span class="fechar-item-quando">{' '}Ficou de antes</span>}
+          {quando && <span class="fechar-item-quando">{' '}{quando}</span>}
         </p>
       </div>
       <div class="fechar-acoes" role="group" aria-label={`O que fazer com: ${tarefa.titulo}`}>
@@ -183,10 +184,10 @@ function EmailSemResposta({ email, hoje, acoes }: { email: Email; hoje: string; 
   return (
     <li class="fechar-item">
       <div class="fechar-item-texto">
-        <p class="fechar-item-titulo">{assunto}</p>
-        <p class="fechar-item-meta">
-          <span>{email.remetente || 'Remetente desconhecido'}</span>
-          <span>{quandoChegou(email.data, hoje)}</span>
+        <p class="fechar-item-titulo">
+          {assunto}
+          <span class="fechar-item-quando">{' · '}{email.remetente || 'Remetente desconhecido'}</span>
+          <span class="fechar-item-quando">{' · '}{quandoChegou(email.data, hoje)}</span>
         </p>
       </div>
       <div class="fechar-acoes" role="group" aria-label={`O que fazer com: ${assunto}`}>
@@ -219,6 +220,31 @@ function EmailSemResposta({ email, hoje, acoes }: { email: Email; hoje: string; 
   );
 }
 
+// ---- Amanhã (só mostra) ----
+
+/** A prévia é só uma olhada: passando disto, diz quantas ficam de fora. */
+const MAX_NA_PREVIA = 5;
+
+/**
+ * O que vai para amanhã: tudo o que ficou aberto (o "N voltam amanhã" de Dia fechado conta o mesmo) e o que já é de amanhã.
+ * Prazo de hora e compromisso antigo com hora não andam sozinhos: entram na prévia com a etiqueta, não como "volta sozinha".
+ * Não inclui os compromissos de amanhã do Google Agenda: a prévia só usa as tarefas, sem ler a agenda de novo.
+ */
+function previaDeAmanha(tarefas: readonly Tarefa[] | undefined, hoje: string, ficaram: readonly Tarefa[]): { tarefa: Tarefa; etiqueta?: string }[] {
+  const amanha = somarDias(hoje, 1);
+  const deAmanha = (tarefas ?? []).filter((t) => !t.feito && t.data === amanha);
+  const horaDe = (t: Tarefa) => t.inicio ?? (t.prazoHora ? `até ${t.prazoHora}` : undefined);
+  const itens = [
+    ...ficaram.map((tarefa) => {
+      const hora = horaDe(tarefa);
+      return { tarefa, etiqueta: hora ? (estaAtrasada(tarefa, hoje) ? `atrasada · ${hora}` : hora) : undefined };
+    }),
+    // Tudo aqui é de amanhã: o dia não se repete; só a hora, quando há.
+    ...deAmanha.map((tarefa) => ({ tarefa, etiqueta: horaDe(tarefa) })),
+  ];
+  return itens.sort((a, b) => porOrdem(a.tarefa, b.tarefa));
+}
+
 // ---- O cartão ----
 
 type Props = { dia: AgoraDoDia; salas: readonly Sala[] };
@@ -242,6 +268,7 @@ export function FecharDia({ dia, salas }: Props) {
   const passam = ficaram.filter((t) => !t.prazoHora);
   const emails = (dia.fila ?? []).filter((item) => item.tipo === 'email' && item.email).map((item) => item.email!);
   const emailsLidos = dia.emails.lidoEm !== null;
+  const amanha = previaDeAmanha(dia.tarefas, hoje, ficaram);
   const verTarefas = useVerTudo(ficaram.length);
   const verEmails = useVerTudo(emails.length);
 
@@ -305,6 +332,8 @@ export function FecharDia({ dia, salas }: Props) {
       ) : (
         <>
           <AvisoDasAcoes acoes={acoes} />
+          <div class="fechar-corpo">
+          <div class="fechar-colunas">
           <div class="fechar-grupos">
             <div class="fechar-grupo">
               <div class="fechar-grupo-topo">
@@ -364,6 +393,35 @@ export function FecharDia({ dia, salas }: Props) {
               )}
               {verEmails.botao}
             </div>
+          </div>
+
+          <div class="fechar-grupo fechar-amanha">
+            <div class="fechar-grupo-topo">
+              <h3 id="fechar-amanha">Amanhã</h3>
+              {amanha.length > 0 && <span class="fechar-amanha-conta">{nTarefas(amanha.length)}</span>}
+            </div>
+            {dia.tarefas !== undefined && amanha.length === 0 && <p class="lista-vazia-texto">Nada marcado para amanhã.</p>}
+            {amanha.length > 0 && (
+              <ul class="fechar-lista fechar-lista-amanha" aria-labelledby="fechar-amanha">
+                {amanha.slice(0, MAX_NA_PREVIA).map(({ tarefa, etiqueta }) => {
+                  const sala = tarefa.salaId === null ? undefined : salas.find((s) => s.id === tarefa.salaId);
+                  return (
+                    <li key={tarefa.id} class="fechar-item fechar-item-amanha">
+                      <div class="fechar-item-texto">
+                        <span class={`ponto-da-sala ${corDaSala(tarefa.salaId ?? '')}`} role="img" aria-label={`Sala: ${sala ? sala.nome : 'nenhuma'}`} />
+                        <p class="fechar-item-titulo">
+                          {tarefa.titulo || '(sem título)'}
+                          {etiqueta && <span class="fechar-item-quando">{' '}{etiqueta}</span>}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {amanha.length > MAX_NA_PREVIA && <p class="lista-vazia-texto">{`E mais ${amanha.length - MAX_NA_PREVIA}.`}</p>}
+          </div>
+          </div>
           </div>
 
           <div class="fechar-final">

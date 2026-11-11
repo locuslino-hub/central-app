@@ -515,6 +515,18 @@ describe('estado da sincronia, sempre em texto', () => {
     expect(anuncio().textContent).toBe('Aparelho não conectado');
   });
 
+  it('já em Conectar aparelho, o chip "não conectado" diz o estado mas não é link para a própria página', async () => {
+    await mostrar('#/conectar', 1280);
+    await act(async () => {
+      await semRede();
+    });
+    await waitFor(() => expect(chip().textContent).toContain('Aparelho não conectado'));
+    expect(within(chip()).queryByRole('link')).toBeNull();
+    // Saindo de Conectar sem conectar, volta a ser o caminho até lá.
+    navegar('#/');
+    await waitFor(() => expect(within(chip()).getByRole('link', { name: 'Aparelho não conectado' }).getAttribute('href')).toBe('#/conectar'));
+  });
+
   it('o mesmo vale com alterações na fila: sem conexão não é "Por enviar"', async () => {
     await salvar('tarefas', { titulo: 'Ligar para Renata', salaId: null } as never);
     await mostrar('#/', 1280);

@@ -352,3 +352,119 @@ test.describe('página da água, 390 × 844', () => {
     await expect(page.locator('main .cartao-agua .agua-resumo')).toBeFocused();
   });
 });
+
+// ---- Acabamentos da página da água ----
+
+const verdeAcao = 'rgb(63, 107, 79)'; // --acao
+
+/** Soma um valor pelo campo "Outro valor" da página e espera o total mudar. */
+async function somar(page: Page, texto: string) {
+  const caixa = pagina(page);
+  await caixa.getByRole('textbox', { name: 'Outro valor' }).fill(texto);
+  await caixa.getByRole('button', { name: 'Somar' }).click();
+  await expect(caixa.getByRole('textbox', { name: 'Outro valor' })).toHaveValue('');
+}
+
+test.describe('página da água, acabamentos, 1280 × 800', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test('"Desfazer último" usa a cor de ação (verde), não a tinta escura', async ({ page }) => {
+    await abrirPagina(page);
+    const cor = await pagina(page).getByRole('button', { name: /^Desfazer último/ }).evaluate((el) => getComputedStyle(el).color);
+    expect(cor).toBe(verdeAcao);
+  });
+
+  test('a barra de hoje fica verde-escura quando a meta é batida, e mantém o contorno de hoje', async ({ page }) => {
+    await abrirPagina(page);
+    const barra = pagina(page).locator('.agua-barra.hoje');
+    const fundo = () => barra.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await fundo()).not.toBe(verdeAcao); // ainda não bateu a meta
+    await somar(page, '2 L');
+    await expect(pagina(page).locator('.agua-grande')).toHaveText('2.000 mL');
+    expect(await fundo()).toBe(verdeAcao);
+    const contorno = await barra.evaluate((el) => ({ estilo: getComputedStyle(el).outlineStyle, largura: getComputedStyle(el).outlineWidth }));
+    expect(contorno).toEqual({ estilo: 'solid', largura: '2px' });
+  });
+
+  test('a altura do diálogo não pula entre atrás, em dia e meta', async ({ page }) => {
+    await abrirPagina(page);
+    const altura = async () => Math.round((await pagina(page).boundingBox())!.height);
+    const dica = async () => Math.round((await pagina(page).locator('.agua-dica').boundingBox())!.height);
+    const atras = [await altura(), await dica()];
+    await somar(page, '1,5 L');
+    await expect(pagina(page).locator('.agua-dica.ok')).toBeVisible();
+    const emDia = [await altura(), await dica()];
+    await somar(page, '600');
+    await expect(pagina(page).locator('.agua-dica.meta')).toBeVisible();
+    const meta = [await altura(), await dica()];
+    expect(emDia).toEqual(atras);
+    expect(meta).toEqual(atras);
+  });
+});
+
+test.describe('página da água, acabamentos, janela baixa', () => {
+  test.use({ viewport: { width: 1280, height: 520 } });
+
+  test('no computador, quando o conteúdo rola, o cabeçalho fixo ganha a borda de baixo; no topo, não', async ({ page }) => {
+    await abrirPagina(page);
+    const cabeca = pagina(page).locator('.agua-pag-cabeca');
+    const borda = () => cabeca.evaluate((el) => getComputedStyle(el).borderBottomWidth);
+    expect(await pagina(page).locator('.agua-pag').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    expect(await borda()).toBe('0px');
+    await pagina(page).locator('.agua-pag').evaluate((el) => el.scrollTo(0, 120));
+    await expect.poll(borda).toBe('1px');
+    await pagina(page).locator('.agua-pag').evaluate((el) => el.scrollTo(0, 0));
+    await expect.poll(borda).toBe('0px');
+  });
+});
+
+test.describe('página da água, 880 × 1024 (uma coluna, janela larga de tablet)', () => {
+  test.use({ viewport: { width: 880, height: 1024 } });
+
+  test('o gráfico e as garrafas não esticam além de ~700 px e ficam centrados', async ({ page }) => {
+    await abrirPagina(page, '#/agora');
+    const caixa = pagina(page);
+    const folha = (await caixa.locator('.agua-pag').boundingBox())!;
+    for (const seletor of ['.agua-grafico', '.agua-garrafas']) {
+      const alvo = (await caixa.locator(seletor).boundingBox())!;
+      expect(alvo.width, seletor).toBeLessThanOrEqual(700.5);
+    }
+    const col = (await caixa.locator('.agua-col1').boundingBox())!;
+    expect(Math.abs(col.x + col.width / 2 - (folha.x + folha.width / 2))).toBeLessThan(2);
+  });
+});
+
+// Celular estreito: o texto da dica pode ir a três linhas, e mesmo assim a altura não pode pular.
+for (const largura of [320, 360, 390]) {
+  test.describe(`página da água, acabamentos, ${largura} × 844`, () => {
+    test.use({ viewport: { width: largura, height: 844 } });
+
+    test('a altura do diálogo não pula entre atrás, em dia e meta', async ({ page }) => {
+      await abrirPagina(page, '#/agora');
+      const altura = async () => Math.round((await pagina(page).boundingBox())!.height);
+      const dica = async () => Math.round((await pagina(page).locator('.agua-dica').boundingBox())!.height);
+      const atras = [await altura(), await dica()];
+      await somar(page, '1,5 L');
+      await expect(pagina(page).locator('.agua-dica.ok')).toBeVisible();
+      const emDia = [await altura(), await dica()];
+      await somar(page, '600');
+      await expect(pagina(page).locator('.agua-dica.meta')).toBeVisible();
+      const meta = [await altura(), await dica()];
+      expect(emDia).toEqual(atras);
+      expect(meta).toEqual(atras);
+    });
+
+    test('à noite, com a dica "atrás" mais longa (várias garrafas), a altura também não pula', async ({ page }) => {
+      await page.clock.setFixedTime('2026-11-05T20:30:00+00:00');
+      await abrirPagina(page, '#/agora');
+      const dica = async () => Math.round((await pagina(page).locator('.agua-dica').boundingBox())!.height);
+      const atras = await dica();
+      await somar(page, '1,9 L');
+      await expect(pagina(page).locator('.agua-dica.ok')).toBeVisible();
+      const emDia = await dica();
+      await somar(page, '200');
+      await expect(pagina(page).locator('.agua-dica.meta')).toBeVisible();
+      expect([emDia, await dica()]).toEqual([atras, atras]);
+    });
+  });
+}

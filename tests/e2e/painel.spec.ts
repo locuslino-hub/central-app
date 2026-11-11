@@ -340,6 +340,17 @@ for (const [nome, viewport, sufixo] of [
       const emails = fechar.getByRole('list', { name: 'E-mails sem resposta' });
       await emails.getByRole('group', { name: 'O que fazer com: Dúvida sobre a prova' }).getByRole('button', { name: 'Agora não' }).click();
       await expect(emails.getByRole('listitem')).toHaveCount(1);
+      // Uma linha por tarefa (no celular, o título e as ações em duas) e a prévia do que vai para amanhã.
+      const alturas = await tarefas.getByRole('listitem').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+      const largura = page.viewportSize()!.width;
+      for (const altura of alturas) expect(altura).toBeLessThanOrEqual(largura >= 700 ? 72 : 124);
+      const amanha = fechar.getByRole('list', { name: 'Amanhã' });
+      await expect(amanha.getByRole('listitem')).toHaveText([
+        'Entrega do relatório até 17:00',
+        'Ler artigo da Renata',
+        'Preparar slides da aula',
+        'Rever capítulo 3 da Marina',
+      ]);
       expect(await pequenos(page)).toEqual([]);
       expect(await semRolagemDeLado(page)).toBe(true);
       await capturar(page, `fechar-${sufixo}`);
@@ -377,3 +388,32 @@ test.describe('computador, 1280 px: o Agora no painel direito', () => {
     await expect(lado.getByRole('heading', { name: 'Chat' })).toBeVisible();
   });
 });
+
+// O selo da sincronia ("Atualizado") não empurra a saudação: no computador ele flutua no canto, e a saudação fica no alto.
+for (const largura of [1101, 1280]) {
+  test.describe(`computador, ${largura} px: o selo e a saudação`, () => {
+    test.use({ viewport: { width: largura, height: 900 } });
+
+    test('a saudação começa no alto da página e o texto dela não passa por baixo do selo', async ({ page }) => {
+      await abrir(page, '#/');
+      await expect(page.getByRole('main').getByRole('region', { name: 'Mensagem do dia' })).toContainText('Boa tarde');
+      await expect(page.locator('.sync')).toContainText('Atualizado');
+      const medidas = await page.evaluate(() => {
+        const h1 = [...document.querySelectorAll<HTMLElement>('main [aria-label="Mensagem do dia"] *')].find((el) => el.children.length === 0 && el.textContent?.startsWith('Boa tarde'))!;
+        const pagina = document.querySelector('main') as HTMLElement;
+        const selo = (document.querySelector('.sync') as HTMLElement).getBoundingClientRect();
+        const texto = document.createRange();
+        texto.selectNodeContents(h1);
+        const t = texto.getBoundingClientRect();
+        return {
+          descidaDaSaudacao: Math.round(h1.getBoundingClientRect().top - pagina.getBoundingClientRect().top),
+          textoAteOSelo: Math.round(selo.left - t.right),
+          naMesmaLinha: selo.top < t.bottom,
+        };
+      });
+      expect(medidas.descidaDaSaudacao).toBeLessThanOrEqual(40);
+      expect(medidas.naMesmaLinha).toBe(true); // o selo está ao lado, não numa linha acima
+      expect(medidas.textoAteOSelo).toBeGreaterThan(0);
+    });
+  });
+}

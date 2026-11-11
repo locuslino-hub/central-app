@@ -433,7 +433,7 @@
 }
 .atalhos a:hover,
 .atalhos button.mais:hover {
-  background: var(--poco);
+  background: rgb(var(--som-rgb) / 0.08);
 }
 .atalhos a:focus-visible,
 .atalhos button.mais:focus-visible {
@@ -553,6 +553,7 @@
   gap: 14px;
   min-height: 0;
   padding: 14px 14px 14px 0;
+  position: relative;
   overflow-y: auto;
 }
 .painel-direito > section {

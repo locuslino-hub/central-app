@@ -192,7 +192,9 @@
 
 /* ---- Quadro de dica ---- */
 
+/* O quadro não muda de altura entre atrás, em dia e meta (o diálogo não pula): o espaço de duas linhas de texto é sempre dele (três no celular, abaixo). */
 .agua-dica {
+  min-height: calc(2 * 1.35 * 0.9rem + 20px);
   display: flex;
   align-items: flex-start;
   gap: 9px;
@@ -201,6 +203,12 @@
   border-radius: 16px;
   font-size: 0.9rem;
   line-height: 1.35;
+}
+/* Celular (320 a 480 px): a dica "atrás" à noite chega a três linhas; o espaço de três é o que não deixa o quadro pular. */
+@media (max-width: 480px) {
+  .agua-dica {
+    min-height: calc(3 * 1.35 * 0.9rem + 20px);
+  }
 }
 .agua-dica.atras {
   background: var(--dica-atras);
@@ -228,7 +236,7 @@
   flex-wrap: wrap;
   gap: 3px 4px;
   align-self: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   max-width: calc(3 * 0.93rem + 2 * 4px);
 }
 .garrafinha {
