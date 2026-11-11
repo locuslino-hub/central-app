@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   NOTAS_NO_MAXIMO,
+  descartarNotasPorGuardar,
   guardarNotasPorGuardar,
   notasGuardadas,
   notasPorGuardar,
@@ -29,6 +30,11 @@ type Props = {
   notas: string | undefined;
   /** Texto de apoio dentro do campo vazio. */
   dica: string;
+  /**
+   * A sala ou a pessoa foi apagada (página "não encontrada"): o campo mostra o
+   * texto que ficou por guardar, com o aviso, e não tenta gravar sozinho.
+   */
+  apagado?: boolean;
 };
 
 type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro' | 'apagado';
@@ -45,18 +51,22 @@ const APAGADO: Record<DonoDeNotas, string> = {
   pessoas: 'Esta pessoa foi apagada; a nota não foi guardada.',
 };
 
-export function Notas({ colecao, id, notas, dica }: Props) {
-  // Texto que ficou por guardar (a sala sumiu com ele no campo) volta ao campo.
-  const [pendente] = useState(() => notasPorGuardar(colecao, id));
+export function Notas({ colecao, id, notas, dica, apagado = false }: Props) {
+  // Texto que ficou por guardar volta ao campo só se a sala ou a pessoa sumiu
+  // com ele. Num registro que existe ele é descartado: gravá-lo poderia apagar
+  // uma nota mais nova vinda de outro aparelho.
+  const [pendente] = useState(() => {
+    if (apagado) return notasPorGuardar(colecao, id);
+    descartarNotasPorGuardar(colecao, id);
+    return undefined;
+  });
   const [texto, setTexto] = useState(pendente ?? notas ?? '');
-  const [situacao, setSituacao] = useState<Situacao>('parado');
+  const [situacao, setSituacao] = useState<Situacao>(apagado ? 'apagado' : 'parado');
   const campo = useRef<HTMLTextAreaElement>(null);
   /** O texto mais novo digitado, mesmo antes de o estado se refazer. */
   const atual = useRef(texto);
   /** Digitou e ainda não gravou. */
-  const sujo = useRef(pendente !== undefined && pendente !== (notas ?? ''));
-  /** Abriu com texto por guardar (o efeito roda depois: o dono pode já ter digitado). */
-  const abriuPorGuardar = useRef(sujo.current);
+  const sujo = useRef(pendente !== undefined);
   /** Uma versão nova chegou de fora enquanto o campo estava em uso: aparece ao sair, se nada foi digitado. */
   const chegouDeFora = useRef(false);
   const doRegistro = useRef(notas);
@@ -105,12 +115,6 @@ export function Notas({ colecao, id, notas, dica }: Props) {
     atual.current = notas ?? '';
     setTexto(atual.current);
   }, [notas]);
-
-  // Abriu com texto por guardar: tenta já (se a sala ainda não existe, o aviso aparece).
-  useEffect(() => {
-    if (abriuPorGuardar.current) void gravar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Esconder o app ou sair da página também grava.
   useEffect(() => {

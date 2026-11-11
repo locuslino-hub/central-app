@@ -33,3 +33,25 @@ describe('Notas de um registro que não existe mais', () => {
     expect(campo.value).toBe('Prefere terças');
   });
 });
+
+describe('Notas: texto por guardar ao reabrir uma sala que existe', () => {
+  it('não grava por cima da nota mais nova que veio de outro aparelho', async () => {
+    const { guardarNotasPorGuardar, notasPorGuardar } = await import('../../src/dados/notas');
+    const { gravarDoServidor, lerRegistros } = await import('../../src/dados/loja');
+    // Uma gravação que falhou deixou este texto por guardar.
+    guardarNotasPorGuardar('salas', 'sala-orientacoes', 'Texto velho que falhou');
+    const [sala] = await lerRegistros([{ colecao: 'salas', id: 'sala-orientacoes' }]);
+    await gravarDoServidor([
+      { colecao: 'salas', registro: { ...sala!, notas: 'Nota nova do celular', atualizadoEm: Date.now() + 5000, aparelho: 'celular-fake' } },
+    ]);
+
+    render(<Notas colecao="salas" id="sala-orientacoes" notas="Nota nova do celular" dica="Anote" />);
+
+    // O texto velho sai da memória (na versão com defeito, só depois de gravar por cima).
+    await waitFor(() => expect(notasPorGuardar('salas', 'sala-orientacoes')).toBeUndefined());
+    const [depois] = await lerRegistros([{ colecao: 'salas', id: 'sala-orientacoes' }]);
+    expect((depois as { notas?: string }).notas).toBe('Nota nova do celular');
+    expect((screen.getByRole('textbox', { name: 'Notas' }) as HTMLTextAreaElement).value).toBe('Nota nova do celular');
+    expect(screen.queryByText('Salvo')).toBeNull();
+  });
+});

@@ -220,7 +220,7 @@ export function Sala({ id }: { id: string }) {
       <Pagina titulo="Sala não encontrada">
         <p class="aviso">Esta sala não existe neste aparelho.</p>
         {/* Apagada com a nota por gravar: o texto que o dono escreveu continua aqui. */}
-        {notasPorGuardar('salas', id) !== undefined && <Notas colecao="salas" id={id} notas={undefined} dica="Notas" />}
+        {notasPorGuardar('salas', id) !== undefined && <Notas colecao="salas" id={id} notas={undefined} dica="Notas" apagado />}
         <p>
           <a class="botao-link" href={hrefDe('salas')}>
             Ver as salas
