@@ -65,11 +65,11 @@ describe('espelharTarefas', () => {
     expect(g.vivas()[0].due).toBeUndefined();
   });
 
-  it('feita: completed; reaberta: needsAction, sem a hora de conclusão', () => {
+  it('feita: completed; reaberta na Central depois (feitoEm): needsAction, sem a hora de conclusão', () => {
     const g = tarefasGoogleFalso();
     const [{ googleId }] = espelhar(g, item({ feito: true }));
     expect(g.vivas()[0]).toMatchObject({ status: 'completed', completed: expect.any(String) });
-    espelhar(g, item({ feito: false, googleId: googleId! }));
+    espelhar(g, item({ feito: false, feitoEm: Date.parse(g.vivas()[0].completed!) + 1000, googleId: googleId! }));
     expect(g.vivas()[0].status).toBe('needsAction');
     expect(g.vivas()[0].completed).toBeUndefined();
   });

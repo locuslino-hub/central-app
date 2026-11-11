@@ -1,5 +1,5 @@
 // Serviço avançado do Google Tarefas (Tasks API v1) na memória, com o que o
-// script usa: Tasklists.list/insert e Tasks.list/insert/patch/remove. Segue a
+// script usa: Tasklists.list/insert e Tasks.list/get/insert/patch/remove. Segue a
 // referência da API: lista sem as apagadas (showDeleted) nem as escondidas
 // (showHidden) por padrão, `due` só com o dia, `completed` some ao reabrir,
 // apagar marca `deleted` e o patch numa apagada continua respondendo (com
@@ -70,7 +70,7 @@ export function tarefasGoogleFalso({
         delete t.completed;
       }
     }
-    if (t.status === 'completed') t.completed ??= '2026-11-05T12:00:00.000Z';
+    if (t.status === 'completed') t.completed ??= new Date(agora()).toISOString();
     else delete t.completed;
     t.updated = new Date(agora()).toISOString();
   }
@@ -103,7 +103,9 @@ export function tarefasGoogleFalso({
         .filter((t) => args.showCompleted !== false || t.status !== 'completed')
         // dueMin/dueMax: só tarefas com dia, dentro do intervalo (dueMin incluído, dueMax excluído).
         .filter((t) => typeof args.dueMin !== 'string' || (t.due !== undefined && Date.parse(t.due) >= Date.parse(args.dueMin)))
-        .filter((t) => typeof args.dueMax !== 'string' || (t.due !== undefined && Date.parse(t.due) < Date.parse(args.dueMax)));
+        .filter((t) => typeof args.dueMax !== 'string' || (t.due !== undefined && Date.parse(t.due) < Date.parse(args.dueMax)))
+        // completedMin: só as concluídas a partir dessa hora (incluída).
+        .filter((t) => typeof args.completedMin !== 'string' || (t.completed !== undefined && Date.parse(t.completed) >= Date.parse(args.completedMin)));
       const tamanho = Math.min(typeof args.maxResults === 'number' ? args.maxResults : 20, paginaMaxima);
       const desde = typeof args.pageToken === 'string' ? Number(args.pageToken) : 0;
       const seguinte = desde + tamanho < todas.length ? String(desde + tamanho) : undefined;
