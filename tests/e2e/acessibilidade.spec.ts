@@ -148,6 +148,9 @@ for (const [nome, viewport] of [
       await abrir(page, '#/');
       const titulos = new Map<string, string>();
       for (const vista of VISTAS) {
+        // Só o hash muda: o título da vista anterior continua até a nova vista trocá-lo.
+        // Vai por uma página neutra (sem o sufixo) para não ler o título velho.
+        await page.goto('about:blank');
         await page.goto(`/central-app/${vista.hash}`);
         await vista.pronto(page);
         await expect.poll(() => page.title()).toMatch(/ · Central de Comando$/);
