@@ -47,7 +47,7 @@ describe('tela Cores do Google', () => {
     ]);
     render(<CoresDoGoogle />);
     const azul = await screen.findByRole('group', { name: /Mirtilo/ });
-    expect(within(azul).getByText('3 eventos')).toBeTruthy();
+    await waitFor(() => expect(within(azul).getByText('3 eventos')).toBeTruthy());
     expect(within(azul).getByText(/Capítulo 2.*Capítulo 3/)).toBeTruthy();
     expect(within(azul).queryByText(/Leitura/)).toBeNull();
     expect((azul.querySelector('.cor-amostra') as HTMLElement).style.background).toMatch(/63, 81, 181|#3f51b5/);
@@ -63,11 +63,27 @@ describe('tela Cores do Google', () => {
     expect(screen.getByRole('group', { name: /Etiqueta do Google/ })).toBeTruthy();
   });
 
-  it('sem eventos com cor, explica o que fazer', async () => {
+  it('sem eventos com cor, explica e ainda lista as 11 cores do Google para ligar a uma sala', async () => {
     const agenda = await agendaDeTeste();
     agenda.responder([hoje('Sem cor', '16:00', '17:00')]);
     render(<CoresDoGoogle />);
     expect(await screen.findByText(/Nenhuma cor/)).toBeTruthy();
+    expect(screen.getAllByRole('group')).toHaveLength(11);
+    const tomate = screen.getByRole('group', { name: /Tomate/ });
+    expect(within(tomate).getByText('Nenhum evento nestes meses')).toBeTruthy();
+    fireEvent.change(within(tomate).getByLabelText('Sala'), { target: { value: 'sala-mba' } });
+    await waitFor(async () => expect(await listar('coresDasSalas')).toMatchObject([{ chave: 'cor:11', salaId: 'sala-mba' }]));
+  });
+
+  it('com eventos coloridos, as cores vistas vêm primeiro e as outras do Google depois, sem repetir', async () => {
+    const agenda = await agendaDeTeste();
+    agenda.responder([hoje('Capítulo 2', '09:00', '10:00', { cor: AZUL })]);
+    render(<CoresDoGoogle />);
+    const nomesAgora = () => screen.getAllByRole('group').map((g) => g.querySelector('.cor-nome')!.textContent ?? '');
+    await waitFor(() => expect(nomesAgora()[0]).toMatch(/Mirtilo/));
+    const nomes = nomesAgora();
+    expect(nomes).toHaveLength(11);
+    expect(nomes.filter((n) => /Mirtilo/.test(n ?? ''))).toHaveLength(1);
   });
 
   it('tem rota própria, link na página de Salas e entrada no Mais do celular', () => {

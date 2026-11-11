@@ -70,14 +70,17 @@ function hexDaChave(chave: string): string {
 
 /**
  * As cores para a tela Cores do Google: as vistas nos eventos e, no fim, as
- * que têm sala ligada mas nenhum evento no período (para dar para desligar).
+ * que não têm evento no período: as 11 cores de evento do Google (para o dono
+ * poder ligar uma cor ainda não usada a uma sala nova) e as que têm sala
+ * ligada (para dar para desligar).
  */
 export function coresParaLigar(eventos: readonly Evento[], registros: readonly CorDaSala[] | undefined): CorVista[] {
   const vistas = coresVistas(eventos);
   const jaVistas = new Set(vistas.map((v) => v.chave));
-  const semEventos = [...mapaDeCores(registros).keys()]
+  const daPaleta = Object.keys(CORES_DOS_EVENTOS).map((id) => `cor:${id}`);
+  const semEventos = [...new Set([...daPaleta, ...mapaDeCores(registros).keys()])]
     .filter((chave) => !jaVistas.has(chave))
-    .sort()
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
     .map((chave) => ({ chave, hex: hexDaChave(chave), quantos: 0, exemplos: [] }));
   return [...vistas, ...semEventos];
 }

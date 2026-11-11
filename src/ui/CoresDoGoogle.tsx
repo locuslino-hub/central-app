@@ -1,5 +1,6 @@
 // Cores do Google (spec 2026-11-09, sala pela cor): as cores e etiquetas que
-// aparecem nos eventos dos últimos e dos próximos 60 dias, cada uma com a
+// aparecem nos eventos dos últimos e dos próximos 60 dias, mais as 11 cores de
+// evento do Google (para ligar uma cor ainda sem evento a uma sala nova), cada uma com a
 // amostra, quantos eventos têm e até 2 títulos de exemplo, e um seletor de
 // sala. O dono liga uma vez; depois os compromissos daquela cor ganham a sala
 // em todas as telas (a sala gravada pela Central ainda vale antes, e a
@@ -85,10 +86,10 @@ export function CoresDoGoogle() {
         Um compromisso com sala escolhida na Central continua na dele.
       </p>
       <AvisoDaAgenda leitura={leitura} aoTentar={atualizar} />
-      {lido && vistas.length === 0 && (
+      {lido && !vistas.some((v) => v.quantos > 0) && (
         <div>
           <p class="lista-vazia-titulo">Nenhuma cor nos eventos destes meses.</p>
-          <p class="lista-vazia-texto">Dê uma cor ou etiqueta aos eventos no Google Agenda e volte aqui.</p>
+          <p class="lista-vazia-texto">Você já pode ligar as cores do Google a salas; elas valem para os próximos eventos.</p>
         </div>
       )}
       {vistas.length > 0 && (
