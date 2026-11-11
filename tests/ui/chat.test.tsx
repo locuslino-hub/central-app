@@ -698,6 +698,8 @@ describe('descreverQuando', () => {
     ['compromisso hoje', { tipo: 'compromisso', data: '2026-11-05', inicio: '15:00', fim: '16:00' }, 'Hoje, 15:00 às 16:00'],
     ['compromisso sexta', { tipo: 'compromisso', data: '2026-11-06', inicio: '11:00', fim: '12:00' }, 'Sexta, 6/11, 11:00 às 12:00'],
     ['compromisso sábado', { tipo: 'compromisso', data: '2026-11-07', inicio: '11:00', fim: '12:00' }, 'Sábado, 7/11, 11:00 às 12:00'],
+    ['tarefa com hora hoje', { data: '2026-11-05', inicio: '18:00' }, 'Hoje, 18:00'],
+    ['tarefa com faixa', { data: '2026-11-06', inicio: '14:00', fim: '16:00' }, 'Sexta, 6/11, 14:00 às 16:00'],
   ])('%s', (_nome, extra, texto) => {
     expect(descreverQuando(item(extra), HOJE)).toBe(texto);
   });

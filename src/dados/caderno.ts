@@ -191,15 +191,16 @@ export const SO_COM_ENTER = 'so-com-enter';
  * A linha tem data? Então vira item, pelo `interpretar` do chat, na sala da
  * página (a sala que a frase citar não vale aqui: o dono escreveu nesta página).
  * Compromisso só nasce com `compromisso: true` (Enter): sair do campo devolve
- * `SO_COM_ENTER`. `null` se não tem data, se a frase tem mais de um pedido ou se nada saiu dela.
+ * `SO_COM_ENTER`. `null` se a linha não diz um dia (o chat põe hoje por padrão,
+ * o Caderno não), se a frase tem mais de um pedido ou se nada saiu dela.
  */
 export async function itemDaLinha(texto: string, salaId: string, opcoes: { compromisso: boolean }): Promise<ItemDaLinha | typeof SO_COM_ENTER | null> {
   const itens = await interpretar(texto);
   if (itens.length !== 1) return null;
   const item = itens[0];
-  if (!item.data && !item.semana) return null;
+  if ((!item.data || item.diaAssumido) && !item.semana) return null;
   if (item.tipo === 'compromisso' && !opcoes.compromisso) return SO_COM_ENTER;
-  const { certeza: _certeza, pessoaNova: _nova, termoSala: _termo, pessoaNome: _nome, ...puro } = item;
+  const { certeza: _certeza, pessoaNova: _nova, termoSala: _termo, pessoaNome: _nome, diaAssumido: _assumido, ...puro } = item;
   const criado = await criarItem({ ...puro, salaId });
   const base = { titulo: item.titulo, data: item.data, semana: item.semana, inicio: item.inicio, desfazer: criado.desfazer };
   return criado.tarefa

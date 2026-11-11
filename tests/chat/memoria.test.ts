@@ -350,7 +350,7 @@ describe('interpretar', () => {
 
   it('usa as palavras da memória: banheiro é Casa, e o termo vai junto para o cartão', async () => {
     const [item] = await interpretar('Preciso parafusar o apoio do banheiro');
-    expect(item).toMatchObject({ salaId: 'sala-casa', motivoSala: 'memoria', termoSala: 'banheiro', data: undefined });
+    expect(item).toMatchObject({ salaId: 'sala-casa', motivoSala: 'memoria', termoSala: 'banheiro', data: '2026-11-05' });
   });
 
   it('pessoa desconhecida sem sala vem com pessoaNova; depois de lembrar, não vem mais', async () => {
@@ -455,9 +455,22 @@ describe('criarItem', () => {
     expect(daSemana).toMatchObject({ semana: '2026-11-09', pessoaId: 'p1', marcar: true });
   });
 
-  it('tarefa não leva inicio, mesmo que o item traga', async () => {
+  it('tarefa com hora (a frase disse "tarefa") guarda a hora de início, com a duração padrão a confirmar', async () => {
     const { tarefa: salva } = await criarItem(tarefa({ data: '2026-11-06', inicio: '10:00' }));
-    expect('inicio' in salva).toBe(false);
+    expect(salva).toMatchObject({ data: '2026-11-06', inicio: '10:00', duracaoMin: 60, duracaoConfirmada: false });
+    expect('fim' in salva).toBe(false);
+  });
+
+  it('tarefa com faixa de horas: a duração vem da faixa, já confirmada', async () => {
+    const { tarefa: salva } = await criarItem(tarefa({ data: '2026-11-06', inicio: '14:00', fim: '16:30' }));
+    expect(salva).toMatchObject({ inicio: '14:00', duracaoMin: 150, duracaoConfirmada: true });
+  });
+
+  it('hora de início só vai em tarefa com dia', async () => {
+    const { tarefa: semDia } = await criarItem(tarefa({ data: undefined, inicio: '10:00' }));
+    expect('inicio' in semDia).toBe(false);
+    const { tarefa: daSemana } = await criarItem(tarefa({ data: undefined, semana: '2026-11-09', inicio: '10:00' }));
+    expect('inicio' in daSemana).toBe(false);
   });
 
   it('uma Tarefa antiga com hora de início ainda vai e volta pela sincronia; hora malformada é recusada', async () => {

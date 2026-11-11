@@ -21,11 +21,13 @@ import { minuscula, nomeDaSemana, nomeDoDia } from './quando';
 
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Quando, em palavras: "Sexta, 6/11, 11:00 às 12:00", "Até hoje, às 18:00", "Sem prazo". */
+/** Quando, em palavras: "Sexta, 6/11, 11:00 às 12:00", "Hoje, 18:00", "Até hoje, às 18:00", "Sem prazo". */
 export function descreverQuando(item: ItemDoChat, hoje: string): string {
   if (item.data) {
     const dia = nomeDoDia(item.data, hoje);
     if (item.tipo === 'compromisso' && item.inicio && item.fim) return `${dia}, ${item.inicio} às ${item.fim}`;
+    // Tarefa com hora: o fim só quando a frase disse.
+    if (item.tipo === 'tarefa' && item.inicio) return item.fim ? `${dia}, ${item.inicio} às ${item.fim}` : `${dia}, ${item.inicio}`;
     if (item.prazoHora) return `Até ${minuscula(dia)}, às ${item.prazoHora}`;
     return dia;
   }

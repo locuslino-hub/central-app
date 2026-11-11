@@ -136,14 +136,14 @@ describe('mesclagem', () => {
     expect(await interpretar(frase)).toEqual(esperado);
   });
 
-  it('IA diz "hoje" numa frase sem data: o item fica sem prazo', async () => {
+  it('IA diz "hoje" e hora numa frase sem dia nem hora: valem as regras (tarefa de hoje, sem hora)', async () => {
     const { ia } = iaFalsa([
       { tipo: 'compromisso', titulo: 'Organizar os papéis do escritório', sala: 'Casa', quando: 'hoje', inicio: '11:00', fim: '12:00' },
     ]);
     usarIA(ia);
     const [item] = await interpretar('Preciso organizar os papéis do escritório');
     expect(item.tipo).toBe('tarefa');
-    expect(item.data).toBeUndefined();
+    expect(item.data).toBe('2026-11-05');
     expect(item.semana).toBeUndefined();
     expect(item.inicio).toBeUndefined();
     expect(item.titulo).toBe('Organizar os papéis do escritório');
@@ -181,7 +181,7 @@ describe('mesclagem', () => {
     expect(itens.every((item) => item.certeza === 'baixa')).toBe(true);
   });
 
-  it('item da IA que não aparece na frase fica sem prazo e pede confirmação', async () => {
+  it('item da IA que não aparece na frase fica para hoje, com certeza baixa', async () => {
     const { ia } = iaFalsa([
       { titulo: 'Ligar pro dentista', sala: 'Pessoal' },
       { titulo: 'Pagar a conta de luz', sala: 'Casa', quando: 'amanhã' },
@@ -193,7 +193,7 @@ describe('mesclagem', () => {
     expect(itens).toHaveLength(2);
     expect(itens[0]).toMatchObject({ titulo: 'Ligar pro dentista', data: '2026-11-06' });
     expect(itens[1].titulo).toBe('Pagar a conta de luz');
-    expect(itens[1].data).toBeUndefined();
+    expect(itens[1].data).toBe('2026-11-05');
     expect(itens[1].certeza).toBe('baixa');
   });
 
