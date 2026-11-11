@@ -19,7 +19,7 @@ import { AvisoDasAcoes, useAcoes, useMarcar, type Acoes } from './Acoes';
 import { corDaSala } from './Menu';
 import { contar, juntar, nEmails, nTarefas } from './plural';
 import { quandoChegou } from './PorResponder';
-import { daChecklist, porOrdem, quandoNaLista } from './tarefas-lista';
+import { daChecklist, estaAtrasada, porOrdem, quandoNaLista } from './tarefas-lista';
 import type { AgoraDoDia } from './useAgoraDoDia';
 import { useVerTudo } from './VerTudo';
 import './painel.css';
@@ -186,8 +186,8 @@ function EmailSemResposta({ email, hoje, acoes }: { email: Email; hoje: string; 
       <div class="fechar-item-texto">
         <p class="fechar-item-titulo">
           {assunto}
-          <span class="fechar-item-quando">{' '}{email.remetente || 'Remetente desconhecido'}</span>
-          <span class="fechar-item-quando">{' '}{quandoChegou(email.data, hoje)}</span>
+          <span class="fechar-item-quando">{' · '}{email.remetente || 'Remetente desconhecido'}</span>
+          <span class="fechar-item-quando">{' · '}{quandoChegou(email.data, hoje)}</span>
         </p>
       </div>
       <div class="fechar-acoes" role="group" aria-label={`O que fazer com: ${assunto}`}>
@@ -225,11 +225,24 @@ function EmailSemResposta({ email, hoje, acoes }: { email: Email; hoje: string; 
 /** A prévia é só uma olhada: passando disto, diz quantas ficam de fora. */
 const MAX_NA_PREVIA = 5;
 
-/** O que vai para amanhã: as que ficaram e voltam sozinhas (prazo de hora não anda) e as que já são de amanhã. */
-function previaDeAmanha(tarefas: readonly Tarefa[] | undefined, hoje: string, voltam: readonly Tarefa[]): Tarefa[] {
+/**
+ * O que vai para amanhã: tudo o que ficou aberto (o "N voltam amanhã" de Dia fechado conta o mesmo) e o que já é de amanhã.
+ * Prazo de hora e compromisso antigo com hora não andam sozinhos: entram na prévia com a etiqueta, não como "volta sozinha".
+ * Não inclui os compromissos de amanhã do Google Agenda: a prévia só usa as tarefas, sem ler a agenda de novo.
+ */
+function previaDeAmanha(tarefas: readonly Tarefa[] | undefined, hoje: string, ficaram: readonly Tarefa[]): { tarefa: Tarefa; etiqueta?: string }[] {
   const amanha = somarDias(hoje, 1);
-  const jaMarcadas = (tarefas ?? []).filter((t) => !t.feito && t.data === amanha);
-  return [...voltam, ...jaMarcadas].sort(porOrdem);
+  const deAmanha = (tarefas ?? []).filter((t) => !t.feito && t.data === amanha);
+  const horaDe = (t: Tarefa) => t.inicio ?? (t.prazoHora ? `até ${t.prazoHora}` : undefined);
+  const itens = [
+    ...ficaram.map((tarefa) => {
+      const hora = horaDe(tarefa);
+      return { tarefa, etiqueta: hora ? (estaAtrasada(tarefa, hoje) ? `atrasada · ${hora}` : hora) : undefined };
+    }),
+    // Tudo aqui é de amanhã: o dia não se repete; só a hora, quando há.
+    ...deAmanha.map((tarefa) => ({ tarefa, etiqueta: horaDe(tarefa) })),
+  ];
+  return itens.sort((a, b) => porOrdem(a.tarefa, b.tarefa));
 }
 
 // ---- O cartão ----
@@ -255,7 +268,7 @@ export function FecharDia({ dia, salas }: Props) {
   const passam = ficaram.filter((t) => !t.prazoHora);
   const emails = (dia.fila ?? []).filter((item) => item.tipo === 'email' && item.email).map((item) => item.email!);
   const emailsLidos = dia.emails.lidoEm !== null;
-  const amanha = previaDeAmanha(dia.tarefas, hoje, passam);
+  const amanha = previaDeAmanha(dia.tarefas, hoje, ficaram);
   const verTarefas = useVerTudo(ficaram.length);
   const verEmails = useVerTudo(emails.length);
 
@@ -390,16 +403,15 @@ export function FecharDia({ dia, salas }: Props) {
             {dia.tarefas !== undefined && amanha.length === 0 && <p class="lista-vazia-texto">Nada marcado para amanhã.</p>}
             {amanha.length > 0 && (
               <ul class="fechar-lista fechar-lista-amanha" aria-labelledby="fechar-amanha">
-                {amanha.slice(0, MAX_NA_PREVIA).map((tarefa) => {
-                  // Tudo aqui é de amanhã: o dia não se repete; só a hora, quando há.
-                  const hora = tarefa.inicio ?? (tarefa.prazoHora ? `até ${tarefa.prazoHora}` : undefined);
+                {amanha.slice(0, MAX_NA_PREVIA).map(({ tarefa, etiqueta }) => {
+                  const sala = tarefa.salaId === null ? undefined : salas.find((s) => s.id === tarefa.salaId);
                   return (
                     <li key={tarefa.id} class="fechar-item fechar-item-amanha">
                       <div class="fechar-item-texto">
-                        <span class={`ponto-da-sala ${corDaSala(tarefa.salaId ?? '')}`} aria-hidden="true" />
+                        <span class={`ponto-da-sala ${corDaSala(tarefa.salaId ?? '')}`} role="img" aria-label={`Sala: ${sala ? sala.nome : 'nenhuma'}`} />
                         <p class="fechar-item-titulo">
                           {tarefa.titulo || '(sem título)'}
-                          {hora && <span class="fechar-item-quando">{' '}{hora}</span>}
+                          {etiqueta && <span class="fechar-item-quando">{' '}{etiqueta}</span>}
                         </p>
                       </div>
                     </li>

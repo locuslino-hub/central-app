@@ -434,21 +434,37 @@ test.describe('página da água, 880 × 1024 (uma coluna, janela larga de tablet
   });
 });
 
-test.describe('página da água, acabamentos, 390 × 844', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+// Celular estreito: o texto da dica pode ir a três linhas, e mesmo assim a altura não pode pular.
+for (const largura of [320, 360, 390]) {
+  test.describe(`página da água, acabamentos, ${largura} × 844`, () => {
+    test.use({ viewport: { width: largura, height: 844 } });
 
-  test('a altura do diálogo não pula entre atrás, em dia e meta', async ({ page }) => {
-    await abrirPagina(page, '#/agora');
-    const altura = async () => Math.round((await pagina(page).boundingBox())!.height);
-    const dica = async () => Math.round((await pagina(page).locator('.agua-dica').boundingBox())!.height);
-    const atras = [await altura(), await dica()];
-    await somar(page, '1,5 L');
-    await expect(pagina(page).locator('.agua-dica.ok')).toBeVisible();
-    const emDia = [await altura(), await dica()];
-    await somar(page, '600');
-    await expect(pagina(page).locator('.agua-dica.meta')).toBeVisible();
-    const meta = [await altura(), await dica()];
-    expect(emDia).toEqual(atras);
-    expect(meta).toEqual(atras);
+    test('a altura do diálogo não pula entre atrás, em dia e meta', async ({ page }) => {
+      await abrirPagina(page, '#/agora');
+      const altura = async () => Math.round((await pagina(page).boundingBox())!.height);
+      const dica = async () => Math.round((await pagina(page).locator('.agua-dica').boundingBox())!.height);
+      const atras = [await altura(), await dica()];
+      await somar(page, '1,5 L');
+      await expect(pagina(page).locator('.agua-dica.ok')).toBeVisible();
+      const emDia = [await altura(), await dica()];
+      await somar(page, '600');
+      await expect(pagina(page).locator('.agua-dica.meta')).toBeVisible();
+      const meta = [await altura(), await dica()];
+      expect(emDia).toEqual(atras);
+      expect(meta).toEqual(atras);
+    });
+
+    test('à noite, com a dica "atrás" mais longa (várias garrafas), a altura também não pula', async ({ page }) => {
+      await page.clock.setFixedTime('2026-11-05T20:30:00+00:00');
+      await abrirPagina(page, '#/agora');
+      const dica = async () => Math.round((await pagina(page).locator('.agua-dica').boundingBox())!.height);
+      const atras = await dica();
+      await somar(page, '1,9 L');
+      await expect(pagina(page).locator('.agua-dica.ok')).toBeVisible();
+      const emDia = await dica();
+      await somar(page, '200');
+      await expect(pagina(page).locator('.agua-dica.meta')).toBeVisible();
+      expect([emDia, await dica()]).toEqual([atras, atras]);
+    });
   });
-});
+}
