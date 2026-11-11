@@ -151,5 +151,9 @@ export function registroValido(colecao: NomeDaColecao, registro: unknown, agora:
   if (atualizadoEm > agora + FOLGA_DO_FUTURO_MS) return false;
   if (apagado !== undefined && typeof apagado !== 'boolean') return false;
   const esquema: Record<string, Tipo> = ESQUEMAS[colecao];
+  // Só entra o que o esquema conhece (e os quatro campos da base, já conferidos acima).
+  const permitidos = (campo: string) =>
+    campo === 'id' || campo === 'aparelho' || campo === 'atualizadoEm' || campo === 'apagado' || Object.prototype.hasOwnProperty.call(esquema, campo);
+  if (!Object.keys(registro).every(permitidos)) return false;
   return Object.keys(esquema).every((campo) => campoValido(esquema[campo], registro[campo]));
 }

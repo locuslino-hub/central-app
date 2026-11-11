@@ -100,4 +100,19 @@ describe('esquemas do script', () => {
       expect(registroValido(colecao, { ...COMPLETOS[colecao], [campo]: valor }, AGORA)).toBe(false);
     }
   });
+
+  // Segurança: só entra o que o esquema conhece. Campo a mais (de aparelho
+  // adulterado ou de versão futura) não é guardado no Drive.
+  it.each(NOMES_DAS_COLECOES)('%s: campo que não está no esquema é recusado', (colecao) => {
+    expect(registroValido(colecao, { ...COMPLETOS[colecao], extra: 'x' }, AGORA)).toBe(false);
+    // Vindo de JSON, `__proto__` é um campo próprio como outro qualquer.
+    const adulterado = JSON.parse(JSON.stringify(COMPLETOS[colecao]).replace(/}$/, ',"__proto__":{"x":1}}'));
+    expect(registroValido(colecao, adulterado, AGORA)).toBe(false);
+  });
+
+  it('o apagado (lápide) continua aceito em toda coleção', () => {
+    for (const colecao of NOMES_DAS_COLECOES) {
+      expect(registroValido(colecao, { ...COMPLETOS[colecao], apagado: true }, AGORA)).toBe(true);
+    }
+  });
 });
