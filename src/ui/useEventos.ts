@@ -31,7 +31,9 @@ export function useEventos(de: string, ate: string): { leitura: Leitura; atualiz
     const tentar = (forcar: boolean) => {
       const atual = lerEventos(de, ate);
       if (atual.carregando) return;
-      if (forcar || atual.tentadoEm === null || Date.now() - atual.tentadoEm >= INTERVALO_MINIMO_MS) {
+      // Obsoleta: este aparelho criou ou removeu um evento com a tela fechada
+      // (no celular o chat é outra página). Ao abrir, lê de novo sem esperar.
+      if (forcar || atual.obsoleta || atual.tentadoEm === null || Date.now() - atual.tentadoEm >= INTERVALO_MINIMO_MS) {
         void atualizarEventos(de, ate);
       }
     };
