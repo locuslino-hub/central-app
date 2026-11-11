@@ -57,6 +57,18 @@ describe('vence', () => {
   });
 });
 
+describe('enviar: campos fora do esquema', () => {
+  it('o script recusa o registro com campo desconhecido e guarda o resto', () => {
+    const armazem = armazemNaMemoria();
+    const resposta = enviar(
+      { mudancas: [item({ ...tarefa('t1', 'Com campo a mais', T0), extra: 'x' }), item(tarefa('t2', 'Normal', T0))] },
+      armazem,
+    );
+    expect(resposta.recusadas).toEqual([{ colecao: 'tarefas', id: 't1' }]);
+    expect(resposta.aceitas.map((c) => c.id)).toEqual(['t2']);
+  });
+});
+
 describe('puxar', () => {
   it('sem arquivo no Drive devolve lista vazia e agora 0', () => {
     const armazem = armazemNaMemoria();

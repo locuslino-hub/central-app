@@ -138,11 +138,34 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
   }
 }
 
+const CAMPOS_DA_BASE = new Set(['id', 'aparelho', 'atualizadoEm', 'apagado']);
+
+function campoConhecido(esquema: Record<string, Tipo>, campo: string): boolean {
+  return CAMPOS_DA_BASE.has(campo) || Object.prototype.hasOwnProperty.call(esquema, campo);
+}
+
+/** Cópia do registro só com os campos que o esquema conhece (e os da base). */
+export function semCamposDesconhecidos<T extends Record<string, unknown>>(colecao: NomeDaColecao, registro: T): T {
+  const esquema: Record<string, Tipo> = ESQUEMAS[colecao];
+  return Object.fromEntries(Object.entries(registro).filter(([campo]) => campoConhecido(esquema, campo))) as T;
+}
+
 /**
  * O registro tem forma aceitável para a coleção? `agora` é o relógio de quem
  * confere: `atualizadoEm` além de agora + 10 min é recusado.
+ *
+ * `estrito`: campo que não está no esquema recusa o registro. Só quem GRAVA
+ * dados novos o usa (o script ao receber, a restauração da cópia). Quem LÊ
+ * (o app ao puxar) não pode: um campo de versão futura, ou um campo antigo que
+ * saiu do esquema, faria o registro sumir do aparelho para sempre, porque a
+ * marca `desde` avança mesmo assim. Ali se usa `semCamposDesconhecidos`.
  */
-export function registroValido(colecao: NomeDaColecao, registro: unknown, agora: number): boolean {
+export function registroValido(
+  colecao: NomeDaColecao,
+  registro: unknown,
+  agora: number,
+  { estrito = false }: { estrito?: boolean } = {},
+): boolean {
   if (!objeto(registro)) return false;
   const { id, aparelho, atualizadoEm, apagado } = registro;
   if (typeof id !== 'string' || !ID_VALIDO.test(id)) return false;
@@ -151,9 +174,6 @@ export function registroValido(colecao: NomeDaColecao, registro: unknown, agora:
   if (atualizadoEm > agora + FOLGA_DO_FUTURO_MS) return false;
   if (apagado !== undefined && typeof apagado !== 'boolean') return false;
   const esquema: Record<string, Tipo> = ESQUEMAS[colecao];
-  // Só entra o que o esquema conhece (e os quatro campos da base, já conferidos acima).
-  const permitidos = (campo: string) =>
-    campo === 'id' || campo === 'aparelho' || campo === 'atualizadoEm' || campo === 'apagado' || Object.prototype.hasOwnProperty.call(esquema, campo);
-  if (!Object.keys(registro).every(permitidos)) return false;
+  if (estrito && !Object.keys(registro).every((campo) => campoConhecido(esquema, campo))) return false;
   return Object.keys(esquema).every((campo) => campoValido(esquema[campo], registro[campo]));
 }

@@ -4,7 +4,7 @@
 // que só existe em versões novas é opcional, para registro antigo, que não o
 // tem, continuar valendo.
 import { describe, expect, it } from 'vitest';
-import { ESQUEMAS, NOMES_DAS_COLECOES, registroValido, type NomeDaColecao } from '../../script/colecoes';
+import { ESQUEMAS, NOMES_DAS_COLECOES, registroValido, semCamposDesconhecidos, type NomeDaColecao } from '../../script/colecoes';
 import type { Colecoes } from '../../src/dados/tipos';
 
 // Relógio fixo: quinta, 2026-11-05, 12:20 em Lisboa (WET = UTC em novembro).
@@ -103,11 +103,17 @@ describe('esquemas do script', () => {
 
   // Segurança: só entra o que o esquema conhece. Campo a mais (de aparelho
   // adulterado ou de versão futura) não é guardado no Drive.
-  it.each(NOMES_DAS_COLECOES)('%s: campo que não está no esquema é recusado', (colecao) => {
-    expect(registroValido(colecao, { ...COMPLETOS[colecao], extra: 'x' }, AGORA)).toBe(false);
+  it.each(NOMES_DAS_COLECOES)('%s: no modo estrito, campo que não está no esquema é recusado', (colecao) => {
+    expect(registroValido(colecao, { ...COMPLETOS[colecao], extra: 'x' }, AGORA, { estrito: true })).toBe(false);
     // Vindo de JSON, `__proto__` é um campo próprio como outro qualquer.
     const adulterado = JSON.parse(JSON.stringify(COMPLETOS[colecao]).replace(/}$/, ',"__proto__":{"x":1}}'));
-    expect(registroValido(colecao, adulterado, AGORA)).toBe(false);
+    expect(registroValido(colecao, adulterado, AGORA, { estrito: true })).toBe(false);
+  });
+
+  it.each(NOMES_DAS_COLECOES)('%s: fora do modo estrito, campo desconhecido não derruba o registro (campo de versão futura ou antiga)', (colecao) => {
+    expect(registroValido(colecao, { ...COMPLETOS[colecao], googleTarefaId: 'x' }, AGORA)).toBe(true);
+    const limpo = semCamposDesconhecidos(colecao, { ...COMPLETOS[colecao], googleTarefaId: 'x' });
+    expect(limpo).toEqual(COMPLETOS[colecao]);
   });
 
   it('o apagado (lápide) continua aceito em toda coleção', () => {

@@ -151,7 +151,7 @@ export function enviar(dados: unknown, armazem: Armazem): RespostaEnviar {
   for (const mudanca of dados.mudancas as unknown[]) {
     exigir(objeto(mudanca) && objeto(mudanca.registro));
     const { colecao, registro } = mudanca;
-    if (colecaoConhecida(colecao) && registroValido(colecao, registro, agora)) {
+    if (colecaoConhecida(colecao) && registroValido(colecao, registro, agora, { estrito: true })) {
       validas.push({ colecao, registro: registro as RegistroBase });
     } else if (typeof colecao === 'string' && typeof registro.id === 'string') {
       recusadas.push({ colecao, id: registro.id });

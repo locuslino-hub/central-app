@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase, type IDBPTransaction } from 'idb';
-import { NOMES_DAS_COLECOES, colecaoConhecida, registroValido, type NomeDaColecao } from '../../script/colecoes';
+import { NOMES_DAS_COLECOES, colecaoConhecida, registroValido, semCamposDesconhecidos, type NomeDaColecao } from '../../script/colecoes';
 import { vence } from '../../script/dados';
 import type {
   Aviso,
@@ -751,6 +751,8 @@ function objeto(valor: unknown): valor is Record<string, unknown> {
  * conhecida, ids e campos com a forma certa, carimbo até 10 min no futuro.
  * O "agora" é o maior entre este relógio e o do servidor: aparelho com
  * relógio atrasado não descarta o que o servidor já aceitou.
+ * Campo que este app não conhece (de uma versão futura, ou antigo) é tirado,
+ * mas o registro fica: recusá-lo o perderia, pois `desde` avança de qualquer jeito.
  */
 function validadorRemoto(relogioDoServidor: number) {
   const agora = Math.max(Date.now(), Number.isFinite(relogioDoServidor) ? relogioDoServidor : 0);
@@ -758,7 +760,7 @@ function validadorRemoto(relogioDoServidor: number) {
     if (!objeto(valor)) return [];
     const { colecao, registro } = valor;
     if (!colecaoConhecida(colecao) || !registroValido(colecao, registro, agora)) return [];
-    return [{ colecao, registro: registro as Registro }];
+    return [{ colecao, registro: semCamposDesconhecidos(colecao, registro) as Registro }];
   };
 }
 

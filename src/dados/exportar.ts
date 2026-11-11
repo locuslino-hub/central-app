@@ -55,7 +55,7 @@ export async function restaurarCopia(copia: Copia): Promise<{ restaurados: numbe
       continue;
     }
     for (const registro of registros as unknown[]) {
-      if (!registroValido(nome, registro, agora) || (registro as Registro).apagado) {
+      if (!registroValido(nome, registro, agora, { estrito: true }) || (registro as Registro).apagado) {
         recusados += 1;
         continue;
       }

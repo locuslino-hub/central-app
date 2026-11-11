@@ -560,6 +560,19 @@ describe('loja para a sincronia', () => {
     expect(await listarPendentes()).toHaveLength(1);
   });
 
+  it('registro puxado com campo desconhecido é mantido, sem o campo (versão futura ou campo antigo)', async () => {
+    await gravarDoServidor([
+      {
+        colecao: 'tarefas',
+        registro: { id: 't1', ...tarefa('Remota'), atualizadoEm: AGORA - 1, aparelho: 'outro', googleTarefaId: 'g-1', novidadeFutura: { a: 1 } },
+      },
+    ]);
+    const [guardada] = await listar('tarefas');
+    expect(guardada.titulo).toBe('Remota');
+    expect(guardada).not.toHaveProperty('googleTarefaId');
+    expect(guardada).not.toHaveProperty('novidadeFutura');
+  });
+
   it('marca desde começa em 0 e guarda o valor salvo', async () => {
     expect(await lerDesde()).toBe(0);
     await salvarDesde(1234);
