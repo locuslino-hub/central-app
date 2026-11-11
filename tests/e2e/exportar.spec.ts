@@ -117,7 +117,11 @@ for (const [nome, viewport] of [
 
       await page.goto('/central-app/#/conectar');
       await page.getByLabel('Restaurar a partir de uma cópia').setInputFiles(caminho);
+      // Pede confirmação antes de devolver qualquer coisa.
+      await expect(page.getByText(/Vai devolver \d+ itens? da cópia de 05\/11; o que mudou depois volta como estava/)).toBeVisible();
+      await page.getByRole('button', { name: 'Restaurar', exact: true }).click();
       await expect(page.getByRole('status').filter({ hasText: 'Cópia restaurada' })).toContainText('itens devolvidos');
+      await expect(page.getByLabel('Restaurar a partir de uma cópia')).toBeFocused();
 
       await page.goto('/central-app/#/atividades');
       await expect(page.getByRole('checkbox', { name: 'Revisar o capítulo 2 da Marina' })).toBeVisible();

@@ -173,10 +173,14 @@ function notificar(mudanca: Mudanca) {
   }
 }
 
-/** Grava (inserindo ou substituindo) com a hora atual e este aparelho, e enfileira em `pendentes`. */
+/**
+ * Grava (inserindo ou substituindo) com a hora atual e este aparelho, e enfileira em `pendentes`.
+ * `semEspelho`: a tarefa não entra na fila do espelho no Google Tarefas (a restauração da cópia).
+ */
 export async function salvar<C extends Colecao>(
   colecao: C,
   registro: ParaSalvar<Colecoes[C]>,
+  { semEspelho = false }: { semEspelho?: boolean } = {},
 ): Promise<Colecoes[C]> {
   const salvo = await comBanco(async (banco) => {
     const tx = escrever(banco, [colecao, PENDENTES, LOCAL]);
@@ -188,7 +192,7 @@ export async function salvar<C extends Colecao>(
     const novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
     await loja.put(novo);
     await enfileirar(tx, colecao, novo.id);
-    if (colecao === 'tarefas') await espelharSeMudou(tx, atual as Tarefa | undefined, novo as Tarefa);
+    if (colecao === 'tarefas' && !semEspelho) await espelharSeMudou(tx, atual as Tarefa | undefined, novo as Tarefa);
     await tx.done;
     return novo;
   });
@@ -760,7 +764,7 @@ function validadorRemoto(relogioDoServidor: number) {
     if (!objeto(valor)) return [];
     const { colecao, registro } = valor;
     if (!colecaoConhecida(colecao) || !registroValido(colecao, registro, agora)) return [];
-    return [{ colecao, registro: semCamposDesconhecidos(colecao, registro) as Registro }];
+    return [{ colecao, registro: semCamposDesconhecidos(colecao, registro as Record<string, unknown>) as Registro }];
   };
 }
 

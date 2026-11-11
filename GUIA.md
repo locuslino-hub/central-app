@@ -73,17 +73,19 @@ Uma vez por dia, quando o app envia alterações, o script guarda no seu Drive u
 2. Na parte **Cópia de segurança**, toque em **Baixar cópia dos dados**.
 3. O navegador baixa um arquivo chamado `central-copia-AAAA-MM-DD.json`, com a data de hoje. Guarde-o num lugar seguro, como uma pasta do seu Drive ou do seu computador.
 
-Esse arquivo leva tarefas, salas, pessoas, caderno, água, documentos e o resto. **Ele não leva o código de acesso nem os seus e-mails.** Por isso, depois de uma restauração num aparelho novo, conecte o aparelho primeiro (parte 1).
+Esse arquivo leva tarefas, salas, pessoas (com os e-mails de contato delas), caderno, água, documentos e o resto. **Ele não leva a conexão, o código de acesso nem as mensagens do Gmail.** Como tem os contatos, guarde-o com cuidado. Num aparelho novo, conecte o aparelho primeiro (parte 1) e só depois restaure.
 
 **Para restaurar a partir de uma cópia:**
 
 1. Conecte o aparelho (parte 1), se ainda não estiver conectado.
-2. Em **Conectar aparelho**, na parte **Cópia de segurança**, toque em **Restaurar a partir de uma cópia** e escolha o arquivo `central-copia-….json`.
-3. O app mostra quantos itens foram devolvidos. Se algum estiver fora do formato, ele diz quantos não foram restaurados.
+2. Em **Conectar aparelho**, na parte **Cópia de segurança**, use **Restaurar a partir de uma cópia** e escolha o arquivo `central-copia-….json`. Arquivos com mais de 5 MB são recusados.
+3. O app **pergunta antes**: "Vai devolver N itens da cópia de DD/MM; o que mudou depois volta como estava." Toque em **Restaurar** para confirmar ou em **Cancelar** para desistir sem mudar nada.
+4. Depois de restaurar, o app mostra quantos itens foram devolvidos. Se algum estiver fora do formato, ele diz quantos não foram restaurados.
 
 Como a restauração funciona:
 
-- Ela **devolve** o que está na cópia e **não apaga** nada que já existe no app.
+- Ela **devolve** o que está na cópia e **não apaga** nada que já existe no app. As **configurações** (como o fim do dia) não são restauradas.
+- Ela **não mexe no Google**: tarefas e marcas de "feito" que voltam não são enviadas de novo ao Google Tarefas nem ao Google Agenda.
 - O que volta conta como uma edição nova: vale mais do que a versão que estava no app e segue para os outros aparelhos, como qualquer alteração.
 - Se você apagou algo de propósito depois de baixar a cópia, esse item volta. Apague de novo se não o quiser.
 - Arquivos que não vieram do botão **Baixar cópia dos dados** são recusados, e o app avisa.

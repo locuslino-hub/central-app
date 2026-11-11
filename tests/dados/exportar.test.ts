@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NOMES_DAS_COLECOES } from '../../script/colecoes';
-import { apagar, listar, salvar, semear } from '../../src/dados/loja';
-import { FORMATO_DA_COPIA, lerCopia, montarCopia, nomeDoArquivoDaCopia, restaurarCopia } from '../../src/dados/exportar';
+import { apagar, lerConfig, listar, listarPendentes, salvar, semear } from '../../src/dados/loja';
+import { FORMATO_DA_COPIA, lerCopia, montarCopia, nomeDoArquivoDaCopia, resumoDaCopia, restaurarCopia } from '../../src/dados/exportar';
 import { salvarConexao } from '../../src/conexao/guarda';
 
 // Relógio fixo: quinta, 2026-11-05, 12:20 em Lisboa (WET = UTC em novembro).
@@ -84,5 +84,51 @@ describe('restaurarCopia', () => {
     const resultado = await restaurarCopia(copia);
     expect(resultado).toEqual({ restaurados: 1, recusados: 1 });
     expect((await listar('tarefas')).map((t) => t.titulo)).toEqual(['Ler o artigo da Aurora']);
+  });
+
+  it('nunca restaura a configuração', async () => {
+    await salvar('config', { fimDoDia: '19:00' });
+    const copia = await montarCopia();
+    await salvar('config', { fimDoDia: '21:30' });
+    const resultado = await restaurarCopia(copia);
+    expect(resultado.restaurados).toBe(0);
+    expect((await lerConfig()).fimDoDia).toBe('21:30');
+  });
+
+  it('tarefa concluída que volta não vai ao Google Tarefas: nada entra na fila de espelho', async () => {
+    const feita = await salvar('tarefas', { ...tarefa('Entregar o relatório'), feito: true });
+    const aberta = await salvar('tarefas', tarefa('Ler o artigo da Aurora'));
+    const copia = await montarCopia();
+    await apagar('tarefas', feita.id);
+    await apagar('tarefas', aberta.id);
+    const antes = (await listarPendentes()).filter((p) => p.tipo === 'espelho').length;
+    await restaurarCopia(copia);
+    expect((await listar('tarefas')).map((t) => t.titulo).sort()).toEqual(['Entregar o relatório', 'Ler o artigo da Aurora']);
+    expect((await listarPendentes()).filter((p) => p.tipo === 'espelho')).toHaveLength(antes);
+  });
+
+  it('eventosFeitos volta sem as marcas do caminho até o Google e sem fila nova', async () => {
+    const feito = await salvar('eventosFeitos', { eventoId: 'ev-1', agendaId: 'primary', data: '2026-11-05', feito: true, pendenteNoGoogle: true, soNaCentral: true });
+    const copia = await montarCopia();
+    await apagar('eventosFeitos', feito.id);
+    const antes = (await listarPendentes()).length;
+    await restaurarCopia(copia);
+    const [volta] = await listar('eventosFeitos');
+    expect(volta).toMatchObject({ eventoId: 'ev-1', feito: true });
+    expect(volta).not.toHaveProperty('pendenteNoGoogle');
+    expect(volta).not.toHaveProperty('soNaCentral');
+    expect(await listarPendentes()).toHaveLength(antes + 1); // só o registro, que sincroniza com o Drive
+  });
+});
+
+describe('resumoDaCopia', () => {
+  it('conta o que seria devolvido (sem a configuração, sem o que é inválido) e dá o dia da cópia', async () => {
+    await semear();
+    await salvar('tarefas', tarefa('Ler o artigo da Aurora'));
+    const copia = await montarCopia();
+    copia.colecoes.tarefas.push({ ...copia.colecoes.tarefas[0], id: 'estranha', extra: 'x' } as never);
+    const resumo = resumoDaCopia(copia);
+    expect(resumo.itens).toBe(copia.colecoes.salas.length + copia.colecoes.palavras.length + 1);
+    expect(resumo.dia).toBe('05/11');
   });
 });

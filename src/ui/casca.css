@@ -634,6 +634,20 @@
   margin: 0 0 12px;
   color: var(--tinta2);
 }
+.exportar-confirma {
+  margin: 14px 0 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--campo);
+  border-radius: var(--r-p);
+}
+.exportar-confirma p {
+  margin: 0 0 10px;
+}
+.exportar-confirma-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .exportar-restaurar {
   margin: 18px 0 6px;
 }

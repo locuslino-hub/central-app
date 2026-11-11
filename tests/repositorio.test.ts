@@ -146,13 +146,15 @@ const BINARIOS = /\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|eot|gguf|bin|z
 
 /**
  * Este arquivo traz, de propósito, um exemplo de cada segredo e e-mail que procura. O package-lock.json
- * leva o e-mail de contato de quem mantém cada pacote de terceiros.
+ * leva o e-mail de contato de quem mantém cada pacote de terceiros (só o e-mail é dispensado nele).
  */
-const FORA_DA_VARREDURA = new Set(['tests/repositorio.test.ts', 'package-lock.json']);
+const FORA_DOS_SEGREDOS = new Set(['tests/repositorio.test.ts']);
+/** O package-lock.json fica só fora do e-mail: a busca por chave e token vale nele também. */
+const FORA_DOS_EMAILS = new Set(['tests/repositorio.test.ts', 'package-lock.json']);
 
 function arquivosDoGit(): string[] {
   const saida = spawnSync('git', ['ls-files', '-z'], { encoding: 'utf8' });
-  return saida.stdout.split('\0').filter((caminho) => caminho !== '' && !BINARIOS.test(caminho) && !FORA_DA_VARREDURA.has(caminho));
+  return saida.stdout.split('\0').filter((caminho) => caminho !== '' && !BINARIOS.test(caminho));
 }
 
 describe('e-mails e segredos: as próprias verificações', () => {
@@ -195,16 +197,16 @@ describe('arquivos versionados', () => {
   });
 
   it('nenhum tem e-mail que não seja noreply ou @exemplo.invalid', () => {
-    const problemas = arquivos.flatMap((arquivo) =>
-      emailsDeFora(readFileSync(arquivo, 'utf8')).map((email) => `${arquivo}: ${email}`),
-    );
+    const problemas = arquivos
+      .filter((arquivo) => !FORA_DOS_EMAILS.has(arquivo))
+      .flatMap((arquivo) => emailsDeFora(readFileSync(arquivo, 'utf8')).map((email) => `${arquivo}: ${email}`));
     expect(problemas).toEqual([]);
   });
 
   it('nenhum tem chave, token ou credencial', () => {
-    const problemas = arquivos.flatMap((arquivo) =>
-      segredosEm(readFileSync(arquivo, 'utf8')).map((nome) => `${arquivo}: ${nome}`),
-    );
+    const problemas = arquivos
+      .filter((arquivo) => !FORA_DOS_SEGREDOS.has(arquivo))
+      .flatMap((arquivo) => segredosEm(readFileSync(arquivo, 'utf8')).map((nome) => `${arquivo}: ${nome}`));
     expect(problemas).toEqual([]);
   });
 });
@@ -220,12 +222,14 @@ describe('histórico do Git', () => {
     expect(segredosEm(autores)).toEqual([]);
 
     // Só as linhas acrescentadas: o que já foi retirado também ficou no histórico.
-    const adicionadas = git('log', '--all', '-p', '--no-color', '--format=', '--', '.', ...[...FORA_DA_VARREDURA].map((caminho) => `:(exclude)${caminho}`))
-      .stdout.split('\n')
-      .filter((linha) => linha.startsWith('+') && !linha.startsWith('+++'))
-      .join('\n');
-    expect(adicionadas.length).toBeGreaterThan(0);
-    expect(emailsDeFora(adicionadas)).toEqual([]);
-    expect(segredosEm(adicionadas)).toEqual([]);
+    const adicionadasSem = (excluidos: ReadonlySet<string>) =>
+      git('log', '--all', '-p', '--no-color', '--format=', '--', '.', ...[...excluidos].map((caminho) => `:(exclude)${caminho}`))
+        .stdout.split('\n')
+        .filter((linha) => linha.startsWith('+') && !linha.startsWith('+++'))
+        .join('\n');
+    const paraSegredos = adicionadasSem(FORA_DOS_SEGREDOS);
+    expect(paraSegredos.length).toBeGreaterThan(0);
+    expect(segredosEm(paraSegredos)).toEqual([]);
+    expect(emailsDeFora(adicionadasSem(FORA_DOS_EMAILS))).toEqual([]);
   });
 });
