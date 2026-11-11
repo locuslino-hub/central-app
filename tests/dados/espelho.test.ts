@@ -8,6 +8,7 @@ import { ErroConexao } from '../../src/conexao/cliente';
 import type { Evento } from '../../src/dados/agenda';
 import { aplicarFeitos, idDoFeito, marcarCompromissoFeito } from '../../src/dados/eventos-feitos';
 import {
+  INTERVALO_ENTRE_TENTATIVAS_MS,
   TENTATIVAS_NO_MAXIMO,
   concluirMigracao,
   enfileirarEspelhosQueFaltam,
@@ -215,7 +216,12 @@ describe('sincronia com o Google Tarefas', () => {
     expect(await sincronizar({ chamar: servidor.chamar, esperar: semEspera })).toBe('atualizado');
     expect((await espelhos())[0].tentativas).toBe(1);
 
-    for (let vez = 1; vez < TENTATIVAS_NO_MAXIMO; vez++) await sincronizar({ chamar: servidor.chamar, esperar: semEspera });
+    // Uma rodada por hora: dentro da mesma hora as recusas contam uma vez só.
+    for (let vez = 1; vez < TENTATIVAS_NO_MAXIMO; vez++) {
+      vi.setSystemTime(Date.now() + INTERVALO_ENTRE_TENTATIVAS_MS);
+      await sincronizar({ chamar: servidor.chamar, esperar: semEspera });
+    }
+    expect((await espelhos())[0].tentativas).toBe(TENTATIVAS_NO_MAXIMO);
     const chamadas = servidor.de('espelharTarefas').length;
     await sincronizar({ chamar: servidor.chamar, esperar: semEspera });
     expect(servidor.de('espelharTarefas').length).toBe(chamadas);

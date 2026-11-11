@@ -168,11 +168,12 @@ export type EventoPendente = {
 
 /**
  * Controle de uma ação de agenda na fila: quando entrou e quantas vezes o
- * script ou o Google a recusou (sem internet não conta). Passando do limite
- * (`agendaEsgotada`), a sincronia para de tentar, mas a entrada fica e o
- * Painel avisa; nada é apagado sozinho.
+ * script ou o Google a recusou (sem internet não conta; no máximo uma por
+ * hora, a partir de `ultimaTentativa`). Passando do limite (`agendaEsgotada`),
+ * a sincronia para de tentar, mas a entrada fica e o Painel avisa; nada é
+ * apagado sozinho.
  */
-export type ControleDaFila = { criadoEm?: number; tentativas?: number };
+export type ControleDaFila = { criadoEm?: number; tentativas?: number; ultimaTentativa?: number };
 
 export type PendenteCriarEvento = ControleDaFila & {
   seq: number;

@@ -229,9 +229,9 @@ async function espelharSeMudou(tx: Escrita, antes: Tarefa | undefined, depois: T
 }
 
 type AcaoDeEspelho =
-  | Omit<Extract<PendenteEspelho, { acao: 'espelharTarefa' }>, 'seq' | 'criadoEm' | 'tentativas'>
-  | Omit<Extract<PendenteEspelho, { acao: 'marcarEventoFeito' }>, 'seq' | 'criadoEm' | 'tentativas'>
-  | Omit<Extract<PendenteEspelho, { acao: 'marcarTarefaGoogle' }>, 'seq' | 'criadoEm' | 'tentativas'>;
+  | Omit<Extract<PendenteEspelho, { acao: 'espelharTarefa' }>, 'seq' | 'criadoEm' | 'tentativas' | 'ultimaTentativa'>
+  | Omit<Extract<PendenteEspelho, { acao: 'marcarEventoFeito' }>, 'seq' | 'criadoEm' | 'tentativas' | 'ultimaTentativa'>
+  | Omit<Extract<PendenteEspelho, { acao: 'marcarTarefaGoogle' }>, 'seq' | 'criadoEm' | 'tentativas' | 'ultimaTentativa'>;
 
 function entradaDeEspelho(acao: AcaoDeEspelho): Omit<PendenteEspelho, 'seq'> {
   return { ...acao, criadoEm: Date.now(), tentativas: 0 };
@@ -381,8 +381,8 @@ export const DIAS_NA_FILA_NO_MAXIMO = 7;
 
 /** A ação, como se entrega a `enfileirarAgenda`: o `seq` e o controle são postos aqui. */
 export type AcaoDeAgenda =
-  | Omit<Extract<PendenteAgenda, { acao: 'criarEvento' }>, 'seq' | 'criadoEm' | 'tentativas'>
-  | Omit<Extract<PendenteAgenda, { acao: 'removerEvento' }>, 'seq' | 'criadoEm' | 'tentativas'>;
+  | Omit<Extract<PendenteAgenda, { acao: 'criarEvento' }>, 'seq' | 'criadoEm' | 'tentativas' | 'ultimaTentativa'>
+  | Omit<Extract<PendenteAgenda, { acao: 'removerEvento' }>, 'seq' | 'criadoEm' | 'tentativas' | 'ultimaTentativa'>;
 
 /** A sincronia parou de tentar esta ação (de agenda ou de espelho): muitas recusas ou muito tempo na fila. */
 export function agendaEsgotada(acao: ControleDaFila, agora = Date.now()): boolean {
@@ -415,13 +415,26 @@ export async function retirarPendente(seq: number): Promise<boolean> {
   });
 }
 
-/** Conta uma recusa do script ou do Google (sem internet não conta). */
+/** Recusas dentro desse intervalo contam como uma só (a sincronia roda a cada minuto). */
+export const INTERVALO_ENTRE_TENTATIVAS_MS = 60 * 60 * 1000;
+
+/**
+ * Conta uma recusa do script ou do Google (sem internet não conta), no máximo
+ * uma por hora por entrada: com rodadas a cada minuto, o limite de
+ * TENTATIVAS_NO_MAXIMO vale umas 20 horas de recusas, não 20 minutos.
+ */
 export async function registrarTentativa(seq: number): Promise<void> {
   await comBanco(async (banco) => {
     const tx = escrever(banco, [PENDENTES]);
     const fila = tx.objectStore(PENDENTES);
     const atual: Pendente | undefined = await fila.get(seq);
-    if (atual?.tipo === 'agenda' || atual?.tipo === 'espelho') await fila.put({ ...atual, tentativas: (atual.tentativas ?? 0) + 1 });
+    const agora = Date.now();
+    if (atual?.tipo === 'agenda' || atual?.tipo === 'espelho') {
+      const ultima = atual.ultimaTentativa;
+      // Relógio que voltou também conta como dentro da hora.
+      const naMesmaHora = ultima !== undefined && Math.abs(agora - ultima) < INTERVALO_ENTRE_TENTATIVAS_MS;
+      if (!naMesmaHora) await fila.put({ ...atual, tentativas: (atual.tentativas ?? 0) + 1, ultimaTentativa: agora });
+    }
     await tx.done;
   });
 }
@@ -435,7 +448,8 @@ export async function reiniciarAgendaParada(): Promise<void> {
     const todas: Pendente[] = await fila.getAll();
     for (const p of todas) {
       if ((p.tipo === 'agenda' || p.tipo === 'espelho') && agendaEsgotada(p, agora)) {
-        await fila.put({ ...p, criadoEm: agora, tentativas: 0 });
+        const { ultimaTentativa: _ultima, ...resto } = p;
+        await fila.put({ ...resto, criadoEm: agora, tentativas: 0 });
       }
     }
     await tx.done;

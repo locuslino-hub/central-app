@@ -30,6 +30,8 @@ const daAgenda = async () =>
   (await listarPendentes()).filter((p): p is PendenteAgenda => p.tipo === 'agenda');
 
 const semEspera = (_ms: number) => Promise.resolve();
+const MINUTO = 60 * 1000;
+const HORA = 60 * MINUTO;
 
 /** Sincroniza com o servidor de verdade para os registros e a agenda falsa para os eventos. */
 function sincronizarCom(agenda: ReturnType<typeof agendaEscrita>) {
@@ -475,7 +477,11 @@ describe('limite de tentativas', () => {
     await agenda.instalar();
     agenda.modo('recusar');
     await criarCompromisso(novo); // entra na fila sem tentativas contadas
-    for (let i = 0; i < 20; i++) await sincronizarCom(agenda);
+    // Uma rodada por hora: dentro da mesma hora as recusas contam uma vez só.
+    for (let i = 0; i < 20; i++) {
+      await sincronizarCom(agenda);
+      vi.setSystemTime(Date.now() + HORA);
+    }
     expect((await daAgenda())[0].tentativas).toBe(20);
     const antes = agenda.de('criarEvento').length;
 
@@ -491,6 +497,48 @@ describe('limite de tentativas', () => {
     await reiniciarAgendaParada();
     expect(await sincronizarCom(agenda)).toBe('atualizado');
     expect(agenda.eventos.size).toBe(1);
+  });
+
+  it('rodadas seguidas contam no máximo uma tentativa por hora: 20 tentativas são umas 20 horas, não 20 minutos', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('recusar');
+    await criarCompromisso(novo);
+    const inicio = Date.now();
+
+    for (let minuto = 0; minuto < 60; minuto++) {
+      vi.setSystemTime(inicio + minuto * MINUTO);
+      await sincronizarCom(agenda);
+    }
+    expect((await daAgenda())[0].tentativas).toBe(1);
+
+    vi.setSystemTime(inicio + HORA);
+    await sincronizarCom(agenda);
+    expect((await daAgenda())[0].tentativas).toBe(2);
+
+    // Ainda tenta a cada rodada (o Google pode voltar a qualquer hora); só não conta.
+    expect(agenda.de('criarEvento').length).toBeGreaterThanOrEqual(61);
+  });
+
+  it('a contagem de uma hora é por entrada, e "Tentar de novo" a zera', async () => {
+    const { enfileirarAgenda, registrarTentativa, reiniciarAgendaParada } = await import('../../src/dados/loja');
+    const a = await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: 'a'.repeat(32) });
+    const b = await enfileirarAgenda({ tipo: 'agenda', acao: 'removerEvento', id: 'b'.repeat(32) });
+    await registrarTentativa(a);
+    await registrarTentativa(a);
+    await registrarTentativa(b);
+    const tentativas = async () => (await daAgenda()).map((p) => p.tentativas);
+    expect(await tentativas()).toEqual([1, 1]);
+
+    for (let hora = 1; hora < 20; hora++) {
+      vi.setSystemTime(Date.now() + HORA);
+      await registrarTentativa(a);
+    }
+    expect(await tentativas()).toEqual([20, 1]);
+    await reiniciarAgendaParada();
+    expect(await tentativas()).toEqual([0, 1]);
+    await registrarTentativa(a);
+    expect(await tentativas()).toEqual([1, 1]);
   });
 
   it('sem internet não conta tentativa', async () => {

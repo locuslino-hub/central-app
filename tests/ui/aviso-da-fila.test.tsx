@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { criarCompromisso } from '../../src/dados/compromisso';
-import { listarPendentes, registrarTentativa, semear, TENTATIVAS_NO_MAXIMO } from '../../src/dados/loja';
+import { INTERVALO_ENTRE_TENTATIVAS_MS, listarPendentes, registrarTentativa, semear, TENTATIVAS_NO_MAXIMO } from '../../src/dados/loja';
 import { AvisoDaFila } from '../../src/ui/AvisoDaFila';
 import { agendaEscrita } from '../apoio/agenda-escrita';
 
@@ -14,13 +14,21 @@ beforeEach(async () => {
 
 const novo = { titulo: 'Banca', data: '2026-11-06', inicio: '11:00', fim: '12:00', salaId: null };
 
+/** Recusas até o limite, uma por hora (dentro da mesma hora contam uma vez só). */
+async function recusarAte(...seqs: number[]) {
+  for (let i = 0; i < TENTATIVAS_NO_MAXIMO; i++) {
+    for (const seq of seqs) await registrarTentativa(seq);
+    vi.setSystemTime(Date.now() + INTERVALO_ENTRE_TENTATIVAS_MS);
+  }
+}
+
 async function esgotar() {
   const agenda = agendaEscrita();
   await agenda.instalar();
   agenda.modo('recusar');
   await criarCompromisso(novo);
   const [{ seq }] = await listarPendentes();
-  for (let i = 0; i < TENTATIVAS_NO_MAXIMO; i++) await registrarTentativa(seq);
+  await recusarAte(seq);
   return agenda;
 }
 
@@ -73,9 +81,7 @@ describe('aviso da fila: espelho no Google parado', () => {
     const tarefa = (await criarTarefa('Ligar para a Aurora', { data: '2026-11-05' }))!;
     await criarTarefa('Revisar parágrafo');
     await enfileirarMarcaDeFeito('meu1', true);
-    for (const p of await listarPendentes()) if (p.tipo === 'espelho') {
-      for (let i = 0; i < TENTATIVAS_NO_MAXIMO; i++) await registrarTentativa(p.seq);
-    }
+    await recusarAte(...(await listarPendentes()).flatMap((p) => (p.tipo === 'espelho' ? [p.seq] : [])));
     render(<AvisoDaFila />);
 
     expect(await screen.findByText('2 tarefas não chegaram ao Google Tarefas.')).toBeTruthy();
