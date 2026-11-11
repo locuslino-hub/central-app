@@ -301,9 +301,10 @@ export function Semana({ data }: { data?: string }) {
                   data-hoje={String(dia === hoje)}
                   data-tem={String(total > 0)}
                   aria-pressed={dia === escolhido}
-                  aria-label={`${diaPorExtenso(dia, hoje)}${dia === hoje ? ', hoje' : ''}, ${contagem(total)}`}
                   onClick={() => setEscolha({ semana: segunda, dia })}
                 >
+                  {/* O nome vem de um texto só para o leitor de tela, e não de aria-label: a abreviação e o número que se veem ficam de fora dele. */}
+                  <span class="so-leitor">{`${diaPorExtenso(dia, hoje)}${dia === hoje ? ', hoje' : ''}, ${contagem(total)}`}</span>
                   <span aria-hidden="true">{abreviacaoDoDia(dia)}</span>
                   <span class="cal-faixa-numero" aria-hidden="true">
                     {Number(dia.slice(8))}

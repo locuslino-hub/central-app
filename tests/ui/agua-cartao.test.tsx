@@ -287,7 +287,7 @@ describe('AguaCurta', () => {
   it('sugerindo uma garrafa inteira ou mais, o botão diz "+1 garrafa" e o nome falado contém o mesmo texto', async () => {
     render(<AguaCurta aoAbrir={() => {}} />); // 0 mL, falta 619
     const botaoToda = await waitFor(() => botao('+1 garrafa, 500 mL, sugerido', curta()));
-    expect(botaoToda.textContent).toBe('+1 garrafa500 mL');
+    expect(botaoToda.textContent).toBe('+1 garrafa 500 mL');
     expect(botaoToda.classList.contains('sugerido')).toBe(true);
   });
 

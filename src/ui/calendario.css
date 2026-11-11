@@ -531,6 +531,7 @@
   margin: 0 0 12px;
 }
 .cal-faixa-dia {
+  position: relative; /* contém o texto só para leitor de tela (.so-leitor) */
   display: grid;
   justify-items: center;
   align-content: center;
@@ -591,6 +592,7 @@
   padding: 0;
 }
 .mes-dia {
+  position: relative; /* contém o texto só para leitor de tela (.so-leitor) */
   display: flex;
   flex-direction: column;
   align-items: flex-start;

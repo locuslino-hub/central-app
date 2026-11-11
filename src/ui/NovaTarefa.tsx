@@ -18,6 +18,8 @@ type Props = {
 export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  // Para o leitor de tela: a tarefa já aparece na lista, mas quem não a vê precisa saber que foi criada.
+  const [aviso, setAviso] = useState('');
   const campo = useRef<HTMLInputElement>(null);
   const emAndamento = useRef(false);
   const id = `nova-${rotulo.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -35,6 +37,7 @@ export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
     try {
       await criarTarefa(limpo, { ...(data === undefined ? {} : { data }), ...(salaId === undefined ? {} : { salaId }), ...(pessoaId === undefined ? {} : { pessoaId }) });
       setErro(null);
+      setAviso(`Tarefa adicionada: ${limpo}`);
       // Só limpa o que foi gravado: quem já começou a próxima não perde o texto.
       setTexto((atual) => (atual.trim() === limpo ? '' : atual));
       campo.current?.focus();
@@ -65,6 +68,7 @@ export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
           onInput={(e) => {
             setTexto((e.target as HTMLInputElement).value);
             setErro(null);
+            setAviso('');
           }}
         />
         {/* Em coluna estreita só o "+" aparece (o campo precisa de espaço para o texto de dentro); o nome é sempre "Adicionar". */}
@@ -75,6 +79,9 @@ export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
           <span class="nova-tarefa-texto">Adicionar</span>
         </button>
       </div>
+      <p class="so-leitor" role="status">
+        {aviso}
+      </p>
       {erro && (
         <p class="tarefa-erro" role="alert">
           {erro}

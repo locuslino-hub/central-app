@@ -72,7 +72,7 @@ export function CaixasSalas({ salas, tarefas, fila, pessoas, hoje }: Props) {
                 aria-label={`${sala.nome}: ${partes.length > 0 ? juntar(partes) : 'em dia'}`}
                 data-vazia={String(partes.length === 0)}
               >
-                <span class="caixa-sala-nome">{sala.nome}</span>
+                <span class="caixa-sala-nome">{sala.nome}</span>{' '}
                 <span class="caixa-sala-conta" aria-hidden="true">
                   {comNumero && <span class="caixa-sala-numero">{t + e}</span>}
                   {comNumero ? ` ${legenda}` : legenda}

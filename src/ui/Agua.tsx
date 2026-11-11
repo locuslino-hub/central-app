@@ -191,7 +191,7 @@ export function BotoesDeFracao({ sit, registrar, carregando = false }: { sit: Si
           // A etiqueta "sugerido" é do envoltório, não do botão: assim sobra um pouco para os lados sem o botão "transbordar".
           <div key={fracao} class="agua-fracao" data-sugerido={sug ? 'true' : undefined}>
             <button type="button" class={sug ? 'sugerido' : undefined} aria-label={`${nome}, ${n(ml)} mL${sug ? ', sugerido' : ''}`} onClick={() => registrar(ml)}>
-              <b>{nome}</b>
+              <b>{nome}</b>{' '}
               <span>{n(ml)} mL</span>
             </button>
           </div>
@@ -226,7 +226,7 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
           <b class="agua-total">
             {n(total)}
             <small> mL</small>
-          </b>
+          </b>{' '}
           <span class="agua-sub">
             de {n(META_ML)} mL · {porcento}%
           </span>
@@ -342,7 +342,7 @@ export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
             <Icone nome="gota" />
           </span>
           <span class="agua-texto">
-            <b class="agua-total-curto">Água: {n(total)} mL</b>
+            <b class="agua-total-curto">Água: {n(total)} mL</b>{' '}
             <span class="agua-sub">
               {porcento}% ·{' '}
               {carregando ? (
@@ -361,7 +361,7 @@ export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
           aria-label={`+${nome}, ${n(ml)} mL${sugerida ? ', sugerido' : ''}`}
           onClick={() => registrar(ml)}
         >
-          +{nome}
+          +{nome}{' '}
           <small>{n(ml)} mL</small>
         </button>
       </div>

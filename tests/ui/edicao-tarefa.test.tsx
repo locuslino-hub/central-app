@@ -252,7 +252,7 @@ describe('apagar tarefa', () => {
 
     await waitFor(async () => expect(await listar('tarefas')).toEqual([]));
     await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Validar dados' })).toBeNull());
-    const aviso = await screen.findByRole('status');
+    const aviso = await screen.findByText('Tarefa apagada: Validar dados').then((texto) => texto.closest('[role="status"]') as HTMLElement);
     expect(aviso.textContent).toContain('Tarefa apagada: Validar dados');
     const desfazer = within(aviso).getByRole('button', { name: 'Desfazer' });
     await waitFor(() => expect(document.activeElement).toBe(desfazer));

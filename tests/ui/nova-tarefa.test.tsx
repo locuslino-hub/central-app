@@ -27,6 +27,16 @@ describe('nova tarefa na Checklist (vai para hoje)', () => {
     expect(document.activeElement).toBe(entrada);
   });
 
+  it('anuncia a criação numa região viva e a tira quando o dono volta a escrever', async () => {
+    render(<Checklist />);
+    const entrada = await campo('Nova tarefa para hoje');
+    fireEvent.input(entrada, { target: { value: 'Ligar para a Marina' } });
+    adicionar();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Tarefa adicionada: Ligar para a Marina'));
+    fireEvent.input(entrada, { target: { value: 'L' } });
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
   it('Enter também adiciona', async () => {
     render(<Checklist />);
     const entrada = await campo('Nova tarefa para hoje');

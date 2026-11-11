@@ -123,10 +123,10 @@ describe('Mês', () => {
     render(<Mes />);
     const ontem = celula(/^Quarta-feira, 4 de novembro/);
     expect(ontem.getAttribute('data-passado')).toBe('true');
-    expect(ontem.getAttribute('aria-label')).toContain('passado');
+    expect(ontem.textContent).toContain('passado');
     expect(celula(/^Quinta-feira, 5 de novembro/).getAttribute('data-passado')).toBe('false');
     expect(celula(/^Sexta-feira, 6 de novembro/).getAttribute('data-passado')).toBe('false');
-    expect(celula(/^Sexta-feira, 6 de novembro/).getAttribute('aria-label')).not.toContain('passado');
+    expect(celula(/^Sexta-feira, 6 de novembro/).textContent).not.toContain('passado');
   });
 
   it('a legenda explica pontos, anéis e dias passados', async () => {

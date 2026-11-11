@@ -174,12 +174,13 @@ function CelulaDoDia({ dia, hoje, doMes, cabem, salaDoEvento }: CelulaProps) {
     <a
       class="mes-dia"
       href={`#/semana?d=${dia.data}`}
-      aria-label={nome}
       aria-current={eHoje ? 'date' : undefined}
       data-hoje={String(eHoje)}
       data-fora={String(!doMes)}
       data-passado={String(passado)}
     >
+      {/* O nome vem de um texto só para o leitor de tela, e não de aria-label: o texto que se vê (número e títulos) fica de fora dele. */}
+      <span class="so-leitor">{nome}</span>
       <span class="mes-numero" aria-hidden="true">
         {Number(dia.data.slice(8))}
       </span>
