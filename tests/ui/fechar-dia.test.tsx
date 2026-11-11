@@ -238,3 +238,58 @@ describe('Fechar o dia: o passo final', () => {
     expect(await fechar().findByText('Nenhuma tarefa concluída hoje. 1 tarefa volta amanhã.')).toBeTruthy();
   });
 });
+
+describe('Fechar o dia: a prévia de amanhã e as linhas compactas', () => {
+  const previa = async () => within(await fechar().findByRole('list', { name: 'Amanhã' }));
+
+  it('Amanhã mostra o que volta (as que ficaram, sem prazo de hora) e o que já é de amanhã; feita e prazo de hoje ficam de fora', async () => {
+    await criar('Feita de manhã', { data: '2026-11-05', feito: true });
+    await criar('Rever capítulo 3', { data: '2026-11-05', salaId: 'sala-orientacoes' });
+    await criar('Ler artigo', { data: '2026-11-04' });
+    await criar('Entrega do relatório', { data: '2026-11-04', prazoHora: '17:00' }); // prazo não anda: não volta amanhã
+    await criar('Reunião com a Renata', { data: '2026-11-06' }); // já é de amanhã
+    await criar('Comprar lâmpadas', { data: '2026-11-07' }); // depois de amanhã
+    await criar('Já feita para amanhã', { data: '2026-11-06', feito: true });
+    await scriptDeTeste();
+    mostrar();
+    const lista = await previa();
+    await waitFor(() => expect(lista.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ler artigo', 'Reunião com a Renata', 'Rever capítulo 3']));
+    expect(fechar().getByRole('heading', { name: 'Amanhã' })).toBeTruthy();
+    // A prévia só mostra: os botões são das listas de cima.
+    expect(lista.queryAllByRole('button')).toEqual([]);
+  });
+
+  it('a prévia acompanha as ações: Sem prazo e Feita tiram a tarefa; Desfazer a devolve', async () => {
+    await diaComSobras();
+    mostrar();
+    const grupoDe = async (titulo: string) => within(await (await listaDeTarefas()).findByRole('group', { name: `O que fazer com: ${titulo}` }));
+    await waitFor(async () => expect((await previa()).getAllByRole('listitem')).toHaveLength(2));
+
+    fireEvent.click((await grupoDe('Ler artigo')).getByRole('button', { name: 'Sem prazo' }));
+    await waitFor(async () => expect((await previa()).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Rever capítulo 3']));
+    fireEvent.click(fechar().getByRole('button', { name: 'Desfazer' }));
+    await waitFor(async () => expect((await previa()).getAllByRole('listitem')).toHaveLength(2));
+
+    fireEvent.click((await grupoDe('Rever capítulo 3')).getByRole('button', { name: 'Feita' }));
+    await waitFor(async () => expect((await previa()).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ler artigo']));
+  });
+
+  it('sem nada para amanhã, a prévia diz isso', async () => {
+    await scriptDeTeste();
+    mostrar();
+    expect(await fechar().findByText('Nada marcado para amanhã.')).toBeTruthy();
+    expect(fechar().queryByRole('list', { name: 'Amanhã' })).toBeNull();
+  });
+
+  it('cada tarefa que ficou é uma linha só de texto: título (com a hora, se houver) sem parágrafo de detalhe', async () => {
+    await criar('Ler artigo', { data: '2026-11-04', salaId: 'sala-investigacao' });
+    await scriptDeTeste();
+    mostrar();
+    const linha = (await listaDeTarefas()).getAllByRole('listitem')[0];
+    await waitFor(() => expect(within(linha).getByRole('img').getAttribute('aria-label')).toBe('Sala: Investigação'));
+    expect(linha.querySelectorAll('p')).toHaveLength(1);
+    expect(linha.querySelector('p')!.textContent).toBe('Ler artigo Ficou de antes');
+    // A sala vira uma bolinha com nome para o leitor de tela, sem ocupar uma linha.
+    expect(within(linha).getByRole('img', { name: 'Sala: Investigação' })).toBeTruthy();
+  });
+});

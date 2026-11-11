@@ -340,6 +340,17 @@ for (const [nome, viewport, sufixo] of [
       const emails = fechar.getByRole('list', { name: 'E-mails sem resposta' });
       await emails.getByRole('group', { name: 'O que fazer com: Dúvida sobre a prova' }).getByRole('button', { name: 'Agora não' }).click();
       await expect(emails.getByRole('listitem')).toHaveCount(1);
+      // Uma linha por tarefa (no celular, o título e as ações em duas) e a prévia do que vai para amanhã.
+      const alturas = await tarefas.getByRole('listitem').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+      const largura = page.viewportSize()!.width;
+      for (const altura of alturas) expect(altura).toBeLessThanOrEqual(largura >= 700 ? 72 : 124);
+      const amanha = fechar.getByRole('list', { name: 'Amanhã' });
+      await expect(amanha.getByRole('listitem')).toHaveText([
+        'Entrega do relatório até 17:00',
+        'Ler artigo da Renata',
+        'Preparar slides da aula',
+        'Rever capítulo 3 da Marina',
+      ]);
       expect(await pequenos(page)).toEqual([]);
       expect(await semRolagemDeLado(page)).toBe(true);
       await capturar(page, `fechar-${sufixo}`);
