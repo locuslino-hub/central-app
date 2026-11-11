@@ -110,6 +110,13 @@ export type EventoFeito = Base & {
  */
 export type CorDaSala = Base & { chave: string; salaId: string | null };
 
+/**
+ * Um gole. `data` AAAA-MM-DD e `hora` HH:MM de Lisboa; `ml` inteiro de 1 a 5000.
+ * Um registro por gole, com id próprio: dois aparelhos registrando no mesmo
+ * minuto somam, nada se perde. Desfazer grava a lápide (`apagado`).
+ */
+export type AguaRegistro = Base & { data: string; hora: string; ml: number };
+
 export type Colecoes = {
   salas: Sala;
   pessoas: Pessoa;
@@ -122,6 +129,7 @@ export type Colecoes = {
   config: Config;
   eventosFeitos: EventoFeito;
   coresDasSalas: CorDaSala;
+  agua: AguaRegistro;
 };
 
 export type Colecao = keyof Colecoes;

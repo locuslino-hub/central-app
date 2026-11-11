@@ -16,8 +16,22 @@ const HORA_VALIDA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
  * (paleta '1' a '11') ou cor da agenda (hex sem `#`).
  */
 export const CHAVE_DE_COR = /^(?:label:[A-Za-z0-9_-]{1,64}|cor:(?:[1-9]|1[01])|agenda:[0-9a-f]{6})$/;
+/** `AAAA-MM-DD`. */
+const DIA_VALIDO = /^\d{4}-\d{2}-\d{2}$/;
 
-type Tipo = 'texto' | 'texto?' | 'textoOuNulo' | 'textoOuNulo?' | 'url' | 'hora?' | 'booleano' | 'booleano?' | 'chaveDeCor';
+type Tipo =
+  | 'texto'
+  | 'texto?'
+  | 'textoOuNulo'
+  | 'textoOuNulo?'
+  | 'url'
+  | 'dia'
+  | 'hora'
+  | 'hora?'
+  | 'ml'
+  | 'booleano'
+  | 'booleano?'
+  | 'chaveDeCor';
 
 /** Campos de texto conferidos em cada coleção (ver src/dados/tipos.ts). */
 export const ESQUEMAS = {
@@ -51,6 +65,8 @@ export const ESQUEMAS = {
   },
   /** Cor do Google -> sala (null: sem sala ligada; vale a adivinhação pelo título). */
   coresDasSalas: { chave: 'chaveDeCor', salaId: 'textoOuNulo' },
+  /** Um gole por registro: dois aparelhos registrando ao mesmo tempo somam. */
+  agua: { data: 'dia', hora: 'hora', ml: 'ml' },
 } as const satisfies Record<string, Record<string, Tipo>>;
 
 export type NomeDaColecao = keyof typeof ESQUEMAS;
@@ -78,8 +94,14 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || valor === null || typeof valor === 'string';
     case 'url':
       return typeof valor === 'string' && URL_VALIDA.test(valor);
+    case 'dia':
+      return typeof valor === 'string' && DIA_VALIDO.test(valor);
+    case 'hora':
+      return typeof valor === 'string' && HORA_VALIDA.test(valor);
     case 'hora?':
       return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
+    case 'ml':
+      return typeof valor === 'number' && Number.isInteger(valor) && valor >= 1 && valor <= 5000;
     case 'booleano':
       return typeof valor === 'boolean';
     case 'booleano?':
