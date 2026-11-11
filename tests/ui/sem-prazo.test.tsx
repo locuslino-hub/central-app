@@ -1,10 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
+import { configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apagar, listar, semear } from '../../src/dados/loja';
 import { SemPrazo } from '../../src/ui/SemPrazo';
 import { criar } from '../apoio/tarefas';
 
 // Quinta-feira, 2026-11-05, 12:20 (Europe/Lisbon). Só a data é falsa.
+// Esperas pelo que aparece na tela, nunca por tempo fixo; o teto alto só vale
+// para a máquina carregada (como em salas-pessoas.test.tsx).
+configure({ asyncUtilTimeout: 5000 });
+
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(Date.parse('2026-11-05T12:20:00Z'));
@@ -193,7 +197,8 @@ describe('Sem prazo', () => {
     fireEvent.click(entendi);
 
     await waitFor(async () => expect((await unica()).semanaVencida).toBeUndefined());
-    expect(screen.queryByText(/a semana de 26\/10 acabou/)).toBeNull();
+    // A tela redesenha depois da gravação (bem depois, com a máquina carregada): espera por ela.
+    await waitFor(() => expect(screen.queryByText(/a semana de 26\/10 acabou/)).toBeNull());
     expect(screen.getByText('Ler artigo da Aurora')).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Ler artigo da Aurora' })));
   });
