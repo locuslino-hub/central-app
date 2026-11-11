@@ -1,6 +1,7 @@
 // O contador de água (Tarefa 26): o cartão completo da coluna direita (e do topo
 // do Agora no celular e no tablet) e a versão curta, para quando o chat está aberto.
 // As contas são de dados/agua.ts (puras); aqui só se juntam os dados vivos e o desenho.
+// O selo, o quadro de dica e os botões ¼ ½ ¾ Toda também servem à página expandida (AguaPagina.tsx).
 // Regras e textos: docs/superpowers/specs/2026-11-09-agua.md (cartão completo, versão curta).
 import { useId, useState } from 'preact/hooks';
 import {
@@ -25,10 +26,10 @@ import './agua.css';
 // ---- Pequenas peças ----
 
 /** Número do jeito do Brasil: `2.000`. */
-const n = (ml: number) => ml.toLocaleString('pt-BR');
+export const n = (ml: number) => ml.toLocaleString('pt-BR');
 
 /** `HH:MM`, de minutos desde 00:00. */
-const hm = (minuto: number) => `${String(Math.floor(minuto / 60)).padStart(2, '0')}:${String(Math.round(minuto % 60)).padStart(2, '0')}`;
+export const hm = (minuto: number) => `${String(Math.floor(minuto / 60)).padStart(2, '0')}:${String(Math.round(minuto % 60)).padStart(2, '0')}`;
 
 const BOTOES: readonly { fracao: Fracao; nome: string }[] = [
   { fracao: 0.25, nome: '¼' },
@@ -69,15 +70,16 @@ export async function desfazerUltimoGole(dia: string): Promise<void> {
   if (ultimo) await apagar('agua', ultimo.id);
 }
 
-/** Até a página da Tarefa 27 existir, tocar no anel ou no total não faz nada. */
-export const abrirPaginaDaAgua = () => {};
-
 // ---- O que os dois cartões leem ----
 
-type AguaDoDia = {
+export type AguaDoDia = {
   dia: string;
   minuto: number;
   total: number;
+  /** Todos os registros guardados (de todos os dias, apagados fora do alcance de `goleDeHoje`). Vazio enquanto lê. */
+  registros: readonly AguaRegistro[];
+  /** Os goles de hoje, por hora crescente. */
+  doDia: readonly AguaRegistro[];
   /** O último gole de hoje (o que o Desfazer tira). */
   ultimo: AguaRegistro | undefined;
   sit: Situacao;
@@ -89,7 +91,7 @@ type AguaDoDia = {
   erro: string;
 };
 
-function useAguaDoDia(): AguaDoDia {
+export function useAguaDoDia(): AguaDoDia {
   const registros = useAgua();
   const dia = useDia();
   const agora = useAgora();
@@ -110,6 +112,8 @@ function useAguaDoDia(): AguaDoDia {
     dia,
     minuto,
     total,
+    registros: lista,
+    doDia,
     ultimo: doDia[doDia.length - 1],
     sit: situacao(total, minuto),
     porcento: Math.min(100, Math.round((total / META_ML) * 100)),
@@ -132,14 +136,58 @@ const SELO = {
   'em-dia': { classe: 'ok', texto: () => 'No ritmo' },
 } as const;
 
+/** O selo do título: "No ritmo", "Atrás N mL" ou "Meta batida ✓". */
+export function SeloDaAgua({ sit }: { sit: Situacao }) {
+  const selo = SELO[sit.estado];
+  return <span class={`agua-selo ${selo.classe}`}>{selo.texto(sit)}</span>;
+}
+
+/** O quadro de dica: o que beber para alcançar (com garrafinhas coral), a folga e o próximo gole, ou a meta batida. */
+export function QuadroDaDica({ sit, minuto }: { sit: Situacao; minuto: number }) {
+  return (
+    <div class={`agua-dica ${sit.estado === 'meta' ? 'meta' : sit.estado === 'atras' ? 'atras' : 'ok'}`}>
+      <span class="agua-dica-texto">
+        <TextoDaDica sit={sit} minuto={minuto} />
+      </span>
+      {sit.estado === 'atras' && (
+        <span class="garrafinhas" aria-hidden="true">
+          {fracoesDaSugestao(sit.sugestao.quartos).map((f, i) => (
+            <Garrafinha key={i} fracao={f} cor="coral" />
+          ))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Os quatro botões ¼ ½ ¾ Toda; o sugerido sai em azul cheio, com a etiqueta "sugerido". */
+export function BotoesDeFracao({ sit, registrar }: { sit: Situacao; registrar: (ml: number) => void }) {
+  const sugerida = sit.estado === 'atras' ? sit.sugestao.botao : null;
+  return (
+    <div class="agua-fracoes" role="group" aria-label="Quanto você bebeu">
+      {BOTOES.map(({ fracao, nome }) => {
+        const ml = GARRAFA_ML * fracao;
+        const sug = sugerida === fracao;
+        return (
+          // A etiqueta "sugerido" é do envoltório, não do botão: assim sobra um pouco para os lados sem o botão "transbordar".
+          <div key={fracao} class="agua-fracao" data-sugerido={sug ? 'true' : undefined}>
+            <button type="button" class={sug ? 'sugerido' : undefined} aria-label={`${nome}, ${n(ml)} mL${sug ? ', sugerido' : ''}`} onClick={() => registrar(ml)}>
+              <b>{nome}</b>
+              <span>{n(ml)} mL</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- O cartão completo ----
 
 export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
   const idTitulo = useId();
   const { total, minuto, sit, porcento, ultimo, registrar, desfazer, erro } = useAguaDoDia();
-  const selo = SELO[sit.estado];
   const garrafa = garrafaDaVez(total);
-  const sugerida = sit.estado === 'atras' ? sit.sugestao.botao : null;
 
   return (
     <section class="cartao-agua" aria-labelledby={idTitulo}>
@@ -148,7 +196,7 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
           <Icone nome="gota" />
           Água
         </h2>
-        <span class={`agua-selo ${selo.classe}`}>{selo.texto(sit)}</span>
+        <SeloDaAgua sit={sit} />
       </header>
 
       <button type="button" class="agua-resumo" aria-label={`${n(total)} mL de ${n(META_ML)} mL, ${porcento}%. Abrir a página da água`} onClick={aoAbrir}>
@@ -168,18 +216,7 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
 
       <Trilha total={total} minuto={minuto} sit={sit} />
 
-      <div class={`agua-dica ${sit.estado === 'meta' ? 'meta' : sit.estado === 'atras' ? 'atras' : 'ok'}`}>
-        <span class="agua-dica-texto">
-          <TextoDaDica sit={sit} minuto={minuto} />
-        </span>
-        {sit.estado === 'atras' && (
-          <span class="garrafinhas" aria-hidden="true">
-            {fracoesDaSugestao(sit.sugestao.quartos).map((f, i) => (
-              <Garrafinha key={i} fracao={f} cor="coral" />
-            ))}
-          </span>
-        )}
-      </div>
+      <QuadroDaDica sit={sit} minuto={minuto} />
 
       <p class="agua-vez">
         <Garrafinha fracao={garrafa.fracao} />
@@ -191,21 +228,7 @@ export function CartaoAgua({ aoAbrir }: { aoAbrir: () => void }) {
         </span>
       </p>
 
-      <div class="agua-fracoes" role="group" aria-label="Quanto você bebeu">
-        {BOTOES.map(({ fracao, nome }) => {
-          const ml = GARRAFA_ML * fracao;
-          const sug = sugerida === fracao;
-          return (
-            // A etiqueta "sugerido" é do envoltório, não do botão: assim sobra um pouco para os lados sem o botão "transbordar".
-            <div key={fracao} class="agua-fracao" data-sugerido={sug ? 'true' : undefined}>
-              <button type="button" class={sug ? 'sugerido' : undefined} aria-label={`${nome}, ${n(ml)} mL${sug ? ', sugerido' : ''}`} onClick={() => registrar(ml)}>
-                <b>{nome}</b>
-                <span>{n(ml)} mL</span>
-              </button>
-            </div>
-          );
-        })}
-      </div>
+      <BotoesDeFracao sit={sit} registrar={registrar} />
 
       <div class="agua-rodape">
         <span role="status">{ultimo ? `Último: ${ultimo.hora} · ${n(ultimo.ml)} mL` : 'Nada registrado ainda'}</span>

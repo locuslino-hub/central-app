@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Mensagem } from '../chat/conversa';
 import { PAINEIS_DIREITOS, type Painel } from '../rotas';
 import { AgoraCurto } from './Agora';
-import { abrirPaginaDaAgua, AguaCurta, CartaoAgua } from './Agua';
+import { AguaCurta, CartaoAgua } from './Agua';
+import { AguaPagina } from './AguaPagina';
 import { Chat, useConversa } from './Chat';
 import { Icone } from './icones';
 
@@ -38,6 +39,9 @@ function guardarChatAberto(aberto: boolean) {
  */
 export function PainelDireito({ semChat = false, semAgora = false }: { semChat?: boolean; semAgora?: boolean }) {
   const [chatAberto, setChatAberto] = useState(lerChatAberto);
+  // A página da água abre do anel do cartão (completo ou curto) e é um diálogo: não ocupa lugar na coluna.
+  const [paginaDaAgua, setPaginaDaAgua] = useState(false);
+  const abrirPaginaDaAgua = () => setPaginaDaAgua(true);
   const mudarChat = (aberto: boolean) => {
     setChatAberto(aberto);
     guardarChatAberto(aberto);
@@ -64,6 +68,7 @@ export function PainelDireito({ semChat = false, semAgora = false }: { semChat?:
           <ChatDoPainel key={painel} aberto={chatAberto} aoMudar={mudarChat} />
         ),
       )}
+      <AguaPagina aberta={paginaDaAgua} aoFechar={() => setPaginaDaAgua(false)} />
     </aside>
   );
 }
