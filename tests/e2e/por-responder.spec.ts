@@ -269,3 +269,41 @@ for (const [nome, viewport, sufixo] of [
     });
   });
 }
+
+// Entre 1101 e 1250 px o cartão fica ao lado de A seguir, estreito: nada pode sair dele.
+for (const largura of [1101, 1180, 1250]) {
+  test.describe(`computador, ${largura} px`, () => {
+    test.use({ viewport: { width: largura, height: 900 } });
+
+    test('Por responder: nada sai do cartão e os botões têm 44 px', async ({ page }) => {
+      await page.goto('/central-app/');
+      await cadastrarMarina(page);
+      await abrir(page, '#/');
+      const cartao = page.getByRole('main').getByRole('region', { name: /Por responder/ });
+      await expect(cartao.getByRole('listitem')).toHaveCount(4);
+
+      if (process.env.CAPTURAS_T14) await cartao.screenshot({ path: join(process.env.CAPTURAS_T14, `por-responder-${largura}.png`) });
+      const medidas = await cartao.evaluate((el) => {
+        const caixa = el.getBoundingClientRect();
+        const saindo: string[] = [];
+        for (const filho of el.querySelectorAll<HTMLElement>('*')) {
+          const r = filho.getBoundingClientRect();
+          if (r.width === 0) continue;
+          if (r.right > caixa.right + 0.5 || r.left < caixa.left - 0.5) saindo.push(`${filho.tagName}.${filho.className} ${Math.round(r.left)}-${Math.round(r.right)} (cartão ${Math.round(caixa.left)}-${Math.round(caixa.right)})`);
+        }
+        const linhas = [...el.querySelectorAll<HTMLElement>('li')].map((li) => li.scrollWidth - li.clientWidth);
+        return { cartao: el.scrollWidth - el.clientWidth, linhas, saindo: saindo.slice(0, 5) };
+      });
+      expect(medidas.cartao).toBeLessThanOrEqual(0);
+      expect(medidas.linhas.every((dif) => dif <= 0)).toBe(true);
+      expect(medidas.saindo).toEqual([]);
+      const pequenosNoCartao = await cartao.evaluate((el) =>
+        [...el.querySelectorAll<HTMLElement>('a[href], button')]
+          .map((c) => ({ t: c.textContent?.trim().slice(0, 20), r: c.getBoundingClientRect() }))
+          .filter((c) => c.r.width > 0 && (c.r.height < 43.5 || c.r.width < 43.5))
+          .map((c) => `${c.t} (${Math.round(c.r.width)}x${Math.round(c.r.height)})`),
+      );
+      expect(pequenosNoCartao).toEqual([]);
+    });
+  });
+}
