@@ -50,7 +50,7 @@ test.describe('celular, 390 px', () => {
     const cartao = principal.getByRole('article');
     await expect(cartao.getByText('Casa', { exact: true })).toBeVisible();
     await expect(cartao.getByText('"Banheiro" costuma ser Casa.')).toBeVisible();
-    await expect(cartao.getByText('Sem prazo')).toBeVisible();
+    await expect(cartao.getByText('Hoje', { exact: true })).toBeVisible();
     await expect(campo).toHaveValue('');
 
     expect(await pequenos(page)).toEqual([]);
