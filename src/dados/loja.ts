@@ -216,12 +216,12 @@ function enfileirar(tx: Escrita, colecao: Colecao, id: string) {
 // ---- Espelho no Google (feito espelhado) ----
 
 /**
- * O que a tarefa espelho no Google Tarefas mostra. `null`: a tarefa não é
- * espelhada (não existe, ou é compromisso antigo com hora, que vai para o
- * Google Agenda pela migração).
+ * O que a tarefa espelho no Google Tarefas mostra. `null`: a tarefa não existe.
+ * Tarefa com hora (`inicio`, decisão de 11/11) também é espelhada: o Google
+ * Tarefas guarda só o dia, então a hora não entra no que a espelho mostra.
  */
 export function espelhoDaTarefa(tarefa: Tarefa | undefined): string | null {
-  if (!tarefa || tarefa.inicio) return null;
+  if (!tarefa) return null;
   return JSON.stringify([String(tarefa.titulo ?? ''), tarefa.data ?? null, !!tarefa.feito, !!tarefa.apagado]);
 }
 

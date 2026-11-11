@@ -2,7 +2,6 @@
 // poder ser testado: main.tsx só liga isto e desenha a tela.
 import { lerConexao } from './conexao/guarda';
 import { enfileirarEspelhosQueFaltam, semear, semearPalavras } from './dados/loja';
-import { migrarCompromissos } from './dados/migrar';
 import { iniciarSincronia, sincronizar } from './dados/sincronia';
 import { iniciarVirada } from './dados/virada';
 
@@ -20,8 +19,9 @@ export function iniciarApp() {
   semear().catch((erro: unknown) => console.error('Não consegui criar as salas iniciais', erro));
   // As palavras que a memória do chat já conhece ("banheiro" é Casa...).
   semearPalavras().catch((erro: unknown) => console.error('Não consegui criar as palavras iniciais', erro));
-  // Compromissos que o chat guardava como tarefa com hora vão para o Google Agenda (uma vez, sem duplicar).
-  migrarCompromissos().catch((erro: unknown) => console.error('Não consegui levar os compromissos para a agenda', erro));
+  // Tarefa com hora de início é tarefa (decisão de 11/11): o app não a leva mais
+  // para o Google Agenda. A migração antiga (dados/migrar.ts) não roda mais; um
+  // pedido dela que ainda esteja na fila termina pela sincronia.
   // Tarefas abertas sem espelho no Google Tarefas (de antes do espelho) entram na fila uma vez.
   enfileirarEspelhosQueFaltam().catch((erro: unknown) => console.error('Não consegui pôr as tarefas no espelho', erro));
   iniciarSincronia();

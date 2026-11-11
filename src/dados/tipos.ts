@@ -18,9 +18,11 @@ export type Pessoa = Base & { nome: string; salaId: string; papel?: string; emai
 /**
  * `data`: `AAAA-MM-DD`. `semana`: a segunda-feira da semana, `AAAA-MM-DD`.
  * Sem `data` e sem `semana` = Sem prazo. `prazoHora` só existe em tarefa com prazo.
- * `inicio` (`HH:MM`, R28): só em tarefas antigas, de quando o chat guardava
- * compromisso como tarefa com hora. Hoje o compromisso vai para o Google Agenda;
- * `migrarCompromissos` leva essas tarefas para lá e o app não cria mais nenhuma.
+ * `inicio` (`HH:MM`): tarefa com hora (decisão de 11/11: a frase do chat disse
+ * "tarefa" ou "atividade" com dia e hora). Aparece em Atividades e como bloco
+ * na Agenda, pela `duracaoMin`. Também as tarefas antigas de quando o chat
+ * guardava compromisso assim (R28); a migração que as levava ao Google Agenda
+ * (`migrarCompromissos`) não roda mais.
  */
 export type Tarefa = Base & {
   titulo: string;

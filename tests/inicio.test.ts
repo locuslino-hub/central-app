@@ -47,21 +47,18 @@ describe('iniciarApp (o que o main.tsx liga ao abrir)', () => {
     });
   });
 
-  it('põe na fila do Google Agenda as tarefas antigas com hora de início, uma vez só', async () => {
+  it('tarefa com hora de início fica tarefa: abrir o app não a leva para o Google Agenda (decisão de 11/11)', async () => {
     const { listar, listarPendentes, salvar } = await import('../src/dados/loja');
-    await salvar('tarefas', {
-      titulo: 'Reunião com a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
-      duracaoConfirmada: true, feito: false, fixada: false, marcar: false,
+    const tarefa = await salvar('tarefas', {
+      titulo: 'Ligar para a Marina', salaId: null, data: '2026-11-06', inicio: '15:30', duracaoMin: 60,
+      duracaoConfirmada: false, feito: false, fixada: false, marcar: false,
     });
     const { iniciarApp } = await import('../src/inicio');
 
     iniciarApp();
-    await vi.waitFor(async () => expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toHaveLength(1));
-    expect(await listar('tarefas')).toHaveLength(1); // a tarefa só some depois de o script confirmar
-
-    iniciarApp();
-    await new Promise((pronto) => setTimeout(pronto, 100));
-    expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toHaveLength(1);
+    await new Promise((pronto) => setTimeout(pronto, 150));
+    expect((await listarPendentes()).filter((p) => p.tipo === 'agenda')).toEqual([]);
+    expect(await listar('tarefas')).toEqual([expect.objectContaining({ id: tarefa.id, inicio: '15:30' })]);
   });
 
   it('pede armazenamento persistente uma vez, sem mostrar nada e sem quebrar se não houver', async () => {

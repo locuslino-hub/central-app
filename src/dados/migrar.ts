@@ -1,3 +1,7 @@
+// DESLIGADA (11/11): o dono decidiu que tarefa com hora é tarefa (fica em
+// Atividades e como bloco na Agenda), então o app não chama mais esta migração;
+// os pedidos que ela já pôs na fila terminam pela sincronia (`concluirMigracao`).
+//
 // Migração dos compromissos antigos (Tarefa 12): até aqui o chat guardava
 // compromisso como tarefa com hora de início (`Tarefa.inicio`, R28). Agora o
 // compromisso mora no Google Agenda. Em duas fases, para nunca perder nada:
