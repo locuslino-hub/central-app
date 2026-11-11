@@ -284,9 +284,9 @@ describe('AguaCurta', () => {
     expect(curta().querySelectorAll('button.sugerido')).toHaveLength(0);
   });
 
-  it('sugerindo uma garrafa inteira ou mais, o botão diz "+1 garrafa" (e se chama "+Toda" para o leitor de tela)', async () => {
+  it('sugerindo uma garrafa inteira ou mais, o botão diz "+1 garrafa" e o nome falado contém o mesmo texto', async () => {
     render(<AguaCurta aoAbrir={() => {}} />); // 0 mL, falta 619
-    const botaoToda = await waitFor(() => botao('+Toda, 500 mL, sugerido', curta()));
+    const botaoToda = await waitFor(() => botao('+1 garrafa, 500 mL, sugerido', curta()));
     expect(botaoToda.textContent).toBe('+1 garrafa500 mL');
     expect(botaoToda.classList.contains('sugerido')).toBe(true);
   });
@@ -337,7 +337,7 @@ describe('na casca', () => {
     await waitFor(() => expect(lado().querySelector('.cartao-agua.curto')).not.toBeNull());
     expect(lado().querySelectorAll('.cartao-agua')).toHaveLength(1);
     expect(within(lado()).queryByRole('button', { name: /^¼, 125 mL$/ })).toBeNull();
-    const mais = await within(lado()).findByRole('button', { name: /^\+Toda, 500 mL/ });
+    const mais = await within(lado()).findByRole('button', { name: /^\+1 garrafa, 500 mL/ });
     expect(mais.classList.contains('sugerido')).toBe(true);
     // Recolher volta ao cartão completo.
     fireEvent.click(alternar());

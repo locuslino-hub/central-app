@@ -124,7 +124,10 @@ test.describe('largura mínima, 1101 × 800', () => {
     await coluna(page).getByRole('button', { name: /^Chat/ }).click();
     const curta = page.locator('.cartao-agua.curto');
     await expect(curta).toBeVisible();
+    // Estado fixo: sem goles, a sugestão é a garrafa inteira ("+1 garrafa"), o texto mais largo do botão.
+    await expect(curta.getByRole('button', { name: '+1 garrafa, 500 mL, sugerido' })).toBeVisible();
     await semTransbordar(curta);
+    expect((await curta.boundingBox())!.height).toBeLessThanOrEqual(80);
   });
 });
 

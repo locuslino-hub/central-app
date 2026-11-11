@@ -330,7 +330,8 @@ export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
   // Atrás: a garrafa sugerida (destacada). Em dia, meta batida ou ainda lendo: ¼, sem destaque.
   const sugerida = sit.estado === 'atras' && !carregando;
   const fracao: Fracao = sugerida ? sit.sugestao.botao : 0.25;
-  const nome = fracao === 1 ? 'Toda' : BOTOES.find((b) => b.fracao === fracao)!.nome;
+  // O nome falado contém o texto visível (WCAG 2.5.3): uma garrafa inteira é "1 garrafa" nos dois.
+  const nome = fracao === 1 ? '1 garrafa' : BOTOES.find((b) => b.fracao === fracao)!.nome;
   const ml = GARRAFA_ML * fracao;
 
   return (
@@ -356,12 +357,11 @@ export function AguaCurta({ aoAbrir }: { aoAbrir: () => void }) {
         </button>
         <button
           type="button"
-          class={`agua-mais${sugerida ? ' sugerido' : ''}`}
+          class={`agua-mais${sugerida ? ' sugerido' : ''}${fracao === 1 ? ' inteira' : ''}`}
           aria-label={`+${nome}, ${n(ml)} mL${sugerida ? ', sugerido' : ''}`}
           onClick={() => registrar(ml)}
         >
-          {/* Uma garrafa inteira cabe melhor escrita assim; o nome falado continua "Toda". */}
-          {fracao === 1 ? '+1 garrafa' : `+${nome}`}
+          +{nome}
           <small>{n(ml)} mL</small>
         </button>
       </div>

@@ -442,6 +442,15 @@
   font-weight: 500;
   color: var(--tinta3);
 }
+/* "+1 garrafa" é o texto mais largo: quebra em duas linhas ("+1" e "garrafa") num botão estreito, para a linha toda caber em 80 px a 242 px de cartão. */
+.agua-mais.inteira {
+  width: 4rem;
+  padding: 4px 4px;
+  font-size: 0.9rem;
+  line-height: 1.1;
+  white-space: normal;
+  text-align: center;
+}
 .agua-mais.sugerido {
   background: var(--azul);
   box-shadow: 0 0 0 3px var(--azul-f);
