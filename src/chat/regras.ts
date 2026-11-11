@@ -32,7 +32,7 @@ export type Item = {
   marcar: boolean;
   pessoaId?: string;
   /** Por que a sala foi escolhida, para o cartão mostrar. */
-  motivoSala?: 'frase' | 'memoria' | 'pessoa';
+  motivoSala?: 'frase' | 'memoria' | 'pessoa' | 'ia';
 };
 
 export type Resultado = { itens: Item[]; certeza: 'alta' | 'baixa'; vazia: boolean };

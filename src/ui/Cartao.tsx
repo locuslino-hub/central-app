@@ -1,6 +1,7 @@
 // Cartão do chat (Tarefa 8), conforme esboco-chat/chat.html: tipo, título,
-// sala, quando e o motivo da sala, com Trocar sala e Desfazer. Com certeza
-// baixa, pede confirmação antes de guardar. Tudo é texto: nada de HTML da frase.
+// sala, quando e o motivo da sala, com Trocar sala e Desfazer. O item já vem
+// guardado, mesmo com certeza baixa; só se a gravação falhar o cartão oferece
+// Guardar e Descartar. Tudo é texto: nada de HTML da frase.
 import { useEffect, useRef } from 'preact/hooks';
 import {
   abrirTroca,
@@ -62,6 +63,8 @@ function motivo(cartao: EstadoCartao, sala: string | undefined): string | null {
         : `Uma palavra da frase costuma ser ${onde}.`;
     case 'pessoa':
       return `${item.pessoaNome ?? 'A pessoa citada'} fica em ${onde}.`;
+    case 'ia':
+      return 'A IA escolheu a sala.';
     default:
       return null;
   }
@@ -111,7 +114,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
   const nomeDaSala = item.salaId === null ? undefined : salas.find((sala) => sala.id === item.salaId)?.nome;
   const pergunta = item.pessoaNova && item.salaId === null ? `Em que sala fica ${item.pessoaNova}?` : null;
   const mostrarSalas = cartao.trocando || !!pergunta;
-  const aConfirmar = situacao === 'confirmar' || situacao === 'erro';
+  const aConfirmar = situacao === 'erro';
   const porque = motivo(cartao, nomeDaSala);
 
   const escolher = (salaId: string) => {
@@ -132,7 +135,6 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       <p class="chat-titulo">{item.titulo}</p>
       <p class="chat-quando">{descreverQuando(item, hoje)}</p>
       {porque && <p class="chat-motivo">{porque}</p>}
-      {situacao === 'confirmar' && <p class="chat-pergunta">Confira antes de guardar.</p>}
       {situacao === 'erro' && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
       {cartao.aviso && (

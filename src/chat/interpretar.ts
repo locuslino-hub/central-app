@@ -3,7 +3,9 @@
 //
 // Mesclagem com a IA: data, hora e tipo vêm sempre das regras; a IA dá o
 // título, a sala quando regras e memória não decidem, e a divisão de frases
-// longas em vários itens. Pessoa conhecida citada fica no título. A IA só é
+// longas em vários itens. Pessoa conhecida citada fica no título. A sala que a
+// IA escolhe não baixa a certeza: o item é guardado e o cartão oferece Trocar
+// sala, como na sala das regras. A IA só é
 // chamada com certeza baixa, sala indefinida ou frase com mais de 20 palavras,
 // e tem 30 s para responder; sem resposta útil, valem as regras.
 
@@ -176,8 +178,7 @@ function mesclar(frase: string, hoje: string, daIA: ItemIA[], memoria: MemoriaDo
       const sala = salaPeloNome(sugestao.sala, salas);
       if (sala) {
         item.salaId = sala;
-        delete item.motivoSala;
-        certeza = 'baixa';
+        item.motivoSala = 'ia';
       }
     }
     return paraChat(item, trecho, certeza, memoria);

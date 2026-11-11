@@ -148,8 +148,9 @@ describe('mesclagem', () => {
     expect(item.inicio).toBeUndefined();
     expect(item.titulo).toBe('Organizar os papéis do escritório');
     expect(item.salaId).toBe('sala-casa');
-    // Sala escolhida pela IA: o dono confere o cartão antes de guardar.
-    expect(item.certeza).toBe('baixa');
+    // Sala escolhida pela IA: guarda na hora, como a das regras; o cartão diz quem escolheu e oferece Trocar sala.
+    expect(item.certeza).toBe('alta');
+    expect(item.motivoSala).toBe('ia');
   });
 
   it('título da IA sem "Marina" recebe o nome dela', async () => {
