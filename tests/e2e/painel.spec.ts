@@ -294,7 +294,8 @@ for (const [nome, viewport, sufixo] of [
 
       await destaque.getByRole('button', { name: 'Concluir: Ler artigo da Renata' }).click();
       await expect(destaque.getByRole('heading', { name: 'Preparar slides da aula' })).toBeVisible();
-      const desfazer = principal.getByRole('button', { name: 'Desfazer' });
+      // Só o do aviso da tarefa: o cartão Água, no topo da página, tem o seu próprio Desfazer.
+      const desfazer = principal.getByRole('tabpanel').getByRole('button', { name: 'Desfazer' });
       await expect(desfazer).toBeFocused();
       await desfazer.click();
       await expect(destaque.getByRole('heading', { name: 'Ler artigo da Renata' })).toBeVisible();

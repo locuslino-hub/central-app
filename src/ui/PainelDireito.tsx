@@ -1,15 +1,17 @@
-// Coluna da direita no computador: Agora e Chat. O Agora é o cartão curto
-// (destaque, tempo livre e os próximos); a página #/agora tem o resto.
+// Coluna da direita no computador: Agora, Água e Chat. O Agora é o cartão curto
+// (destaque, tempo livre e os próximos); a página #/agora tem o resto. A Água é
+// o cartão completo, e com o chat aberto encolhe para a versão curta.
 // O chat começa recolhido numa barra no pé da coluna, e o Agora fica com o
 // espaço; abre ao tocar na barra. Aberto ou recolhido fica guardado no aparelho.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Mensagem } from '../chat/conversa';
 import { PAINEIS_DIREITOS, type Painel } from '../rotas';
 import { AgoraCurto } from './Agora';
+import { abrirPaginaDaAgua, AguaCurta, CartaoAgua } from './Agua';
 import { Chat, useConversa } from './Chat';
 import { Icone } from './icones';
 
-const TITULO: Record<Painel, string> = { agora: 'Agora', chat: 'Chat' };
+const TITULO: Record<Painel, string> = { agora: 'Agora', agua: 'Água', chat: 'Chat' };
 
 /** Só neste aparelho (localStorage). Sem acesso ao armazenamento, começa recolhido e não guarda. */
 export const CHAVE_DO_CHAT = 'central-chat-aberto';
@@ -40,6 +42,9 @@ export function PainelDireito({ semChat = false, semAgora = false }: { semChat?:
     setChatAberto(aberto);
     guardarChatAberto(aberto);
   };
+  // O chat que a página já é (`semChat`) não está na coluna: com ele fora, a água não precisa encolher.
+  const aguaCurta = chatAberto && !semChat;
+  // A água aparece sempre (também em #/agora e #/chat, que não a repetem).
   const paineis = PAINEIS_DIREITOS.filter((painel) => !(semChat && painel === 'chat') && !(semAgora && painel === 'agora'));
   return (
     <aside class="painel-direito" aria-label="Agora e chat" data-chat={chatAberto ? 'aberto' : 'recolhido'}>
@@ -49,6 +54,12 @@ export function PainelDireito({ semChat = false, semAgora = false }: { semChat?:
             <h2 id="painel-agora">{TITULO.agora}</h2>
             <AgoraCurto />
           </section>
+        ) : painel === 'agua' ? (
+          aguaCurta ? (
+            <AguaCurta key={painel} aoAbrir={abrirPaginaDaAgua} />
+          ) : (
+            <CartaoAgua key={painel} aoAbrir={abrirPaginaDaAgua} />
+          )
         ) : (
           <ChatDoPainel key={painel} aberto={chatAberto} aoMudar={mudarChat} />
         ),

@@ -31,7 +31,10 @@ export function Chat() {
   const ultimaMensagem = conversa[conversa.length - 1];
   useEffect(() => {
     const ultima = log.current?.lastElementChild as HTMLElement | null | undefined;
-    ultima?.scrollIntoView?.({ block: 'nearest' });
+    // Mensagem mais alta que a conversa visível (coluna baixa, com a água e o Agora em cima): vale o pé
+    // dela, onde ficam os botões, e não o topo.
+    const maisAltaQueOLog = !!ultima && ultima.offsetHeight > (log.current?.clientHeight ?? Infinity);
+    ultima?.scrollIntoView?.({ block: maisAltaQueOLog ? 'end' : 'nearest' });
     // No celular a página rola e a barra de baixo é fixa: o campo (logo abaixo da mensagem nova)
     // também precisa ficar à vista, acima da barra. `scroll-margin` em chat.css reserva o espaço dela.
     if (ultima) formulario.current?.scrollIntoView?.({ block: 'end' });

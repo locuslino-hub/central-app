@@ -25,8 +25,8 @@ export type IdDaRota =
   | 'nao-encontrada';
 
 /** O que o painel direito do computador aceita. */
-export type Painel = 'agora' | 'chat';
-export const PAINEIS_DIREITOS: readonly Painel[] = ['agora', 'chat'];
+export type Painel = 'agora' | 'agua' | 'chat';
+export const PAINEIS_DIREITOS: readonly Painel[] = ['agora', 'agua', 'chat'];
 
 export type RotaAtual = {
   id: IdDaRota;

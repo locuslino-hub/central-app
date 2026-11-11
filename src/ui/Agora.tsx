@@ -11,7 +11,8 @@ import type { Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { AvisoDasAcoes, useAcoes, useMarcar, type Acoes } from './Acoes';
 import { ASeguir, duracaoDoItem, porQue, ResponderDoItem, salaDoItem, SeloDoEncaixe, TempoLivre, textoDoTempoLivre, tituloDoItem } from './ASeguir';
 import { FecharDia } from './FecharDia';
-import { usePessoas, useSalas } from './hooks';
+import { abrirPaginaDaAgua, CartaoAgua } from './Agua';
+import { usePessoas, useSalas, useTela } from './hooks';
 import { corDaSala } from './Menu';
 import { minuscula } from './quando';
 import { porDecidir, Triagem } from './Triagem';
@@ -224,6 +225,8 @@ function ConteudoDoAgora({ dia, salas }: { dia: AgoraDoDia; salas: readonly Sala
 /** A página #/agora: abas Agora, Triagem e Fechar o dia (padrão de abas, com setas). */
 export function AgoraPagina() {
   const dia = useAgoraDoDia();
+  // Sem coluna direita (celular e tablet), a água vem no topo da página; no computador já está na coluna.
+  const semColuna = useTela() !== 'computador';
   const salas = useSalas();
   const [aba, setAba] = useState<Aba>('agora');
   const botoes = useRef<Partial<Record<Aba, HTMLButtonElement | null>>>({});
@@ -256,6 +259,7 @@ export function AgoraPagina() {
 
   return (
     <div class="agora-pagina">
+      {semColuna && <CartaoAgua aoAbrir={abrirPaginaDaAgua} />}
       <div class="abas" role="tablist" aria-label="Modo do Agora" onKeyDown={aoTeclar}>
         {ABAS.map((id) => (
           <button

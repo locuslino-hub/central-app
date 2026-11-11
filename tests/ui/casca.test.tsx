@@ -140,12 +140,12 @@ describe('computador (1280 px): menu à esquerda, página, painel direito', () =
     expect(menu.querySelectorAll('[aria-current]')).toHaveLength(1);
   });
 
-  it('o painel direito tem Agora e Chat', async () => {
+  it('o painel direito tem Agora, Água e Chat', async () => {
     await mostrar('#/', 1280);
     const painel = screen.getByRole('complementary', { name: 'Agora e chat' });
     const titulos = within(painel).getAllByRole('heading').map((h: HTMLElement) => h.textContent);
     // Um cartão para cada painel que a rota diz aceitar, na mesma ordem.
-    expect(titulos).toEqual(PAINEIS_DIREITOS.map((p) => (p === 'agora' ? 'Agora' : 'Chat')));
+    expect(titulos).toEqual(PAINEIS_DIREITOS.map((p) => (p === 'agora' ? 'Agora' : p === 'agua' ? 'Água' : 'Chat')));
   });
 
   it('não mostra a barra inferior nem o botão Mais', async () => {

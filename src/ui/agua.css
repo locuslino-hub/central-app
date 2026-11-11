@@ -1,0 +1,445 @@
+/*
+ * Água (Tarefa 26): cartão completo e versão curta. Modelo: prototipo-esbocos/agua-combinado.html.
+ * Medidas em rem (px do protótipo ÷ 15), para crescer junto com o app em telas grandes.
+ * Na largura mínima da coluna (cartão de 242 px) nada corta nem sai do cartão: o que não cabe quebra linha.
+ */
+
+.cartao-agua {
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border-radius: var(--r-g);
+  background: var(--folha);
+  box-shadow: var(--relevo);
+}
+.cartao-agua button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ---- Cabeça: título e selo ---- */
+
+.agua-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 12px;
+}
+.agua-cabeca h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.agua-cabeca .icone {
+  width: 1.33rem;
+  height: 1.33rem;
+  color: var(--azul);
+}
+.agua-selo {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.agua-selo.ok {
+  background: var(--cabe);
+  color: var(--acao2);
+}
+.agua-selo.atras {
+  background: var(--pessego);
+  color: var(--ferrugem);
+}
+.agua-selo.meta {
+  background: var(--azul-f);
+  color: var(--azul);
+}
+
+/* ---- Anel e total (um botão só: abre a página) ---- */
+
+.agua-resumo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--toque);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-p);
+  background: none;
+  text-align: left;
+}
+.agua-anel {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3.33rem;
+  height: 3.33rem;
+  border-radius: 50%;
+  background: conic-gradient(var(--azul-e) calc(var(--p) * 1%), var(--poco) 0);
+  transition: background 0.4s;
+}
+.agua-anel::after {
+  content: '';
+  position: absolute;
+  inset: 0.4rem;
+  border-radius: 50%;
+  background: var(--folha);
+}
+.agua-anel .icone {
+  position: relative;
+  z-index: 1;
+  width: 1.33rem;
+  height: 1.33rem;
+  color: var(--azul);
+}
+.agua-texto {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.2;
+}
+.agua-total {
+  display: block;
+  font-size: 1.47rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.agua-total small {
+  margin-left: 2px;
+  font-size: 0.87rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--tinta3);
+}
+.agua-sub {
+  display: block;
+  font-size: 0.83rem;
+  color: var(--tinta3);
+}
+
+/* ---- Barra do ritmo ---- */
+
+.agua-trilha {
+  position: relative;
+  height: 10px;
+  margin: 24px 0 0;
+  border-radius: 99px;
+  background: var(--poco);
+}
+.agua-bebido {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 99px;
+  background: var(--azul-e);
+  transition: width 0.5s;
+}
+.agua-falta {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 0 99px 99px 0;
+  background: repeating-linear-gradient(-45deg, #f0c9b2 0 4px, #f8e3d6 4px 8px);
+  transition: left 0.5s, width 0.5s;
+}
+.agua-alvo {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--tinta);
+  transition: left 0.5s;
+}
+.agua-alvo span {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  transform: translateX(-50%);
+  font-size: 0.73rem;
+  font-weight: 500;
+  color: var(--tinta2);
+  white-space: nowrap;
+}
+.agua-alvo.dir span {
+  transform: translateX(-100%);
+}
+.agua-alvo.esq span {
+  transform: none;
+}
+
+/* ---- Quadro de dica ---- */
+
+.agua-dica {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.agua-dica.atras {
+  background: var(--dica-atras);
+  color: #5a2a10;
+}
+.agua-dica.ok {
+  background: var(--dica-ok);
+  color: var(--acao2);
+}
+.agua-dica.meta {
+  background: var(--azul-f);
+  color: var(--azul);
+}
+.agua-dica b {
+  font-weight: 600;
+}
+.agua-dica-texto {
+  flex: 1;
+  min-width: 0;
+}
+/* As garrafinhas coral ficam ao lado do texto, na horizontal; passando de 3, quebram em duas fileiras. */
+.garrafinhas {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+  align-self: center;
+  justify-content: flex-end;
+  max-width: calc(3 * 0.93rem + 2 * 4px);
+}
+.garrafinha {
+  display: block;
+  width: 0.93rem;
+  height: 1.6rem;
+  flex: none;
+}
+.garrafinha-vidro {
+  fill: var(--folha);
+  stroke-width: 1.3;
+}
+.garrafinha-azul .garrafinha-vidro {
+  stroke: var(--azul-m);
+}
+.garrafinha-azul .garrafinha-liquido {
+  fill: var(--azul-e);
+}
+.garrafinha-coral .garrafinha-vidro {
+  stroke: var(--coral2);
+}
+.garrafinha-coral .garrafinha-liquido {
+  fill: var(--coral2);
+}
+
+/* ---- Garrafa da vez ---- */
+
+.agua-vez {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 7px;
+  font-size: 0.83rem;
+  line-height: 1.3;
+  color: var(--tinta3);
+}
+.agua-vez b {
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+/* ---- Botões ¼ ½ ¾ Toda ---- */
+
+.agua-fracoes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 9px; /* lugar da etiqueta "sugerido", que sobe um pouco acima do botão */
+}
+.agua-fracao {
+  position: relative;
+  min-width: 0;
+}
+.agua-fracoes button {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--toque);
+  padding: 5px 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--poco);
+  line-height: 1.15;
+  transition: transform 0.08s, background-color 0.15s;
+}
+.agua-fracoes button:hover {
+  background: var(--azul-f);
+}
+.agua-fracoes button:active {
+  transform: scale(0.94);
+}
+.agua-fracoes b {
+  font-size: 1rem;
+  color: var(--azul);
+}
+.agua-fracoes span {
+  font-size: 0.73rem;
+  color: var(--tinta3);
+  white-space: nowrap;
+}
+.agua-fracoes button.sugerido {
+  background: var(--azul);
+  box-shadow: 0 0 0 3px var(--azul-f);
+}
+.agua-fracoes button.sugerido b,
+.agua-fracoes button.sugerido span {
+  color: #fff;
+}
+.agua-fracao[data-sugerido]::before {
+  content: 'sugerido';
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  padding: 0 6px;
+  border-radius: 99px;
+  z-index: 1;
+  background: var(--coral);
+  color: var(--coral-t);
+  font-size: 0.67rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  translate: -50% 0;
+}
+
+/* ---- Rodapé ---- */
+
+.agua-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 8px;
+  margin-top: 4px;
+  font-size: 0.83rem;
+  color: var(--tinta3);
+}
+.agua-rodape button {
+  min-height: var(--toque);
+  padding: 0 10px;
+  margin-right: -10px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--acao);
+  font-weight: 500;
+}
+.agua-rodape button:hover:not(:disabled) {
+  background: var(--poco);
+}
+.agua-rodape button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.agua-erro {
+  margin: 6px 0 0;
+  font-size: 0.83rem;
+  color: var(--alerta);
+}
+
+/* ---- Versão curta (chat aberto): uma linha de uns 70 px ---- */
+
+.cartao-agua.curto {
+  padding: 12px 14px;
+}
+.agua-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agua-linha .agua-resumo {
+  flex: 1;
+  min-width: 0;
+  gap: 11px;
+}
+.curto .agua-anel {
+  width: 46px;
+  height: 46px;
+}
+.curto .agua-anel::after {
+  inset: 6px;
+}
+.curto .agua-anel .icone {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.agua-total-curto {
+  display: block;
+  font-size: 0.97rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.curto .agua-sub {
+  font-size: 0.83rem;
+}
+.curto .agua-sub b {
+  font-weight: 600;
+}
+.curto .agua-sub .ok {
+  color: var(--acao);
+}
+.curto .agua-sub .atras {
+  color: var(--ferrugem);
+}
+.agua-mais {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque);
+  min-height: var(--toque);
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--poco);
+  color: var(--azul);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  transition: transform 0.08s;
+}
+.agua-mais:active {
+  transform: scale(0.94);
+}
+.agua-mais small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--tinta3);
+}
+.agua-mais.sugerido {
+  background: var(--azul);
+  box-shadow: 0 0 0 3px var(--azul-f);
+  color: #fff;
+}
+.agua-mais.sugerido small {
+  color: var(--azul-f);
+}
+
+/* ---- No topo da página Agora (celular e tablet) ---- */
+
+.agora-pagina > .cartao-agua {
+  max-width: 28rem;
+  margin-bottom: 20px;
+}

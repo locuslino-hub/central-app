@@ -143,8 +143,9 @@ test.describe('computador, 1280 px', () => {
     const coluna = (await painel.boundingBox())!;
     expect(barra.height).toBeLessThan(80);
     expect(coluna.y + coluna.height - (barra.y + barra.height)).toBeLessThan(30);
-    const agora = (await painel.locator('.cartao-agora').boundingBox())!;
-    expect(barra.y - (agora.y + agora.height)).toBeLessThan(30);
+    // O Agora cresce e a Água fica logo acima da barra (o cartão Água vem entre os dois).
+    const agua = (await painel.locator('.cartao-agua').boundingBox())!;
+    expect(barra.y - (agua.y + agua.height)).toBeLessThan(30);
     expect(await pequenos(page)).toEqual([]);
 
     // Abrir: o foco vai para o campo.
