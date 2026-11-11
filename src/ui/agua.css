@@ -192,7 +192,9 @@
 
 /* ---- Quadro de dica ---- */
 
+/* O quadro não muda de altura entre atrás, em dia e meta (o diálogo não pula): o espaço de duas linhas de texto é sempre dele. */
 .agua-dica {
+  min-height: calc(2 * 1.35 * 0.9rem + 20px);
   display: flex;
   align-items: flex-start;
   gap: 9px;
@@ -228,7 +230,7 @@
   flex-wrap: wrap;
   gap: 3px 4px;
   align-self: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   max-width: calc(3 * 0.93rem + 2 * 4px);
 }
 .garrafinha {

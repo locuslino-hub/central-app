@@ -172,14 +172,14 @@ describe('gráfico "Ritmo do dia"', () => {
     expect(horas()).toEqual(['08:30', '10:50', '12:00']);
   });
 
-  it('as horas ficam depois de todas as bolinhas (por cima delas), e o traço do que falta vem depois das bolinhas dos goles', async () => {
+  it('as horas ficam depois de todas as bolinhas, também as de agora e esperado (por cima delas), e o traço do que falta vem depois das bolinhas dos goles', async () => {
     await goles([250, '08:30'], [125, '08:50'], [125, '12:00']);
     await abrir();
     await waitFor(() => expect(titulos()).toHaveLength(3));
-    const ordem = Array.from(grafico().querySelectorAll('circle.agua-grafico-gole, text.agua-grafico-hora, line.agua-grafico-falta')).map((e) =>
-      e.tagName === 'circle' ? 'bolinha' : e.tagName === 'text' ? 'hora' : 'falta',
-    );
-    expect(ordem).toEqual(['bolinha', 'bolinha', 'bolinha', 'falta', 'hora', 'hora']);
+    const ordem = Array.from(
+      grafico().querySelectorAll('circle.agua-grafico-gole, circle.agua-grafico-agora, circle.agua-grafico-esperado, text.agua-grafico-hora, line.agua-grafico-falta'),
+    ).map((e) => (e.tagName === 'circle' ? (e.classList.contains('agua-grafico-gole') ? 'bolinha' : e.classList.contains('agua-grafico-agora') ? 'agora' : 'esperado') : e.tagName === 'text' ? 'hora' : 'falta'));
+    expect(ordem).toEqual(['bolinha', 'bolinha', 'bolinha', 'falta', 'agora', 'esperado', 'hora', 'hora']);
   });
 
   it('com pouca diferença (550 contra 619 mL) o traço do que falta passa 3 pontos além das duas bolinhas e continua visível', async () => {
@@ -438,6 +438,22 @@ describe('histórico', () => {
     expect(barras[6].classList.contains('hoje')).toBe(true);
     expect(barras.filter((b) => b.classList.contains('hoje'))).toHaveLength(1);
     expect(historicoDaPagina().getByRole('heading', { name: 'Últimos 7 dias' })).toBeTruthy();
+  });
+
+  it('a barra de hoje também é "meta" quando hoje já chegou a 2.000 mL (e continua "hoje"); abaixo disso, não', async () => {
+    await goles([1000, '08:30'], [1000, '10:00']);
+    await abrir();
+    await esperarTotal('2.000 mL');
+    const hoje = () => pagina().querySelector('.agua-barra.hoje') as HTMLElement;
+    expect(hoje().classList.contains('meta')).toBe(true);
+  });
+
+  it('hoje abaixo da meta: só "hoje"', async () => {
+    await goles([1999, '08:30']);
+    await abrir();
+    await esperarTotal('1.999 mL');
+    const hoje = pagina().querySelector('.agua-barra.hoje') as HTMLElement;
+    expect(hoje.classList.contains('meta')).toBe(false);
   });
 
   it('as barras trazem o dia da semana e os mL para o leitor de tela', async () => {

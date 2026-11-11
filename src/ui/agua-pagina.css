@@ -51,7 +51,10 @@
 .agua-pag-cabeca .agua-selo {
   margin-left: 0;
 }
-/* Empilhado (celular), a folha rola por baixo da cabeça: uma linha fina marca a borda. */
+/* Quando a folha rola por baixo da cabeça (celular, ou janela baixa no computador), uma linha fina marca a borda. */
+.agua-pag-cabeca[data-rolou] {
+  border-bottom: 1px solid var(--linha);
+}
 @media (max-width: 899px) {
   .agua-pag-cabeca {
     border-bottom: 1px solid var(--linha);
@@ -91,6 +94,15 @@
 /* O histórico só desenha depois da leitura; enquanto isso fica um vão, sem "0 dias" nem "0,0 L" falsos. */
 .agua-historico-vazio {
   min-height: 12rem;
+}
+/* Uma coluna: gráfico e garrafas não esticam na janela larga de tablet; ficam centrados, com uns 700 px. */
+@media (max-width: 899px) {
+  .agua-col1,
+  .agua-col2 {
+    width: 100%;
+    max-width: 43.75rem;
+    margin-inline: auto;
+  }
 }
 @media (min-width: 900px) {
   .agua-cols {
@@ -147,6 +159,10 @@
 .agua-desfazer .icone {
   width: 1.05rem;
   height: 1.05rem;
+}
+/* `.agua-pagina button { color: inherit }` (acima) é mais específico que `.agua-desfazer`: sem isto o texto saía em tinta escura. */
+.agua-pagina .agua-desfazer {
+  color: var(--acao);
 }
 .agua-desfazer:hover:not(:disabled) {
   background: var(--poco);
@@ -403,8 +419,14 @@
 .agua-barra.meta {
   background: var(--acao);
 }
+/* Hoje se destaca pelo contorno; a cor continua sendo a da meta (verde-escuro) quando ela já foi batida. */
 .agua-barra.hoje {
   background: var(--azul-m);
+  outline: 2px solid var(--coral2);
+  outline-offset: 1px;
+}
+.agua-barra.hoje.meta {
+  background: var(--acao);
 }
 .agua-semana small {
   font-size: 0.8rem;

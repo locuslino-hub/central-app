@@ -67,6 +67,8 @@ function PaginaAberta({ aoFechar }: { aoFechar: () => void }) {
   }, []);
 
   const fechar = () => caixa.current?.close();
+  // A folha rola por baixo do cabeçalho fixo: só então ele ganha a borda de baixo.
+  const [rolou, setRolou] = useState(false);
 
   return (
     <dialog
@@ -85,8 +87,8 @@ function PaginaAberta({ aoFechar }: { aoFechar: () => void }) {
         if (e.target === e.currentTarget && !dentro) fechar();
       }}
     >
-      <div class="agua-pag">
-        <header class="agua-pag-cabeca">
+      <div class="agua-pag" onScroll={(e) => setRolou(e.currentTarget.scrollTop > 0)}>
+        <header class="agua-pag-cabeca" data-rolou={rolou ? '' : undefined}>
           <h2 id={idTitulo}>
             <Icone nome="gota" />
             Água
@@ -263,7 +265,9 @@ export function GraficoDoRitmo({
         {faltando && (
           <line class="agua-grafico-falta" x1={x(agora)} x2={x(agora)} y1={y(total) + R_AGORA + SOBRA} y2={y(esperado) - R_ESPERADO - SOBRA} />
         )}
-        {/* As horas por último: ficam por cima das bolinhas e do traço (o contorno claro mantém a leitura). */}
+        <circle class="agua-grafico-agora" cx={x(agora)} cy={y(total)} r={R_AGORA} />
+        <circle class="agua-grafico-esperado" cx={x(agora)} cy={y(esperado)} r={R_ESPERADO} />
+        {/* As horas por último: ficam por cima de todas as bolinhas (também as de agora e esperado) e do traço; o contorno claro mantém a leitura. */}
         {bolinhas.map(
           (b) =>
             b.mostraHora && (
@@ -278,8 +282,6 @@ export function GraficoDoRitmo({
               </text>
             ),
         )}
-        <circle class="agua-grafico-agora" cx={x(agora)} cy={y(total)} r={R_AGORA} />
-        <circle class="agua-grafico-esperado" cx={x(agora)} cy={y(esperado)} r={R_ESPERADO} />
       </svg>
       <p class="agua-legenda">
         <span>
@@ -416,7 +418,8 @@ export function HistoricoDaAgua({ registros, hoje }: { registros: readonly AguaR
         {semana.map((d, i) => {
           const ehHoje = i === semana.length - 1;
           const altura = Math.max(8, Math.min(1, d.ml / META_ML) * 100);
-          const classe = `agua-barra${ehHoje ? ' hoje' : d.ml >= META_ML ? ' meta' : ''}`;
+          // Hoje sempre tem o destaque (contorno); a cor é a da meta quando ela já foi batida.
+          const classe = `agua-barra${ehHoje ? ' hoje' : ''}${d.ml >= META_ML ? ' meta' : ''}`;
           const diaSem = diaDaSemana(d.data);
           return (
             <li key={d.data} title={`${n(d.ml)} mL`}>
