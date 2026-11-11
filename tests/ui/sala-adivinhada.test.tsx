@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { montarCalendario, type ItemDeEvento } from '../../src/dados/calendario';
 import type { Evento } from '../../src/dados/agenda';
 import { salvar, semear, semearPalavras } from '../../src/dados/loja';
+import { fireEvent } from '@testing-library/preact';
 import { AgendaHoje } from '../../src/ui/AgendaHoje';
+import { Quadro } from '../../src/ui/Quadro';
+import { Sala } from '../../src/ui/Sala';
 import { ItemDeAgenda } from '../../src/ui/ItemDeAgenda';
 import { LinhaDia } from '../../src/ui/LinhaDia';
 import { agendaDeTeste, evento } from '../apoio/agenda-ui';
@@ -87,5 +90,39 @@ describe('Agenda de hoje: adivinha com a memória guardada', () => {
     expect((await item('Dentista')).className).toContain('sala-outra');
     // A etiqueta diz a sala em palavras: a cor não é o único sinal.
     expect(within(await item('Reunião do projeto Aurora')).getByText('Investigação')).toBeTruthy();
+  });
+});
+
+describe('a sala adivinhada pelo título aparece também no Quadro, na página da Sala e no detalhe', () => {
+  const comMemoria = async () => {
+    await semear();
+    await semearPalavras();
+    const agenda = await agendaDeTeste();
+    agenda.responder([ev('Reunião do projeto Aurora', '16:30', '17:15'), ev('Dentista', '18:00', '18:45')]);
+  };
+
+  it('Quadro: entra na coluna da sala adivinhada; o que não bate não vai para sala nenhuma', async () => {
+    await comMemoria();
+    render(<Quadro />);
+    const coluna = await screen.findByRole('region', { name: 'Investigação' });
+    await waitFor(() => expect(within(coluna).getByText('Reunião do projeto Aurora')).toBeTruthy());
+    expect(screen.queryByText('Dentista')).toBeNull();
+  });
+
+  it('página da Sala: lista o compromisso da sala adivinhada, e só dela', async () => {
+    await comMemoria();
+    render(<Sala id="sala-investigacao" />);
+    const secao = await screen.findByRole('region', { name: 'Próximos compromissos' });
+    await waitFor(() => expect(within(secao).getByText('Reunião do projeto Aurora')).toBeTruthy());
+    expect(within(secao).queryByText('Dentista')).toBeNull();
+  });
+
+  it('detalhe do compromisso diz a sala adivinhada, não "Sem sala"', async () => {
+    await comMemoria();
+    render(<AgendaHoje />);
+    fireEvent.click(await screen.findByRole('button', { name: /Reunião do projeto Aurora/ }));
+    const detalhe = await screen.findByRole('dialog');
+    await waitFor(() => expect(within(detalhe).getByText('Investigação')).toBeTruthy());
+    expect(within(detalhe).queryByText('Sem sala')).toBeNull();
   });
 });
