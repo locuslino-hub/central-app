@@ -6,7 +6,9 @@
 // cada 15 minutos. Falha nunca apaga o que já estava na tela.
 import { ErroConexao, ErroScript, chamar } from '../conexao/cliente';
 import { lerConexao } from '../conexao/guarda';
+import { horaEmLisboa } from '../../script/agenda';
 import { ErroAgenda, listarEventos, type Evento, type RespostaEventos } from './agenda';
+import type { Pendente } from './tipos';
 
 /**
  * - `nao-conectado`: este aparelho ainda não tem a conexão com o script.
@@ -92,6 +94,55 @@ export function lerEventos(de: string, ate: string): Leitura {
 export function assinarEventos(ouvinte: () => void): () => void {
   ouvintes.add(ouvinte);
   return () => void ouvintes.delete(ouvinte);
+}
+
+/**
+ * A fila de ações da agenda mudou sem mudar o Google (compromisso entrou na
+ * fila sem internet, saiu dela por Desfazer, trocou de sala na fila): as telas
+ * desenham de novo, sem ler o Google.
+ */
+export function avisarMudancaNaFila() {
+  avisar();
+}
+
+/** Compromisso criado neste aparelho que ainda espera na fila para ir ao Google. */
+export type EventoAEnviar = Evento & { aEnviar: true };
+
+export function estaAEnviar(evento: Evento): evento is EventoAEnviar {
+  return (evento as Partial<EventoAEnviar>).aEnviar === true;
+}
+
+/**
+ * Os compromissos da fila (`criarEvento`) do período, como eventos da tela,
+ * marcados `aEnviar`. Fora ficam: os que a leitura do Google já traz (mesmo
+ * id: o id é do cliente), os de outro dia e os da migração (a tarefa antiga
+ * ainda aparece no lugar deles).
+ */
+export function eventosAEnviar(pendentes: readonly Pendente[], de: string, ate: string, lidos: readonly Evento[]): EventoAEnviar[] {
+  const jaLidos = new Set(lidos.map((evento) => evento.id));
+  const fila: EventoAEnviar[] = [];
+  for (const pendente of pendentes) {
+    if (pendente.tipo !== 'agenda' || pendente.acao !== 'criarEvento' || pendente.migrarTarefaId) continue;
+    const { id, titulo, data, inicio, fim, salaId } = pendente.evento;
+    if (jaLidos.has(id) || data < de || data > ate) continue;
+    const inicioIso = horaEmLisboa(data, inicio);
+    const fimIso = horaEmLisboa(data, fim);
+    if (!inicioIso || !fimIso) continue;
+    fila.push({
+      id,
+      agendaId: 'primary',
+      titulo,
+      inicio: inicioIso,
+      fim: fimIso,
+      diaInteiro: false,
+      livre: false,
+      recusado: false,
+      salaId,
+      link: null,
+      aEnviar: true,
+    });
+  }
+  return fila;
 }
 
 /** Esquece tudo (testes). */

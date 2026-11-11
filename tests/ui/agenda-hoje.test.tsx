@@ -1,5 +1,6 @@
 import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { criarCompromisso, desfazerCompromisso } from '../../src/dados/compromisso';
 import { semear } from '../../src/dados/loja';
 import { AgendaHoje } from '../../src/ui/AgendaHoje';
 import { DetalheEvento } from '../../src/ui/DetalheEvento';
@@ -439,5 +440,35 @@ describe('DetalheEvento', () => {
   it('sem sala diz "Sem sala"', () => {
     abrirCom(null);
     expect(screen.getByText('Sem sala')).toBeTruthy();
+  });
+});
+
+describe('Agenda de hoje: compromisso ainda na fila', () => {
+  it('sem internet, o compromisso criado aparece na hora, marcado "a enviar" e sem caixa de feito; desfeito, some', async () => {
+    const agenda = await agendaDeTeste();
+    agenda.falharEventosCom('rede');
+    render(<AgendaHoje />);
+    await cartao().findByText('Sem internet.');
+
+    const { eventoId } = await criarCompromisso({ titulo: 'Ligar para o banco', data: '2026-11-05', inicio: '18:00', fim: '19:00', salaId: null });
+
+    const item = (await cartao().findByText('Ligar para o banco')).closest('li') as HTMLElement;
+    expect(item.textContent).toContain('18:00 às 19:00');
+    expect(within(item).getByText('a enviar')).toBeTruthy();
+    expect(within(item).queryByRole('checkbox')).toBeNull();
+
+    await act(async () => desfazerCompromisso(eventoId));
+    await waitFor(() => expect(cartao().queryByText('Ligar para o banco')).toBeNull());
+  });
+
+  it('compromisso de outro dia na fila não entra na agenda de hoje', async () => {
+    const agenda = await agendaDeTeste();
+    agenda.falharEventosCom('rede');
+    render(<AgendaHoje />);
+    await criarCompromisso({ titulo: 'Consulta amanhã', data: '2026-11-06', inicio: '09:00', fim: '10:00', salaId: null });
+    await criarCompromisso({ titulo: 'Reunião hoje', data: '2026-11-05', inicio: '15:00', fim: '16:00', salaId: null });
+
+    await cartao().findByText('Reunião hoje');
+    expect(cartao().queryByText('Consulta amanhã')).toBeNull();
   });
 });
