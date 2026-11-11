@@ -119,7 +119,8 @@ export type Edicao = { titulo?: string; salaId?: string | null; quando?: NovoQua
 /**
  * Muda só o que veio em `edicao`, sobre a versão atual da tarefa. `false`, sem
  * escrever, se o título ficou vazio, o dia não existe ou a tarefa sumiu.
- * Compromisso e prazo (têm hora) ficam no dia deles: só título e sala mudam.
+ * Prazo fica no dia dele (mudar o prazo é `mudarPrazo`). Tarefa com hora muda
+ * de dia e mantém a hora (11/11); sem dia (Sem prazo, Esta semana) perde a hora.
  */
 export async function editarTarefa(id: string, edicao: Edicao): Promise<boolean> {
   const titulo = edicao.titulo === undefined ? undefined : edicao.titulo.trim();
@@ -130,12 +131,16 @@ export async function editarTarefa(id: string, edicao: Edicao): Promise<boolean>
     if (titulo !== undefined) nova.titulo = titulo;
     if (edicao.salaId !== undefined) nova.salaId = edicao.salaId;
     const quando = edicao.quando;
-    if (quando && !atual.inicio && !atual.prazoHora) {
+    if (quando && !atual.prazoHora) {
       const { data: _data, semana: _semana, semanaVencida: _vencida, ...resto } = nova;
       nova = resto as Tarefa;
       if (quando.tipo === 'hoje') nova.data = quando.hoje;
       if (quando.tipo === 'dia') nova.data = quando.dia;
       if (quando.tipo === 'semana') nova.semana = segundaDaSemana(quando.hoje);
+      if (nova.data === undefined) {
+        const { inicio: _inicio, ...semHora } = nova;
+        nova = semHora as Tarefa;
+      }
     }
     return nova;
   }));

@@ -184,8 +184,8 @@ function EdicaoDeTarefa({ tarefa, salas, hoje, aoSalvar, aoApagar, aoFechar }: E
   const campoDia = useRef<HTMLInputElement>(null);
   const emAndamento = useRef(false);
   const idBase = `edicao-${tarefa.id}`;
-  // Compromisso e prazo têm hora: o dia fica com eles.
-  const temQuando = !tarefa.inicio && !tarefa.prazoHora;
+  // Prazo tem hora ligada ao dia: o dia fica com ele. Tarefa com hora muda de dia e leva a hora.
+  const temQuando = !tarefa.prazoHora;
 
   useEffect(() => {
     campoTitulo.current?.focus();
