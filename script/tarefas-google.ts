@@ -1,6 +1,9 @@
 // Google Tarefas pelo serviço avançado Tasks (API v1), com duas partes:
 // 1. Espelho das tarefas da Central (spec 2026-11-09, feito espelhado): o
-//    Google é só espelho; nada do que muda na lista "Central" volta à Central.
+//    Google é espelho. Só uma coisa volta da lista "Central" à Central
+//    (ampliação 11/11): a conclusão feita pelo dono no Google
+//    (`concluidasNoEspelho`). E o espelho nunca desmarca no Google o que o dono
+//    concluiu lá, a não ser que a Central reabra a tarefa depois (`feitoEm`).
 // 2. Blocos do Google Tarefas na Agenda (spec 2026-11-09, blocos): tarefas que
 //    o dono agenda com hora em qualquer lista. Aqui se lê o estado delas (o
 //    feito do Google vale na Central, ver src/dados/eventos-feitos.ts) e se
@@ -38,13 +41,31 @@ export type ItemDoEspelho = {
   /** `AAAA-MM-DD`; sem ela, a espelho fica sem dia. */
   data?: string;
   feito: boolean;
+  /**
+   * Hora (ms, relógio do servidor) da última vez que o feito mudou na
+   * Central; 0 se nunca mudou. Aberta com `feitoEm` depois da conclusão no
+   * Google: reabre lá. Mais velho: a conclusão do Google fica. Sem o campo
+   * (app antigo): reabre sempre, como antes. Feita: vai como hora da conclusão.
+   */
+  feitoEm?: number;
+  /**
+   * A hora que o Google gravou na última conclusão enviada por este aparelho
+   * (`conclusaoPropria` da resposta). Conclusão no Google com essa hora ou
+   * mais velha é do próprio app, nunca do dono: aberta na Central, reabre.
+   */
+  conclusaoPropria?: number;
   /** Apagada na Central: a espelho é apagada. */
   apagado: boolean;
   googleId?: string;
 };
 
-/** `ok: false`: esta tarefa falhou agora (o app tenta de novo); as outras seguem. */
-export type ResultadoDoEspelho = { id: string; ok: boolean; googleId: string | null };
+/**
+ * `ok: false`: esta tarefa falhou agora (o app tenta de novo); as outras seguem.
+ * `concluidaEm`: aberta na Central, mas concluída pelo dono no Google (hora em
+ * ms; 0 se o Google não informou): o app a conclui também.
+ * `conclusaoPropria`: feita na Central; a hora de conclusão que o Google gravou.
+ */
+export type ResultadoDoEspelho = { id: string; ok: boolean; googleId: string | null; concluidaEm?: number; conclusaoPropria?: number };
 
 type Args = Record<string, unknown>;
 
@@ -53,6 +74,8 @@ export interface TarefaDaApi {
   notes?: string;
   deleted?: boolean;
   status?: string;
+  /** RFC 3339 da conclusão (só nas concluídas). */
+  completed?: string;
   /** RFC 3339 da última mudança. */
   updated?: string;
   /** `https://tasks.google.com/task/<id da web>...`: o mesmo id do link no bloco da Agenda. */
@@ -114,16 +137,25 @@ function exigir(condicao: boolean): asserts condicao {
   if (!condicao) throw new PedidoInvalido();
 }
 
+/** Hora em ms: número finito, não negativo. */
+function horaEmMs(valor: unknown): valor is number {
+  return typeof valor === 'number' && Number.isFinite(valor) && valor >= 0;
+}
+
 function lerItem(valor: unknown): ItemDoEspelho {
   exigir(objeto(valor));
-  const { id, titulo, data, feito, apagado, googleId } = valor;
+  const { id, titulo, data, feito, feitoEm, conclusaoPropria, apagado, googleId } = valor;
   exigir(typeof id === 'string' && ID_VALIDO.test(id));
   exigir(typeof titulo === 'string' && titulo.length <= TITULO_RECEBIDO_NO_MAXIMO);
   exigir(data === undefined || dataValida(data));
   exigir(typeof feito === 'boolean' && typeof apagado === 'boolean');
+  exigir(feitoEm === undefined || horaEmMs(feitoEm));
+  exigir(conclusaoPropria === undefined || horaEmMs(conclusaoPropria));
   exigir(googleId === undefined || (typeof googleId === 'string' && ID_DO_GOOGLE.test(googleId)));
   const item: ItemDoEspelho = { id, titulo, feito, apagado };
   if (data !== undefined) item.data = data;
+  if (feitoEm !== undefined) item.feitoEm = feitoEm;
+  if (conclusaoPropria !== undefined) item.conclusaoPropria = conclusaoPropria;
   if (googleId !== undefined) item.googleId = googleId;
   return item;
 }
@@ -143,21 +175,47 @@ function tituloDaEspelho(titulo: string): string {
 }
 
 /**
- * O corpo da espelho. `null` limpa no patch: dia tirado (Sem prazo) e hora de
- * conclusão de uma tarefa reaberta.
+ * O corpo da espelho. `null` limpa no patch o dia tirado (Sem prazo).
+ * - Feita: `completed`, com a hora `feitoEm` como hora da conclusão (se
+ *   conhecida): a conclusão do próprio app não parece mais nova que um
+ *   desfazer logo depois.
+ * - Aberta (app novo, com `feitoEm`): sem status. O que o dono concluiu no
+ *   Google continua concluído; reabrir lá é decidido em `conferirConclusao`.
+ *   Criada sem status, a espelho nasce "a fazer".
+ * - Aberta de app antigo (sem `feitoEm`): `needsAction`, como antes.
  */
 function corpoDa(item: ItemDoEspelho): Record<string, unknown> {
+  let feito: Record<string, unknown> = {};
+  if (item.feito) {
+    feito = { status: 'completed', ...(item.feitoEm ? { completed: new Date(item.feitoEm).toISOString() } : {}) };
+  } else if (item.feitoEm === undefined) {
+    feito = { status: 'needsAction', completed: null };
+  }
   return {
     title: tituloDaEspelho(item.titulo),
     notes: marcadorDaTarefa(item.id),
-    status: item.feito ? 'completed' : 'needsAction',
+    ...feito,
     due: item.data === undefined ? null : `${item.data}T00:00:00.000Z`,
-    ...(item.feito ? {} : { completed: null }),
   };
+}
+
+/** Hora (ms) da conclusão no Google; 0 se não veio ou não se lê. */
+function horaDaConclusao(tarefa: TarefaDaApi): number {
+  const ms = typeof tarefa.completed === 'string' ? Date.parse(tarefa.completed) : NaN;
+  return Number.isFinite(ms) && ms >= 0 ? ms : 0;
 }
 
 /** Id da lista "Central"; cria se não houver. */
 function listaCentral(servico: ServicoDeTarefas): string {
+  const achada = acharListaCentral(servico);
+  if (achada) return achada;
+  const criada = google('tasklists.insert', () => servico.Tasklists.insert({ title: NOME_DA_LISTA }));
+  if (typeof criada?.id !== 'string' || criada.id === '') throw new Error('Google Tarefas não devolveu a lista criada');
+  return criada.id;
+}
+
+/** Id da lista "Central", ou null se não há. Não cria. */
+function acharListaCentral(servico: ServicoDeTarefas): string | null {
   let pagina: string | undefined;
   for (let vez = 0; vez < PAGINAS_NO_MAXIMO; vez++) {
     const args: Args = { maxResults: 100 };
@@ -169,9 +227,7 @@ function listaCentral(servico: ServicoDeTarefas): string {
     pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
     if (!pagina) break;
   }
-  const criada = google('tasklists.insert', () => servico.Tasklists.insert({ title: NOME_DA_LISTA }));
-  if (typeof criada?.id !== 'string' || criada.id === '') throw new Error('Google Tarefas não devolveu a lista criada');
-  return criada.id;
+  return null;
 }
 
 /** id da Central -> id da espelho, pelas notas, de todas as tarefas da lista (concluídas e escondidas também). */
@@ -201,22 +257,48 @@ type Contexto = {
   esquecer: (id: string) => void;
 };
 
+type Espelhada = { googleId: string | null; concluidaEm?: number; conclusaoPropria?: number };
+
 /**
  * Patch na espelho. `null` se ela não existe mais, foi apagada no Google ou o
  * Google recusa o id (400, ex. "Invalid Value"): aí se procura pelas notas.
  */
-function atualizar(ctx: Contexto, googleId: string, corpo: object): string | null {
+function atualizar(ctx: Contexto, item: ItemDoEspelho, googleId: string, corpo: object): Espelhada | null {
+  let resposta: TarefaDaApi;
   try {
-    const resposta = google('tasks.patch', () => ctx.servico.Tasks.patch(corpo, ctx.lista, googleId));
-    if (resposta?.deleted === true) return null;
-    return typeof resposta?.id === 'string' && resposta.id !== '' ? resposta.id : googleId;
+    resposta = google('tasks.patch', () => ctx.servico.Tasks.patch(corpo, ctx.lista, googleId));
   } catch (erro) {
     if (sumiu(erro) || (erro instanceof FalhaDasTarefas && erro.status === 400)) return null;
     throw erro;
   }
+  if (resposta?.deleted === true) return null;
+  const id = typeof resposta?.id === 'string' && resposta.id !== '' ? resposta.id : googleId;
+  return conferirConclusao(ctx, item, id, resposta);
 }
 
-function espelharUma(ctx: Contexto, item: ItemDoEspelho): string | null {
+/**
+ * Depois de gravar a espelho:
+ * - feita na Central: a resposta leva a hora de conclusão que o Google gravou
+ *   (`conclusaoPropria`), que o app guarda para reconhecer a própria conclusão;
+ * - aberta na Central e concluída no Google (o patch não mexe no status): vale
+ *   a mudança mais nova. Reabre no Google se a conclusão de lá é a do próprio
+ *   app (até `conclusaoPropria`) ou se a Central reabriu depois (`feitoEm`
+ *   maior). Senão fica concluída, e a resposta leva `concluidaEm` para o app
+ *   concluir também.
+ */
+function conferirConclusao(ctx: Contexto, item: ItemDoEspelho, id: string, resposta: TarefaDaApi | undefined): Espelhada {
+  if (resposta?.status !== 'completed') return { googleId: id };
+  const concluidaEm = horaDaConclusao(resposta);
+  if (item.feito) return { googleId: id, conclusaoPropria: concluidaEm };
+  const doProprioApp = item.conclusaoPropria !== undefined && concluidaEm <= item.conclusaoPropria;
+  if (doProprioApp || (item.feitoEm ?? 0) > concluidaEm) {
+    google('tasks.patch', () => ctx.servico.Tasks.patch({ status: 'needsAction', completed: null }, ctx.lista, id));
+    return { googleId: id };
+  }
+  return { googleId: id, concluidaEm };
+}
+
+function espelharUma(ctx: Contexto, item: ItemDoEspelho): Espelhada {
   if (item.apagado) {
     const alvo = item.googleId ?? ctx.marcadores().get(item.id);
     if (alvo) {
@@ -227,22 +309,23 @@ function espelharUma(ctx: Contexto, item: ItemDoEspelho): string | null {
       }
       ctx.esquecer(item.id);
     }
-    return null;
+    return { googleId: null };
   }
   const corpo = corpoDa(item);
   if (item.googleId) {
-    const atualizada = atualizar(ctx, item.googleId, corpo);
+    const atualizada = atualizar(ctx, item, item.googleId, corpo);
     if (atualizada) return atualizada;
   }
   const achada = ctx.marcadores().get(item.id);
   if (achada && achada !== item.googleId) {
-    const atualizada = atualizar(ctx, achada, corpo);
+    const atualizada = atualizar(ctx, item, achada, corpo);
     if (atualizada) return atualizada;
   }
   const criada = google('tasks.insert', () => ctx.servico.Tasks.insert(corpo, ctx.lista));
   if (typeof criada?.id !== 'string' || criada.id === '') throw new Error('Google Tarefas não devolveu a tarefa criada');
   ctx.marcadores().set(item.id, criada.id);
-  return criada.id;
+  // Criada agora: só a feita interessa (a hora que o Google gravou).
+  return item.feito ? conferirConclusao(ctx, item, criada.id, criada) : { googleId: criada.id };
 }
 
 /**
@@ -263,13 +346,89 @@ export function espelharTarefas(dados: unknown, servico: ServicoDeTarefas): { re
   };
   const resultados = itens.map((item): ResultadoDoEspelho => {
     try {
-      return { id: item.id, ok: true, googleId: espelharUma(ctx, item) };
+      return { id: item.id, ok: true, ...espelharUma(ctx, item) };
     } catch (erro) {
       registrar(`espelho de tarefa falhou: ${erro instanceof FalhaDasTarefas ? erro.message : 'falhou'}`);
       return { id: item.id, ok: false, googleId: item.googleId ?? null };
     }
   });
   return { resultados };
+}
+
+// ---------- conclusões feitas no Google (ampliação 11/11) ----------
+
+/** Primeira leitura (sem `desde`): as conclusões dos últimos 30 dias. */
+export const JANELA_SEM_DESDE_MS = 30 * 24 * 60 * 60 * 1000;
+/** Teto da resposta: o resto vem nas leituras seguintes. */
+export const CONCLUIDAS_NO_MAXIMO = 500;
+const CAMPOS_DAS_CONCLUIDAS = 'items(notes,status,completed,deleted),nextPageToken';
+
+/** `{desde?}`: hora (ms) a partir da qual ler as conclusões. */
+export function lerPedidoDeConcluidas(dados: unknown): { desde?: number } {
+  exigir(objeto(dados));
+  const { desde } = dados;
+  exigir(desde === undefined || horaEmMs(desde));
+  return desde === undefined ? {} : { desde };
+}
+
+/** Id da lista "Central": das listas guardadas no cache (30 min), se há; senão lê. Não cria. */
+function listaCentralGuardada(servico: ServicoDeTarefas, guarda: GuardaDeTarefas | null): string | null {
+  if (guarda) {
+    const guardada = todasAsListas(servico, guarda).find((l) => l.central);
+    if (guardada) return guardada.id;
+  }
+  return acharListaCentral(servico);
+}
+
+/**
+ * `lerEspelhos {desde?}`: as espelhas da lista "Central" concluídas no Google
+ * e mudadas desde `desde` (`updatedMin`; sem ele, nos últimos 30 dias),
+ * escondidas também; o filtro das concluídas é feito aqui. Devolve só o id da
+ * Central (das notas) e a hora da conclusão: nada de título, notas nem id do
+ * Google. Sem a lista, nada (e não a cria). O id da lista vem do cache do
+ * script, se há; lista que sumiu (404) limpa o cache e devolve nada. `agora`
+ * é o relógio do script: o app pede a próxima leitura a partir dele.
+ */
+export function concluidasNoEspelho(
+  dados: unknown,
+  servico: ServicoDeTarefas | null,
+  agora: number,
+  guarda: GuardaDeTarefas | null = null,
+): { concluidas: { id: string; em: number }[]; agora: number } {
+  const { desde = Math.max(0, agora - JANELA_SEM_DESDE_MS) } = lerPedidoDeConcluidas(dados);
+  const nada = { concluidas: [], agora };
+  if (!servico) return nada;
+  const lista = listaCentralGuardada(servico, guarda);
+  if (!lista) return nada;
+  const porId = new Map<string, number>();
+  let pagina: string | undefined;
+  for (let vez = 0; vez < PAGINAS_POR_LISTA && porId.size < CONCLUIDAS_NO_MAXIMO; vez++) {
+    const args: Args = {
+      maxResults: 100,
+      showCompleted: true,
+      showHidden: true,
+      updatedMin: new Date(desde).toISOString(),
+      fields: CAMPOS_DAS_CONCLUIDAS,
+    };
+    if (pagina) args.pageToken = pagina;
+    let resposta: { items?: TarefaDaApi[]; nextPageToken?: string };
+    try {
+      resposta = google('tasks.list', () => servico.Tasks.list(lista, args));
+    } catch (erro) {
+      if (!sumiu(erro)) throw erro;
+      tirarDoCache(guarda, CHAVE_DAS_LISTAS);
+      return nada;
+    }
+    for (const tarefa of Array.isArray(resposta?.items) ? resposta.items : []) {
+      if (tarefa?.deleted === true || tarefa?.status !== 'completed' || typeof tarefa.notes !== 'string') continue;
+      const id = MARCADOR.exec(tarefa.notes)?.[1];
+      if (!id || (!porId.has(id) && porId.size >= CONCLUIDAS_NO_MAXIMO)) continue;
+      porId.set(id, Math.max(horaDaConclusao(tarefa), porId.get(id) ?? 0));
+    }
+    pagina = typeof resposta?.nextPageToken === 'string' ? resposta.nextPageToken : undefined;
+    if (!pagina) break;
+  }
+  return { concluidas: [...porId].map(([id, em]) => ({ id, em })), agora };
 }
 
 /** Para a função do editor: lê as listas (só a contagem). Não grava nada. */

@@ -1,5 +1,5 @@
 // Serviço avançado do Google Tarefas (Tasks API v1) na memória, com o que o
-// script usa: Tasklists.list/insert e Tasks.list/insert/patch/remove. Segue a
+// script usa: Tasklists.list/insert e Tasks.list/get/insert/patch/remove. Segue a
 // referência da API: lista sem as apagadas (showDeleted) nem as escondidas
 // (showHidden) por padrão, `due` só com o dia, `completed` some ao reabrir,
 // apagar marca `deleted` e o patch numa apagada continua respondendo (com
@@ -43,7 +43,13 @@ function dueDaApi(valor: unknown, metodo: string): string | undefined {
 export function tarefasGoogleFalso({
   paginaMaxima = 100,
   agora = () => Date.parse('2026-11-05T12:00:00Z'),
-}: { paginaMaxima?: number; agora?: () => number } = {}) {
+  ignorarCompleted = false,
+}: {
+  paginaMaxima?: number;
+  agora?: () => number;
+  /** Google que não aceita a hora de conclusão enviada: grava a hora em que o pedido chegou. */
+  ignorarCompleted?: boolean;
+} = {}) {
   const listas = new Map<string, ListaGuardada>();
   const chamadas: Chamada[] = [];
   let proximo = 0;
@@ -68,9 +74,12 @@ export function tarefasGoogleFalso({
         t.status = valor;
       } else if (campo === 'completed' && valor === null) {
         delete t.completed;
+      } else if (campo === 'completed' && !ignorarCompleted) {
+        if (typeof valor !== 'string' || !Number.isFinite(Date.parse(valor))) throw erroDaApi(metodo, 'Invalid Value', 400);
+        t.completed = new Date(Date.parse(valor)).toISOString();
       }
     }
-    if (t.status === 'completed') t.completed ??= '2026-11-05T12:00:00.000Z';
+    if (t.status === 'completed') t.completed ??= new Date(agora()).toISOString();
     else delete t.completed;
     t.updated = new Date(agora()).toISOString();
   }
@@ -103,7 +112,11 @@ export function tarefasGoogleFalso({
         .filter((t) => args.showCompleted !== false || t.status !== 'completed')
         // dueMin/dueMax: só tarefas com dia, dentro do intervalo (dueMin incluído, dueMax excluído).
         .filter((t) => typeof args.dueMin !== 'string' || (t.due !== undefined && Date.parse(t.due) >= Date.parse(args.dueMin)))
-        .filter((t) => typeof args.dueMax !== 'string' || (t.due !== undefined && Date.parse(t.due) < Date.parse(args.dueMax)));
+        .filter((t) => typeof args.dueMax !== 'string' || (t.due !== undefined && Date.parse(t.due) < Date.parse(args.dueMax)))
+        // completedMin: só as concluídas a partir dessa hora (incluída).
+        .filter((t) => typeof args.completedMin !== 'string' || (t.completed !== undefined && Date.parse(t.completed) >= Date.parse(args.completedMin)))
+        // updatedMin: só as mudadas a partir dessa hora (incluída).
+        .filter((t) => typeof args.updatedMin !== 'string' || (t.updated !== undefined && Date.parse(t.updated) >= Date.parse(args.updatedMin)));
       const tamanho = Math.min(typeof args.maxResults === 'number' ? args.maxResults : 20, paginaMaxima);
       const desde = typeof args.pageToken === 'string' ? Number(args.pageToken) : 0;
       const seguinte = desde + tamanho < todas.length ? String(desde + tamanho) : undefined;

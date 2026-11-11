@@ -41,6 +41,8 @@ const CHAVE_APARELHO = 'aparelho';
 const CHAVE_DESDE = 'desde';
 /** Relógio do servidor menos o deste aparelho, em ms, medido no último puxar (nulo: o script não informou). */
 const CHAVE_RELOGIO = 'relogio';
+/** Última leitura das conclusões feitas no Google Tarefas (ampliação 11/11): `{desde, em}`. */
+const CHAVE_LEITURA_DO_GOOGLE = 'leituraDoGoogle';
 /**
  * Ids das tarefas antigas com hora cuja ida para a agenda o dono descartou
  * (AvisoDaFila): a migração não as põe na fila de novo ao reabrir o app.
@@ -189,7 +191,12 @@ export async function salvar<C extends Colecao>(
     // Config é um registro só, sempre 'geral': é esse que lerConfig lê.
     const id = colecao === 'config' ? ID_CONFIG : registro.id || crypto.randomUUID();
     const atual: Registro | undefined = id === registro.id || colecao === 'config' ? await loja.get(id) : undefined;
-    const novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
+    let novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
+    if (colecao === 'tarefas' && !semEspelho) {
+      const diferenca: unknown = await tx.objectStore(LOCAL).get(CHAVE_RELOGIO);
+      const medida = typeof diferenca === 'number' && Number.isFinite(diferenca) ? diferenca : 0;
+      novo = comHoraDoFeito(atual as Tarefa | undefined, novo as Tarefa, medida) as Colecoes[C];
+    }
     await loja.put(novo);
     await enfileirar(tx, colecao, novo.id);
     if (colecao === 'tarefas' && !semEspelho) await espelharSeMudou(tx, atual as Tarefa | undefined, novo as Tarefa);
@@ -206,6 +213,20 @@ export async function salvar<C extends Colecao>(
  */
 function carimbo(atual: Registro | undefined): number {
   return Math.max(Date.now(), atual ? atual.atualizadoEm + 1 : 0);
+}
+
+/**
+ * Concluir ou reabrir na Central marca `feitoEm` com a hora da escrita no
+ * relógio do servidor (o deste aparelho mais a diferença medida no último
+ * puxar): entre a Central e o Google Tarefas vale a mudança mais nova
+ * (ampliação 11/11). Sempre acima do `feitoEm` anterior: reabrir uma
+ * conclusão vinda do Google com relógio adiantado ainda vence. Quem grava sem
+ * espelho (restauração da cópia, conclusão vinda do Google) traz a hora que vale.
+ */
+function comHoraDoFeito(antes: Tarefa | undefined, depois: Tarefa, diferenca: number): Tarefa {
+  if (!antes || !!antes.feito === !!depois.feito) return depois;
+  const anterior = typeof antes.feitoEm === 'number' && Number.isFinite(antes.feitoEm) ? antes.feitoEm : 0;
+  return { ...depois, feitoEm: Math.max(Date.now() + diferenca, anterior + 1) };
 }
 
 function enfileirar(tx: Escrita, colecao: Colecao, id: string) {
@@ -735,6 +756,51 @@ export async function lerDiferencaDeRelogio(): Promise<number | null> {
 
 export async function salvarDesde(desde: number): Promise<void> {
   await comBanco((banco) => banco.put(LOCAL, desde, CHAVE_DESDE));
+}
+
+/**
+ * A última leitura das conclusões no Google Tarefas, só deste aparelho:
+ * `desde` (relógio do script) é de onde ler na próxima; `em` (relógio deste
+ * aparelho) é quando se tentou, para não ler a cada rodada. `null`: nunca leu.
+ */
+export async function lerLeituraDoGoogle(): Promise<{ desde: number | null; em: number } | null> {
+  const lido: unknown = await comBanco((banco) => banco.get(LOCAL, CHAVE_LEITURA_DO_GOOGLE));
+  if (typeof lido !== 'object' || lido === null) return null;
+  const { desde, em } = lido as { desde?: unknown; em?: unknown };
+  if (typeof em !== 'number' || !Number.isFinite(em)) return null;
+  return { desde: typeof desde === 'number' && Number.isFinite(desde) && desde >= 0 ? desde : null, em };
+}
+
+export async function salvarLeituraDoGoogle(leitura: { desde: number | null; em: number }): Promise<void> {
+  await comBanco((banco) => banco.put(LOCAL, leitura, CHAVE_LEITURA_DO_GOOGLE));
+}
+
+const chaveDaConclusaoPropria = (tarefaId: string) => `conclusaoPropria:${tarefaId}`;
+
+/**
+ * A hora de conclusão que o Google gravou quando este aparelho concluiu a
+ * tarefa (resposta do espelho). Só deste aparelho: conclusão no Google com
+ * essa hora ou mais velha é do próprio app, nunca do dono. Só sobe.
+ */
+export async function guardarConclusaoPropria(tarefaId: string, em: number): Promise<void> {
+  if (!Number.isFinite(em) || em < 0) return;
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [LOCAL]);
+    const atual: unknown = await tx.objectStore(LOCAL).get(chaveDaConclusaoPropria(tarefaId));
+    if (typeof atual !== 'number' || em > atual) await tx.objectStore(LOCAL).put(em, chaveDaConclusaoPropria(tarefaId));
+    await tx.done;
+  });
+}
+
+/** As horas guardadas por `guardarConclusaoPropria`, na ordem pedida (`undefined` onde não há). */
+export async function lerConclusoesProprias(tarefaIds: readonly string[]): Promise<(number | undefined)[]> {
+  if (tarefaIds.length === 0) return [];
+  return comBanco(async (banco) => {
+    const tx = banco.transaction(LOCAL, 'readonly');
+    tx.done.catch(() => {});
+    const lidas: unknown[] = await Promise.all(tarefaIds.map((id) => tx.objectStore(LOCAL).get(chaveDaConclusaoPropria(id))));
+    return lidas.map((em) => (typeof em === 'number' && Number.isFinite(em) && em >= 0 ? em : undefined));
+  });
 }
 
 /** Conflitos resolvidos neste aparelho, do mais antigo ao mais novo. */

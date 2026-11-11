@@ -197,7 +197,7 @@ test.describe('computador, 1280 px', () => {
     expect(await pequenos(page)).toEqual([]);
     expect(await semRolagemDeLado(page)).toBe(true);
     // O espelho das tarefas no Google Tarefas é da sincronia (feito espelhado), não do Quadro.
-    expect(acoes.filter((a) => !['emails', 'atualizarEmails', 'eventos', 'puxar', 'enviar', 'ping', 'espelharTarefas'].includes(a))).toEqual([]);
+    expect(acoes.filter((a) => !['emails', 'atualizarEmails', 'eventos', 'puxar', 'enviar', 'ping', 'espelharTarefas', 'lerEspelhos'].includes(a))).toEqual([]);
     expect(erros).toEqual([]);
   });
 });

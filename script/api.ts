@@ -12,6 +12,7 @@ import {
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 import { listarEmails, pedirAtualizacao, type GuardaDeEmails, type ServicoDeGmail } from './email';
 import {
+  concluidasNoEspelho,
   espelharTarefas,
   estadosDasTarefas,
   marcarTarefaGoogle,
@@ -120,6 +121,9 @@ const acoes = new Map<unknown, Acao>([
     const servico = tarefasGoogle(ambiente);
     return ambiente.armazem.comTrava(() => espelharTarefas(dados, servico));
   }],
+  // Só leitura (ampliação 11/11): as espelhas concluídas pelo dono no Google.
+  // Sem o serviço, lista vazia.
+  ['lerEspelhos', (dados, ambiente) => concluidasNoEspelho(dados, tarefasOpcional(ambiente), ambiente.armazem.agora(), ambiente.guardaDeTarefas ?? null)],
   // E-mail só se lê: não há ação que mude o Gmail. Nenhuma das duas usa `dados`.
   ['emails', (_dados, ambiente) => listarEmails(() => gmail(ambiente), emailsGuardados(ambiente))],
   // Com limite de 60 s (email.ts): toques repetidos devolvem a lista guardada.

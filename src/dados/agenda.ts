@@ -18,8 +18,14 @@ import {
   type NovoEvento,
   type RespostaEventos,
 } from '../../script/agenda';
-import { CHAVE_DE_COR } from '../../script/colecoes';
-import { lerLote, lerMarcaDeTarefa, type ItemDoEspelho, type ResultadoDoEspelho } from '../../script/tarefas-google';
+import { CHAVE_DE_COR, ID_VALIDO } from '../../script/colecoes';
+import {
+  lerLote,
+  lerMarcaDeTarefa,
+  lerPedidoDeConcluidas,
+  type ItemDoEspelho,
+  type ResultadoDoEspelho,
+} from '../../script/tarefas-google';
 import { ErroConexao, ErroScript, chamar as chamarOScript } from '../conexao/cliente';
 
 export type { ItemDoEspelho, ResultadoDoEspelho };
@@ -218,6 +224,38 @@ const resultadosDoEspelho = (valor: unknown): valor is { resultados: ResultadoDo
  */
 export function espelharTarefas(itens: ItemDoEspelho[], opcoes: OpcoesDaAgenda = {}): Promise<{ resultados: ResultadoDoEspelho[] }> {
   return pedir('espelharTarefas', () => ({ tarefas: lerLote({ tarefas: itens }) }), resultadosDoEspelho, opcoes);
+}
+
+export type ConcluidaNoGoogle = { id: string; em: number };
+
+const respostaDeConcluidas = (valor: unknown): valor is { concluidas: unknown[]; agora: number } =>
+  typeof valor === 'object' &&
+  valor !== null &&
+  Array.isArray((valor as { concluidas?: unknown }).concluidas) &&
+  typeof (valor as { agora?: unknown }).agora === 'number' &&
+  Number.isFinite((valor as { agora: number }).agora);
+
+/** Conclusão em forma boa: id de registro da Central e hora (ms). */
+export const concluidaValida = (valor: unknown): valor is ConcluidaNoGoogle =>
+  typeof valor === 'object' &&
+  valor !== null &&
+  typeof (valor as ConcluidaNoGoogle).id === 'string' &&
+  ID_VALIDO.test((valor as ConcluidaNoGoogle).id) &&
+  typeof (valor as ConcluidaNoGoogle).em === 'number' &&
+  Number.isFinite((valor as ConcluidaNoGoogle).em) &&
+  (valor as ConcluidaNoGoogle).em >= 0;
+
+/**
+ * As tarefas da Central que o dono concluiu direto no Google Tarefas (lista
+ * "Central") desde `desde` (relógio do script; sem ele, 30 dias). Item em
+ * forma errada fica de fora. `agora`: o relógio do script nesta leitura.
+ */
+export async function lerConcluidasNoGoogle(
+  desde: number | null,
+  opcoes: OpcoesDaAgenda = {},
+): Promise<{ concluidas: ConcluidaNoGoogle[]; agora: number }> {
+  const resposta = await pedir('lerEspelhos', () => lerPedidoDeConcluidas(desde === null ? {} : { desde }), respostaDeConcluidas, opcoes);
+  return { concluidas: resposta.concluidas.filter(concluidaValida), agora: resposta.agora };
 }
 
 /** Troca a sala de um evento da agenda principal; null tira a sala. */

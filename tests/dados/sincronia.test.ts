@@ -660,7 +660,7 @@ describe('estado', () => {
     const [um, dois] = await Promise.all([sincronizarAqui(), sincronizarAqui()]);
 
     expect([um, dois]).toEqual(['atualizado', 'atualizado']);
-    expect(servidor.pedidos.map((p) => p.acao).filter((acao) => acao !== 'espelharTarefas')).toEqual(['puxar', 'enviar', 'puxar']);
+    expect(servidor.pedidos.map((p) => p.acao).filter((acao) => acao !== 'espelharTarefas' && acao !== 'lerEspelhos')).toEqual(['puxar', 'enviar', 'puxar']);
   });
 });
 
