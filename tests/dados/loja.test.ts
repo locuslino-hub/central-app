@@ -2,7 +2,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { NOMES_DAS_COLECOES } from '../../script/colecoes';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { criarDesfazer } from '../../src/dados/desfazer';
+import { DESFAZER_NO_MAXIMO, criarDesfazer } from '../../src/dados/desfazer';
 import {
   apagar,
   assinar,
@@ -372,6 +372,55 @@ describe('desfazer', () => {
     expect(feitos).toEqual(['segundo']);
     await pilha.ultimo()!.reverter();
     expect(pilha.ultimo()?.rotulo).toBe('primeiro');
+  });
+
+  it('guarda no máximo 50 entradas: as mais velhas saem da pilha', async () => {
+    const pilha = criarDesfazer();
+    for (let i = 1; i <= DESFAZER_NO_MAXIMO + 10; i++) pilha.registrar(`ação ${i}`, () => {});
+
+    let quantas = 0;
+    while (pilha.ultimo()) {
+      await pilha.ultimo()!.reverter();
+      quantas++;
+    }
+    expect(DESFAZER_NO_MAXIMO).toBe(50);
+    expect(quantas).toBe(50);
+  });
+
+  it('entrada que saiu da pilha pelo limite ainda desfaz por quem a guardou (o cartão do chat), uma vez só', async () => {
+    const pilha = criarDesfazer();
+    const reverter = vi.fn();
+    const velha = pilha.registrar('velha', reverter);
+    for (let i = 0; i < DESFAZER_NO_MAXIMO; i++) pilha.registrar(`ação ${i}`, () => {});
+
+    await velha.reverter();
+    await velha.reverter();
+
+    expect(reverter).toHaveBeenCalledTimes(1);
+  });
+
+  it('só sai da pilha depois de desfazer: duas chamadas ao mesmo tempo esperam o mesmo desfazer, e a falha chega às duas', async () => {
+    const pilha = criarDesfazer();
+    let soltar!: (erro?: Error) => void;
+    const reverter = vi.fn(() => new Promise<void>((ok, falhou) => (soltar = (erro) => (erro ? falhou(erro) : ok()))));
+    const entrada = pilha.registrar('primeiro', reverter);
+
+    const primeira = entrada.reverter();
+    const segunda = entrada.reverter();
+    await vi.waitFor(() => expect(reverter).toHaveBeenCalledTimes(1));
+    expect(pilha.ultimo()).toBeUndefined(); // andando: o Desfazer não aparece de novo
+    soltar(new Error('sem conexão'));
+
+    await expect(primeira).rejects.toThrow('sem conexão');
+    await expect(segunda).rejects.toThrow('sem conexão');
+    expect(reverter).toHaveBeenCalledTimes(1);
+    expect(pilha.ultimo()).toBe(entrada);
+
+    const terceira = entrada.reverter();
+    await vi.waitFor(() => expect(reverter).toHaveBeenCalledTimes(2));
+    soltar();
+    await terceira;
+    expect(pilha.ultimo()).toBeUndefined();
   });
 
   it('pilhas criadas à parte não se misturam', () => {

@@ -1,36 +1,55 @@
 export type Desfazivel = { rotulo: string; reverter: () => Promise<void> };
 
+/** Entradas guardadas na pilha; as mais velhas saem. */
+export const DESFAZER_NO_MAXIMO = 50;
+
 /**
  * Pilha de desfazer. `ultimo()` só espia o topo (a tela mostra o rótulo);
- * rodar o `reverter` devolvido tira a entrada da pilha e desfaz uma única vez.
- * `registrar` devolve a própria entrada, para quem desfaz um item certo (o
- * cartão do chat) e não o último da pilha. Se o desfazer falha, a entrada
- * volta ao lugar e o erro sobe: o dono pode tentar de novo.
+ * rodar o `reverter` devolvido desfaz uma única vez. `registrar` devolve a
+ * própria entrada, para quem desfaz um item certo (o cartão do chat) e não o
+ * último da pilha; ela vale mesmo depois de sair da pilha pelo limite.
+ * A entrada só sai da pilha quando o desfazer dá certo: se ele falha, fica no
+ * lugar e o erro sobe, e o dono pode tentar de novo. Enquanto ele anda,
+ * `ultimo()` não a mostra, e chamar de novo espera o mesmo desfazer (não
+ * desfaz duas vezes).
  */
 export function criarDesfazer() {
   const pilha: Desfazivel[] = [];
+  const andando = new Set<Desfazivel>();
 
   return {
     registrar(rotulo: string, reverter: () => void | Promise<void>): Desfazivel {
+      let feito = false;
+      let emAndamento: Promise<void> | undefined;
       const entrada: Desfazivel = {
         rotulo,
-        async reverter() {
-          const posicao = pilha.indexOf(entrada);
-          if (posicao === -1) return;
-          pilha.splice(posicao, 1);
-          try {
-            await reverter();
-          } catch (erro) {
-            pilha.splice(Math.min(posicao, pilha.length), 0, entrada);
-            throw erro;
-          }
+        reverter() {
+          if (feito) return Promise.resolve();
+          if (emAndamento) return emAndamento;
+          andando.add(entrada);
+          // Um passo adiante: `emAndamento` já está guardado quando o `finally` o limpa,
+          // mesmo se o desfazer falhar na hora.
+          emAndamento = Promise.resolve()
+            .then(reverter)
+            .then(() => {
+              feito = true;
+              const posicao = pilha.indexOf(entrada);
+              if (posicao !== -1) pilha.splice(posicao, 1);
+            })
+            .finally(() => {
+              andando.delete(entrada);
+              emAndamento = undefined;
+            });
+          return emAndamento;
         },
       };
       pilha.push(entrada);
+      if (pilha.length > DESFAZER_NO_MAXIMO) pilha.splice(0, pilha.length - DESFAZER_NO_MAXIMO);
       return entrada;
     },
     ultimo(): Desfazivel | undefined {
-      return pilha[pilha.length - 1];
+      for (let i = pilha.length - 1; i >= 0; i--) if (!andando.has(pilha[i])) return pilha[i];
+      return undefined;
     },
   };
 }
