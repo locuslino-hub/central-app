@@ -6,7 +6,7 @@
 //
 // Quem usa: o chat (frase de compromisso) e a tarefa de marcar (CaixaMarcar).
 import { ErroAgenda, criarEvento, novoIdDeEvento, removerEvento, trocarSalaEvento } from './agenda';
-import { avisarMudancaNaFila, marcarEventosObsoletos } from './eventos';
+import { avisarMudancaNaFila, esquecerEnviado, lembrarEnviado, marcarEventosObsoletos, trocarSalaDoEnviado } from './eventos';
 import { enfileirarAgenda, retirarCriacaoPendente, trocarSalaPendente } from './loja';
 import type { EventoPendente } from './tipos';
 
@@ -35,6 +35,7 @@ export async function criarCompromisso(novo: NovoCompromisso): Promise<{ eventoI
   const evento: EventoPendente = { ...novo, id: novoIdDeEvento() };
   try {
     await criarEvento(evento);
+    lembrarEnviado(evento);
     marcarEventosObsoletos();
     return { eventoId: evento.id, situacao: 'criado' };
   } catch (erro) {
@@ -55,6 +56,7 @@ export async function criarCompromisso(novo: NovoCompromisso): Promise<{ eventoI
  * Pode ser chamado de novo depois de uma falha.
  */
 export async function desfazerCompromisso(eventoId: string): Promise<void> {
+  esquecerEnviado(eventoId);
   if (await retirarCriacaoPendente(eventoId)) {
     avisarMudancaNaFila();
     return;
@@ -78,5 +80,6 @@ export async function trocarSalaDoCompromisso(eventoId: string, salaId: string |
     return;
   }
   await trocarSalaEvento(eventoId, salaId);
+  trocarSalaDoEnviado(eventoId, salaId);
   marcarEventosObsoletos();
 }

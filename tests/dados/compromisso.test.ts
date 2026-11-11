@@ -133,6 +133,39 @@ describe('a fila da agenda, na sincronia', () => {
     expect([...agenda.eventos.keys()]).toEqual([eventoId]);
   });
 
+  it('enviado pela fila, o compromisso segue na tela até uma leitura que dê certo o trazer', async () => {
+    const { atualizarEventos, eventosEnviados } = await import('../../src/dados/eventos');
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    agenda.modo('rede');
+    const { eventoId } = await criarCompromisso(novo);
+    agenda.modo('ok');
+    await sincronizarCom(agenda);
+    expect(await daAgenda()).toEqual([]);
+
+    const lidos = (eventos: unknown[]) => ({ listar: async () => ({ eventos, incompleto: false }) as never, conectado: async () => true });
+    expect(eventosEnviados('2026-11-06', '2026-11-06', []).map((e) => e.id)).toEqual([eventoId]);
+    // Leitura que falha, ou que ainda não traz o evento: ele continua.
+    await atualizarEventos('2026-11-06', '2026-11-06', { listar: async () => { throw new Error('rede'); }, conectado: async () => true, pingar: async () => ({}) });
+    await atualizarEventos('2026-11-06', '2026-11-06', lidos([]));
+    expect(eventosEnviados('2026-11-06', '2026-11-06', []).map((e) => e.id)).toEqual([eventoId]);
+    // Outro dia não o mostra.
+    expect(eventosEnviados('2026-11-07', '2026-11-07', [])).toEqual([]);
+
+    await atualizarEventos('2026-11-06', '2026-11-06', lidos([agenda.eventos.get(eventoId)]));
+    expect(eventosEnviados('2026-11-06', '2026-11-06', [])).toEqual([]);
+  });
+
+  it('desfazer um compromisso já enviado o tira da tela na hora', async () => {
+    const { eventosEnviados } = await import('../../src/dados/eventos');
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    const { eventoId } = await criarCompromisso(novo);
+    expect(eventosEnviados('2026-11-06', '2026-11-06', []).map((e) => e.id)).toEqual([eventoId]);
+    await desfazerCompromisso(eventoId);
+    expect(eventosEnviados('2026-11-06', '2026-11-06', [])).toEqual([]);
+  });
+
   it('repetir o envio não duplica: o script devolve o evento já criado', async () => {
     const agenda = agendaEscrita();
     await agenda.instalar();

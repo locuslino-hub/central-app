@@ -2,7 +2,7 @@
 // cada 15 minutos (src/dados/eventos.ts guarda e lê).
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Evento } from '../dados/agenda';
-import { assinarEventos, atualizarEventos, eventosAEnviar, lerEventos, type Leitura } from '../dados/eventos';
+import { assinarEventos, atualizarEventos, eventosAEnviar, eventosEnviados, lerEventos, type Leitura } from '../dados/eventos';
 import { aplicarFeitos } from '../dados/eventos-feitos';
 import { listarPendentes } from '../dados/loja';
 import type { PendenteCriarEvento } from '../dados/tipos';
@@ -27,13 +27,17 @@ async function lerCriacoesNaFila(): Promise<PendenteCriarEvento[]> {
 export function useEventos(de: string, ate: string): { leitura: Leitura; atualizar: () => void } {
   // A leitura é lida na hora de desenhar, do período pedido agora: depois de uma
   // troca de período nunca aparece, por um instante, a leitura do período antigo.
-  const [, refazer] = useState(0);
+  const [versao, refazer] = useState(0);
   const [fila, setFila] = useState<PendenteCriarEvento[]>([]);
   const lida = lerEventos(de, ate);
   const leitura = useMemo(() => {
-    const aEnviar = eventosAEnviar(fila, de, ate, lida.eventos);
-    return aEnviar.length ? { ...lida, eventos: [...lida.eventos, ...aEnviar] } : lida;
-  }, [lida, fila, de, ate]);
+    // Criado por este aparelho e ainda não trazido por uma leitura: continua à vista.
+    const enviados = eventosEnviados(de, ate, lida.eventos);
+    const vistos = enviados.length ? [...lida.eventos, ...enviados] : lida.eventos;
+    const aEnviar = eventosAEnviar(fila, de, ate, vistos);
+    return vistos === lida.eventos && !aEnviar.length ? lida : { ...lida, eventos: [...vistos, ...aEnviar] };
+    // `versao` muda a cada aviso dos eventos: os enviados podem ter mudado.
+  }, [lida, fila, de, ate, versao]);
 
   useEffect(() => {
     let ligado = true;

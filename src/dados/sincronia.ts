@@ -14,7 +14,7 @@ import {
   removerEvento,
   type ItemDoEspelho,
 } from './agenda';
-import { marcarEventosObsoletos } from './eventos';
+import { lembrarEnviado, marcarEventosObsoletos } from './eventos';
 import { concluirMarcaDeTarefa } from './eventos-feitos';
 import {
   assinar as assinarLoja,
@@ -260,7 +260,10 @@ async function enviarAgenda(chamar: Chamar): Promise<void> {
       if (acao.acao === 'criarEvento') {
         await criarEvento(acao.evento, { chamar });
         mudou = true;
-        if (!(await retirarPendente(acao.seq))) {
+        if (await retirarPendente(acao.seq)) {
+          // Saiu da fila: fica na tela até a leitura do Google o trazer.
+          lembrarEnviado(acao.evento);
+        } else {
           // Desfeito enquanto era enviado: o evento já existe e precisa sair.
           await removerEventoCriadoSemQuerer(acao.evento.id, chamar);
         }

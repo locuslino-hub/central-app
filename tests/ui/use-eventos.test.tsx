@@ -90,3 +90,23 @@ describe('useEventos', () => {
     expect(agenda.leituras()).toHaveLength(antes + 1);
   });
 });
+
+describe('useEventos: compromisso recém-criado', () => {
+  it('fica à vista mesmo que a leitura seguinte ainda não o traga; some quando a leitura o traz (sem duplicar)', async () => {
+    const { lembrarEnviado } = await import('../../src/dados/eventos');
+    const agenda = await agendaDeTeste();
+    agenda.responder([evento('Aula', { inicio: '2026-11-07T09:00:00+00:00', fim: '2026-11-07T10:00:00+00:00' })]);
+    render(<Sonda de="2026-11-07" ate="2026-11-07" vistos={[]} />);
+    await screen.findByText('Aula');
+
+    act(() => lembrarEnviado({ id: 'f'.repeat(32), titulo: 'Consulta', data: '2026-11-07', inicio: '15:00', fim: '16:00', salaId: null }));
+    await screen.findByText('Aula,Consulta');
+
+    agenda.responder([
+      evento('Aula', { inicio: '2026-11-07T09:00:00+00:00', fim: '2026-11-07T10:00:00+00:00' }),
+      evento('Consulta', { id: 'f'.repeat(32), inicio: '2026-11-07T15:00:00+00:00', fim: '2026-11-07T16:00:00+00:00' }),
+    ]);
+    await act(async () => void (await atualizarEventos('2026-11-07', '2026-11-07')));
+    await screen.findByText('Aula,Consulta');
+  });
+});
