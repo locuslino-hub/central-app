@@ -74,7 +74,7 @@ describe('poda dos estados', () => {
 });
 
 describe('Virar tarefa', () => {
-  it('cria a tarefa com emailId, a sala e a pessoa, sem prazo; Desfazer a apaga', async () => {
+  it('cria a tarefa com emailId, a sala e a pessoa, para hoje (sem dia vai para hoje, 11/11); Desfazer a apaga', async () => {
     const resultado = await virarTarefa(email('Revisão do capítulo 2'), { salaId: 'sala-orientacoes', pessoaId: 'pessoa-1' });
     const [tarefa] = await listar('tarefas');
     expect(tarefa).toMatchObject({
@@ -84,7 +84,7 @@ describe('Virar tarefa', () => {
       pessoaId: 'pessoa-1',
       feito: false,
     });
-    expect(tarefa.data).toBeUndefined();
+    expect(tarefa.data).toBe('2026-11-05');
     expect(tarefa.emailId).toMatch(/^mensagem\d+$/);
 
     await resultado!.entrada!.reverter();

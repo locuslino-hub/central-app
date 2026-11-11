@@ -131,11 +131,11 @@ describe('#/agora', () => {
     await vi.waitFor(async () => expect((await listar('estadosEmail')).find((e) => e.id === 'msg-marina')?.feito).toBe(true));
 
     fireEvent.click(within(destaque().getByRole('group', { name: 'Ações: Dúvida sobre a prova' })).getByRole('button', { name: 'Virar tarefa: Dúvida sobre a prova' }));
-    // A tarefa nasce em Sem prazo, ligada ao e-mail (como no Por responder): sai da fila até ganhar dia.
+    // A tarefa nasce para hoje (11/11), ligada ao e-mail: volta à fila como tarefa, com o e-mail junto.
     expect(await principal().findByText('Tarefa criada: Responder: Dúvida sobre a prova')).toBeTruthy();
-    expect(await principal().findByText('Nada na fila agora.')).toBeTruthy();
+    expect(await noDestaque((d) => d.getByRole('heading', { name: 'Responder: Dúvida sobre a prova' }))).toBeTruthy();
     await vi.waitFor(async () => expect(await tarefaPor('Responder: Dúvida sobre a prova')).toMatchObject({ emailId: 'msg-renata' }));
-    expect((await tarefaPor('Responder: Dúvida sobre a prova')).data).toBeUndefined();
+    expect((await tarefaPor('Responder: Dúvida sobre a prova')).data).toBe('2026-11-05');
     // Só leitura de e-mail saiu do aparelho: nada de Feito ou de tarefa vai para o Gmail.
     expect(script.acoes().filter((a) => a.toLowerCase().includes('mail'))).toEqual(expect.arrayContaining(['emails']));
     expect(script.acoes().filter((a) => a.toLowerCase().includes('mail') && a !== 'emails' && a !== 'atualizarEmails')).toEqual([]);
