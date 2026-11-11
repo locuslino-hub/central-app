@@ -5,12 +5,13 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErroScript } from '../../src/conexao/cliente';
-import { listar, listarPendentes } from '../../src/dados/loja';
+import { listar, listarPendentes, salvarRelogioDoServidor } from '../../src/dados/loja';
 import { LEITURA_DO_GOOGLE_A_CADA_MS, MARGEM_DA_LEITURA_MS, sincronizar } from '../../src/dados/sincronia';
 import { concluirTarefa, criarTarefa, editarTarefa, reabrirTarefa } from '../../src/dados/tarefas';
 import type { PendenteEspelho, Tarefa } from '../../src/dados/tipos';
 import { virarDia } from '../../src/dados/virada';
 import { servidorDeTeste } from '../apoio/servidor';
+import { tarefasGoogleFalso } from '../apoio/tarefas-google';
 
 // Segunda, 2026-11-09, 12:20 em Lisboa. Só o Date é falso (o fake-indexeddb usa timers reais).
 const AGORA = Date.parse('2026-11-09T12:20:00Z');
@@ -205,5 +206,78 @@ describe('quando ler o Google', () => {
         : servidor.chamar<T>(acao, dados);
     expect(await sincronizar({ chamar, esperar: semEspera })).toBe('atualizado');
     expect((await lerTarefa(tarefa.id)).feito).toBe(false);
+  });
+});
+
+describe('revisão 11/11', () => {
+  it('feitoEm usa o relógio do servidor medido no último puxar', async () => {
+    await salvarRelogioDoServidor(AGORA + 60_000);
+    const tarefa = (await criarTarefa('Ligar para a Marina', { data: '2026-11-09' }))!;
+    await concluirTarefa(tarefa.id);
+    expect((await lerTarefa(tarefa.id)).feitoEm).toBe(AGORA + 60_000);
+  });
+
+  it('reabrir uma conclusão vinda do Google com relógio adiantado: feitoEm fica acima dela, e a reabertura vence', async () => {
+    const { rodar, concluirNoGoogle, espelho } = comGoogle();
+    const tarefa = (await criarTarefa('Revisar slides', { data: '2026-11-09' }))!;
+    await rodar();
+    concluirNoGoogle('2026-11-09T13:00:00.000Z');
+    vi.setSystemTime(AGORA + 15 * 60_000);
+    await rodar();
+    expect((await lerTarefa(tarefa.id)).feitoEm).toBe(Date.parse('2026-11-09T13:00:00.000Z'));
+    // 12:36 aqui, ainda antes das 13:00 do Google: reabrir fica acima.
+    vi.setSystemTime(AGORA + 16 * 60_000);
+    await reabrirTarefa(tarefa.id);
+    expect((await lerTarefa(tarefa.id)).feitoEm).toBe(Date.parse('2026-11-09T13:00:00.001Z'));
+    vi.setSystemTime(AGORA + 30 * 60_000);
+    await rodar();
+    expect((await lerTarefa(tarefa.id)).feito).toBe(false);
+    expect(espelho().status).toBe('needsAction');
+  });
+
+  it('tarefa cujo feito nunca mudou vai ao script com feitoEm 0 (app novo)', async () => {
+    const { servidor, rodar } = comGoogle();
+    const tarefa = (await criarTarefa('Comprar lâmpada', { data: '2026-11-09' }))!;
+    await rodar();
+    expect(servidor.de('espelharTarefas')[0].dados.tarefas[0]).toMatchObject({ id: tarefa.id, feitoEm: 0 });
+  });
+
+  // Concluir e Desfazer enquanto o espelho da conclusão ainda está a caminho:
+  // o Google grava a conclusão depois do Desfazer, e ela não pode voltar como
+  // se fosse do dono.
+  async function concluirEDesfazerNoMeioDoEnvio(google: ReturnType<typeof tarefasGoogleFalso>) {
+    const servidor = servidorDeTeste({ comTarefasGoogle: true, tarefasGoogle: google });
+    const rodar = () => sincronizar({ chamar: servidor.chamar, esperar: semEspera });
+    const tarefa = (await criarTarefa('Revisar capítulo', { data: '2026-11-09' }))!;
+    await rodar();
+    vi.setSystemTime(AGORA + 1000);
+    await concluirTarefa(tarefa.id);
+    servidor.aoResponder(async (acao) => {
+      if (acao !== 'espelharTarefas') return;
+      servidor.aoResponder(undefined);
+      vi.setSystemTime(AGORA + 2000);
+      await reabrirTarefa(tarefa.id);
+    });
+    await rodar();
+    for (const passo of [1, 2]) {
+      vi.setSystemTime(AGORA + passo * 60 * 60_000);
+      await rodar();
+    }
+    return { servidor, tarefa };
+  }
+
+  it('Google que aceita a hora enviada: concluir e desfazer no meio do envio fica desfeito, e a espelho reabre', async () => {
+    const google = tarefasGoogleFalso({ agora: () => Date.now() + 5 * 60_000 });
+    const { servidor, tarefa } = await concluirEDesfazerNoMeioDoEnvio(google);
+    expect((await lerTarefa(tarefa.id)).feito).toBe(false);
+    expect(servidor.tarefasGoogle.vivas()[0].status).toBe('needsAction');
+  });
+
+  it('Google que grava a hora de chegada (5 min adiantado): também fica desfeito, e a espelho reabre', async () => {
+    const google = tarefasGoogleFalso({ ignorarCompleted: true, agora: () => Date.now() + 5 * 60_000 });
+    const { servidor, tarefa } = await concluirEDesfazerNoMeioDoEnvio(google);
+    expect((await lerTarefa(tarefa.id)).feito).toBe(false);
+    expect(servidor.tarefasGoogle.vivas()[0].status).toBe('needsAction');
+    expect(servidor.de('lerEspelhos').length).toBeGreaterThan(1);
   });
 });

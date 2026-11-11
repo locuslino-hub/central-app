@@ -192,7 +192,11 @@ export async function salvar<C extends Colecao>(
     const id = colecao === 'config' ? ID_CONFIG : registro.id || crypto.randomUUID();
     const atual: Registro | undefined = id === registro.id || colecao === 'config' ? await loja.get(id) : undefined;
     let novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
-    if (colecao === 'tarefas' && !semEspelho) novo = comHoraDoFeito(atual as Tarefa | undefined, novo as Tarefa) as Colecoes[C];
+    if (colecao === 'tarefas' && !semEspelho) {
+      const diferenca: unknown = await tx.objectStore(LOCAL).get(CHAVE_RELOGIO);
+      const medida = typeof diferenca === 'number' && Number.isFinite(diferenca) ? diferenca : 0;
+      novo = comHoraDoFeito(atual as Tarefa | undefined, novo as Tarefa, medida) as Colecoes[C];
+    }
     await loja.put(novo);
     await enfileirar(tx, colecao, novo.id);
     if (colecao === 'tarefas' && !semEspelho) await espelharSeMudou(tx, atual as Tarefa | undefined, novo as Tarefa);
@@ -212,14 +216,17 @@ function carimbo(atual: Registro | undefined): number {
 }
 
 /**
- * Concluir ou reabrir na Central marca `feitoEm` com a hora da escrita: entre
- * a Central e o Google Tarefas vale a mudança mais nova (ampliação 11/11).
- * Quem grava sem espelho (restauração da cópia, conclusão vinda do Google)
- * traz a hora que vale.
+ * Concluir ou reabrir na Central marca `feitoEm` com a hora da escrita no
+ * relógio do servidor (o deste aparelho mais a diferença medida no último
+ * puxar): entre a Central e o Google Tarefas vale a mudança mais nova
+ * (ampliação 11/11). Sempre acima do `feitoEm` anterior: reabrir uma
+ * conclusão vinda do Google com relógio adiantado ainda vence. Quem grava sem
+ * espelho (restauração da cópia, conclusão vinda do Google) traz a hora que vale.
  */
-function comHoraDoFeito(antes: Tarefa | undefined, depois: Tarefa): Tarefa {
+function comHoraDoFeito(antes: Tarefa | undefined, depois: Tarefa, diferenca: number): Tarefa {
   if (!antes || !!antes.feito === !!depois.feito) return depois;
-  return { ...depois, feitoEm: depois.atualizadoEm };
+  const anterior = typeof antes.feitoEm === 'number' && Number.isFinite(antes.feitoEm) ? antes.feitoEm : 0;
+  return { ...depois, feitoEm: Math.max(Date.now() + diferenca, anterior + 1) };
 }
 
 function enfileirar(tx: Escrita, colecao: Colecao, id: string) {
@@ -766,6 +773,34 @@ export async function lerLeituraDoGoogle(): Promise<{ desde: number | null; em: 
 
 export async function salvarLeituraDoGoogle(leitura: { desde: number | null; em: number }): Promise<void> {
   await comBanco((banco) => banco.put(LOCAL, leitura, CHAVE_LEITURA_DO_GOOGLE));
+}
+
+const chaveDaConclusaoPropria = (tarefaId: string) => `conclusaoPropria:${tarefaId}`;
+
+/**
+ * A hora de conclusão que o Google gravou quando este aparelho concluiu a
+ * tarefa (resposta do espelho). Só deste aparelho: conclusão no Google com
+ * essa hora ou mais velha é do próprio app, nunca do dono. Só sobe.
+ */
+export async function guardarConclusaoPropria(tarefaId: string, em: number): Promise<void> {
+  if (!Number.isFinite(em) || em < 0) return;
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [LOCAL]);
+    const atual: unknown = await tx.objectStore(LOCAL).get(chaveDaConclusaoPropria(tarefaId));
+    if (typeof atual !== 'number' || em > atual) await tx.objectStore(LOCAL).put(em, chaveDaConclusaoPropria(tarefaId));
+    await tx.done;
+  });
+}
+
+/** As horas guardadas por `guardarConclusaoPropria`, na ordem pedida (`undefined` onde não há). */
+export async function lerConclusoesProprias(tarefaIds: readonly string[]): Promise<(number | undefined)[]> {
+  if (tarefaIds.length === 0) return [];
+  return comBanco(async (banco) => {
+    const tx = banco.transaction(LOCAL, 'readonly');
+    tx.done.catch(() => {});
+    const lidas: unknown[] = await Promise.all(tarefaIds.map((id) => tx.objectStore(LOCAL).get(chaveDaConclusaoPropria(id))));
+    return lidas.map((em) => (typeof em === 'number' && Number.isFinite(em) && em >= 0 ? em : undefined));
+  });
 }
 
 /** Conflitos resolvidos neste aparelho, do mais antigo ao mais novo. */

@@ -20,12 +20,17 @@ export type Pedido = { acao: string; dados: any; tamanho: number };
 export function servidorDeTeste({
   comTarefasGoogle = false,
   agenda,
-}: { comTarefasGoogle?: boolean; /** Google Agenda falso (apoio/calendario.ts), para as ações de agenda. */ agenda?: CalendarioFalso } = {}) {
+  tarefasGoogle = tarefasGoogleFalso(),
+}: {
+  comTarefasGoogle?: boolean;
+  /** Google Agenda falso (apoio/calendario.ts), para as ações de agenda. */
+  agenda?: CalendarioFalso;
+  /** Google Tarefas falso sob medida (relógio, hora de conclusão ignorada). */
+  tarefasGoogle?: ReturnType<typeof tarefasGoogleFalso>;
+} = {}) {
   const armazem = armazemNaMemoria();
   armazem.agora = () => Date.now();
   const pedidos: Pedido[] = [];
-  /** O Google Tarefas do espelho (feito espelhado). */
-  const tarefasGoogle = tarefasGoogleFalso();
   /** Devolve um erro para lançar no lugar da resposta, ou nada para atender. */
   let antes: ((acao: string, vez: number) => Error | undefined) | undefined;
   let depois: ((acao: string) => Promise<void> | void) | undefined;

@@ -31,6 +31,8 @@ import {
   lerIdsDoEspelho,
   lerDesde,
   lerLeituraDoGoogle,
+  lerConclusoesProprias,
+  guardarConclusaoPropria,
   listar,
   salvarLeituraDoGoogle,
   agendaEsgotada,
@@ -304,12 +306,20 @@ async function tratarFalhaDoEspelho(erro: unknown, seqs: readonly number[]) {
 }
 
 /** Uma tarefa como a espelho a recebe, com o id da espelho se já se sabe. */
-function itemDoEspelho(tarefa: Tarefa, googleId: string | undefined): ItemDoEspelho {
-  const item: ItemDoEspelho = { id: tarefa.id, titulo: String(tarefa.titulo ?? '').slice(0, 2000), feito: !!tarefa.feito, apagado: !!tarefa.apagado };
+function itemDoEspelho(tarefa: Tarefa, googleId: string | undefined, conclusaoPropria: number | undefined): ItemDoEspelho {
+  // A hora do feito decide, no script, se uma reabertura desmarca o Google.
+  // Sempre vai (0 se o feito nunca mudou): sem ela o script trata como app antigo e reabre.
+  const feitoEm = typeof tarefa.feitoEm === 'number' && Number.isFinite(tarefa.feitoEm) && tarefa.feitoEm >= 0 ? tarefa.feitoEm : 0;
+  const item: ItemDoEspelho = {
+    id: tarefa.id,
+    titulo: String(tarefa.titulo ?? '').slice(0, 2000),
+    feito: !!tarefa.feito,
+    feitoEm,
+    apagado: !!tarefa.apagado,
+  };
   // Dia que não existe nem sai: o script recusaria o lote inteiro.
   if (dataValida(tarefa.data)) item.data = tarefa.data;
-  // A hora do feito decide, no script, se uma reabertura desmarca o Google.
-  if (typeof tarefa.feitoEm === 'number' && Number.isFinite(tarefa.feitoEm) && tarefa.feitoEm >= 0) item.feitoEm = tarefa.feitoEm;
+  if (conclusaoPropria !== undefined) item.conclusaoPropria = conclusaoPropria;
   if (googleId !== undefined && /^[A-Za-z0-9_-]{1,256}$/.test(googleId)) item.googleId = googleId;
   return item;
 }
@@ -363,13 +373,14 @@ async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
   const ids = [...porTarefa.keys()];
   const registros = (await lerRegistros(ids.map((id) => ({ colecao: 'tarefas' as const, id })))) as (Tarefa | undefined)[];
   const idsDoGoogle = await lerIdsDoEspelho(ids);
-  const grupos: { tarefa: Tarefa; seqs: number[]; googleId: string | undefined }[] = [];
+  const proprias = await lerConclusoesProprias(ids);
+  const grupos: { tarefa: Tarefa; seqs: number[]; googleId: string | undefined; propria: number | undefined }[] = [];
   const descartar: number[] = [];
   ids.forEach((id, i) => {
     const tarefa = registros[i];
     // Sumiu, ou deixou de ser espelhável (virou compromisso com hora) sem ser apagada: nada a mandar.
     if (!tarefa || (espelhoDaTarefa(tarefa) === null && !tarefa.apagado)) descartar.push(...porTarefa.get(id)!);
-    else grupos.push({ tarefa, seqs: porTarefa.get(id)!, googleId: idsDoGoogle[i] });
+    else grupos.push({ tarefa, seqs: porTarefa.get(id)!, googleId: idsDoGoogle[i], propria: proprias[i] });
   });
   await removerPendentes(descartar);
 
@@ -377,7 +388,7 @@ async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
     const lote = grupos.slice(i, i + LOTE_NO_MAXIMO);
     let resultados;
     try {
-      ({ resultados } = await espelharTarefas(lote.map(({ tarefa, googleId }) => itemDoEspelho(tarefa, googleId)), { chamar }));
+      ({ resultados } = await espelharTarefas(lote.map(({ tarefa, googleId, propria }) => itemDoEspelho(tarefa, googleId, propria)), { chamar }));
     } catch (erro) {
       await tratarFalhaDoEspelho(erro, lote.flatMap(({ seqs }) => seqs));
       continue;
@@ -393,6 +404,9 @@ async function enviarEspelhos(chamar: Chamar): Promise<boolean> {
       await removerPendentes(seqs);
       if (tarefa.apagado || !resultado.googleId) await esquecerIdDoEspelho(tarefa.id);
       else if (resultado.googleId !== googleId) await guardarIdDoEspelho(tarefa.id, resultado.googleId);
+      // Concluída por este aparelho: a hora que o Google gravou é a da própria conclusão.
+      // Guardada mesmo que o dono já tenha desfeito enquanto o pedido ia.
+      if (tarefa.feito && typeof resultado.conclusaoPropria === 'number') await guardarConclusaoPropria(tarefa.id, resultado.conclusaoPropria);
       // Aberta aqui, concluída pelo dono no Google: conclui aqui também.
       const concluida = { id: tarefa.id, em: resultado.concluidaEm };
       if (!tarefa.apagado && concluidaValida(concluida)) concluidasLa.push(concluida);

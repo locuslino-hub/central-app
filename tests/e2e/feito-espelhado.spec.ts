@@ -95,6 +95,7 @@ test('tarefa concluída direto no Google Tarefas fica feita na Central, e contin
   const [espelho] = script.tarefasGoogle.vivas();
   espelho.status = 'completed';
   espelho.completed = '2026-11-05T12:55:00.000Z';
+  espelho.updated = '2026-11-05T12:55:00.000Z';
   await page.clock.setFixedTime('2026-11-05T12:30:00+00:00');
   await page.reload();
 
