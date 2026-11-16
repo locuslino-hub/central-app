@@ -8,6 +8,8 @@
 // Cada cartão tem a sua fila: guardar, trocar a sala e desfazer o mesmo
 // cartão acontecem um depois do outro, na ordem em que o dono apertou.
 
+import { horaEmLisboa } from '../../script/agenda';
+import { ErroAgenda } from '../dados/agenda';
 import { avisoDaAgenda, trocarSalaDoCompromisso } from '../dados/compromisso';
 import { lerRegistros, salvar } from '../dados/loja';
 import type { Tarefa } from '../dados/tipos';
@@ -152,6 +154,12 @@ async function aplicar(aprendizado: Aprendizado, item: ItemDoChat): Promise<Item
   return item;
 }
 
+/** Compromisso numa hora que não existe em Lisboa (último domingo de março, 01:00 às 01:59). */
+function naoExisteEmLisboa(item: ItemDoChat): boolean {
+  if (item.tipo !== 'compromisso' || !item.data || !item.inicio || !item.fim) return false;
+  return horaEmLisboa(item.data, item.inicio) === null || horaEmLisboa(item.data, item.fim) === null;
+}
+
 /** Grava o item do cartão, com o que estava à espera do Guardar. */
 async function gravar(id: string) {
   const cartao = acharCartao(id);
@@ -172,7 +180,12 @@ async function gravar(id: string) {
     });
   } catch (erro) {
     console.error('Não consegui guardar o item do chat', erro);
-    concluir(id, 'guardar', { situacao: 'erro' });
+    // Hora do salto do horário de verão: tentar de novo falharia sempre igual.
+    const horaInexistente = erro instanceof ErroAgenda && erro.falha === 'invalido' && naoExisteEmLisboa(cartao.item);
+    concluir(id, 'guardar', {
+      situacao: 'erro',
+      aviso: horaInexistente ? 'Essa hora não existe em Lisboa neste dia' : undefined,
+    });
   }
 }
 

@@ -137,7 +137,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       <p class="chat-titulo">{item.titulo}</p>
       <p class="chat-quando">{descreverQuando(item, hoje)}</p>
       {porque && <p class="chat-motivo">{porque}</p>}
-      {situacao === 'erro' && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
+      {situacao === 'erro' && !cartao.aviso && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
       {cartao.aviso && (
         <p class="chat-pergunta" role="status">

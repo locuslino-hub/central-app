@@ -9,6 +9,7 @@
 // chamada com certeza baixa, sala indefinida ou frase com mais de 20 palavras,
 // e tem 30 s para responder; sem resposta útil, valem as regras.
 
+import { TITULO_NO_MAXIMO } from '../../script/agenda';
 import { criarCompromisso, desfazerCompromisso, type SituacaoDaAgenda } from '../dados/compromisso';
 import { desfazer } from '../dados/desfazer';
 import { hojeEmLisboa } from '../dados/dia';
@@ -288,7 +289,8 @@ export async function criarItem(item: Item): Promise<ItemCriado> {
 
 async function criarNaAgenda(item: Compromisso): Promise<ItemCriado> {
   const { eventoId, situacao } = await criarCompromisso({
-    titulo: item.titulo,
+    // A agenda recusa título acima de 200 caracteres: corta em vez de falhar sempre.
+    titulo: item.titulo.slice(0, TITULO_NO_MAXIMO).trimEnd(),
     data: item.data,
     inicio: item.inicio,
     fim: item.fim,

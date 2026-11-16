@@ -132,4 +132,36 @@ describe('frase de compromisso no chat', () => {
     expect(agenda.pedidos).toEqual([]);
     expect(await listar('tarefas')).toEqual([expect.objectContaining({ marcar: true, data: '2026-11-05' })]);
   });
+
+  it('título acima de 200 caracteres: o evento é criado com o título cortado', async () => {
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    render(<Chat />);
+
+    dizer(`Adicione reunião ${'sobre o projeto '.repeat(20)}na sexta feira com inicio às 11:00 e termino 12:00`);
+    const cartao = within(await screen.findByRole('article'));
+    await cartao.findByRole('button', { name: 'Desfazer' });
+
+    expect(agenda.eventos.size).toBe(1);
+    const titulo = [...agenda.eventos.values()][0].titulo;
+    expect(titulo.length).toBeLessThanOrEqual(200);
+    expect(titulo.startsWith('Reunião sobre o projeto')).toBe(true);
+    expect(cartao.queryByText(/Tente de novo/)).toBeNull();
+  });
+
+  it('hora que não existe em Lisboa (salto do horário de verão): aviso próprio, sem "Tente de novo"', async () => {
+    // Quarta-feira, 2027-03-24. O domingo 28 salta de 01:00 para 02:00.
+    vi.setSystemTime(new Date(2027, 2, 24, 12, 20));
+    const agenda = agendaEscrita();
+    await agenda.instalar();
+    render(<Chat />);
+
+    dizer('Adicione reunião sobre o projeto no domingo com inicio às 01:30 e termino 01:45');
+    const cartao = within(await screen.findByRole('article'));
+    await screen.findByText('Essa hora não existe em Lisboa neste dia');
+
+    expect(cartao.queryByText(/Tente de novo/)).toBeNull();
+    expect(agenda.eventos.size).toBe(0);
+    expect(await agendaPendente()).toEqual([]);
+  });
 });
