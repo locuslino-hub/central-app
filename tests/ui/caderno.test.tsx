@@ -405,3 +405,18 @@ describe('avisoDoItem', () => {
     expect(avisoDoItem({ ...base, tipo: 'tarefa', data: '2026-11-06' }, 'MBA', '2026-11-05')).toBe('Virou tarefa em MBA, para sexta, 6/11.');
   });
 });
+
+describe('Caderno: página grande demais (C-05)', () => {
+  it('editar além do limite não grava e avisa para dividir o texto', async () => {
+    // Já guardada acima do limite (ex.: veio de outro aparelho); qualquer edição é recusada.
+    const pagina = await comBlocos(Array.from({ length: 100 }, (_, i) => novoBloco('texto', `${i} ${'a'.repeat(1997)}`)));
+    abrir();
+    const c = await caderno();
+    await waitFor(() => expect(linhas(c)).toHaveLength(100));
+
+    fireEvent.input(linha(c), { target: { value: 'Marina escreveu mais uma linha' } });
+
+    expect(await c.findByText('A página ficou grande demais para sincronizar. Divida o texto em outra página.')).toBeTruthy();
+    expect((await paginaGuardada(pagina.id)).blocos[0].texto).toMatch(/^0 a+/);
+  });
+});

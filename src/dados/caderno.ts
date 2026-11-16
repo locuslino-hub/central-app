@@ -13,6 +13,12 @@ export type Painel = NonNullable<Bloco['painel']>;
 export const TEXTO_DO_BLOCO_NO_MAXIMO = 2000;
 export const BLOCOS_NO_MAXIMO = 300;
 export const TITULO_DA_PAGINA_NO_MAXIMO = 120;
+/**
+ * C-05: tamanho da página inteira (blocos + título, em caracteres do JSON). Fica
+ * abaixo do lote de envio (~258 KB): acima dele a página nunca sincronizaria.
+ */
+export const PAGINA_NO_MAXIMO = 200_000;
+export const GRANDE_DEMAIS = 'grande-demais';
 
 export function novoBloco(tipo: Exclude<TipoDeBloco, 'painel'>, texto = ''): Bloco {
   return { id: crypto.randomUUID(), tipo, texto };
@@ -66,14 +72,16 @@ export async function criarPagina(salaId: string, titulo: string): Promise<Pagin
 /**
  * Grava os blocos lendo a página de novo antes: o título e o resto que mudaram
  * em outro aparelho não são regravados por uma cópia velha. `false` se a página
- * não existe mais.
+ * não existe mais; `'grande-demais'` (nada é gravado) se a página passa de
+ * `PAGINA_NO_MAXIMO`.
  */
-export function gravarBlocos(id: string, blocos: readonly Bloco[]): Promise<boolean> {
+export function gravarBlocos(id: string, blocos: readonly Bloco[]): Promise<boolean | typeof GRANDE_DEMAIS> {
   return naFila(id, async () => {
     const atual = await lerPagina(id);
     if (!atual) return false;
     const novos = limpar(blocos);
     if (JSON.stringify(atual.blocos) === JSON.stringify(novos)) return true;
+    if (JSON.stringify(novos).length + (atual.titulo ?? '').length > PAGINA_NO_MAXIMO) return GRANDE_DEMAIS;
     await salvar('paginas', { ...atual, blocos: novos });
     return true;
   });
@@ -124,13 +132,14 @@ export async function removerBloco(paginaId: string, blocoId: string): Promise<D
   return feito && desfazerDeRemocao(paginaId, feito.bloco, feito.anteriorId);
 }
 
-export type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro' | 'apagado';
+export type Situacao = 'parado' | 'salvando' | 'salvo' | 'erro' | 'apagado' | 'grande-demais';
 
 /**
  * Grava um instante depois da última chamada de `agendar`; `esvaziar` grava já.
  * As gravações andam em fila. Se uma falha, o valor continua pendente. `gravar`
  * que devolve `false` (a página não existe mais) não vale como salvo: a
- * situação fica `apagado` e o valor continua pendente.
+ * situação fica `apagado` e o valor continua pendente. Devolvendo
+ * `'grande-demais'` (C-05), a situação é essa, também com o valor pendente.
  */
 export function criarGravador<T>(gravar: (valor: T) => Promise<unknown>, aoMudar: (s: Situacao) => void, atrasoMs: number) {
   let pendente: { valor: T } | null = null;
@@ -145,9 +154,10 @@ export function criarGravador<T>(gravar: (valor: T) => Promise<unknown>, aoMudar
       pendente = null;
       aoMudar('salvando');
       try {
-        if ((await gravar(valor)) === false) {
+        const gravado = await gravar(valor);
+        if (gravado === false || gravado === GRANDE_DEMAIS) {
           pendente ??= { valor };
-          aoMudar('apagado');
+          aoMudar(gravado === false ? 'apagado' : 'grande-demais');
           return;
         }
         aoMudar(pendente ? 'parado' : 'salvo');

@@ -39,6 +39,7 @@ import {
   lerPendente,
   lerRegistros,
   listarPendentes,
+  pararPendentes,
   registrarTentativa,
   removerPendentes,
   retirarPendente,
@@ -78,8 +79,8 @@ type RespostaPuxar = { registros: unknown[]; agora: number; agoraDoServidor?: nu
 type RespostaEnviar = {
   aceitas: { colecao: string; id: string }[];
   conflitos: unknown[];
-  /** Forma inválida para o script: ficam na fila (sem tela ainda; Tarefa 6). */
-  recusadas: unknown[];
+  /** Forma ou relógio que o script não aceita: o registro fica parado na fila (AvisoDaFila). */
+  recusadas: { colecao: string; id: string }[];
   substituidas: unknown[];
   /** Relógio do servidor, para conferir carimbos do futuro (0 se não veio). */
   agora: number;
@@ -148,7 +149,7 @@ function respostaEnviar(valor: unknown): RespostaEnviar {
   const lista = (valor: unknown) => (Array.isArray(valor) ? valor : []);
   return {
     ...resposta,
-    recusadas: lista(resposta.recusadas),
+    recusadas: lista(resposta.recusadas) as RespostaEnviar['recusadas'],
     substituidas: lista(resposta.substituidas),
     agora: Number.isFinite(resposta.agora) ? resposta.agora : 0,
   };
@@ -173,14 +174,15 @@ const chaveDe = (colecao: string, id: string) => JSON.stringify([colecao, id]);
 
 type Envio = { colecao: Colecao; id: string; seqs: number[]; registro: Registro };
 
-/** Lotes abaixo do limite do script. Registro que sozinho passa do limite fica na fila. */
+const tamanhoDoEnvio = (envio: Envio) => JSON.stringify({ colecao: envio.colecao, registro: envio.registro }).length + 1;
+
+/** Lotes abaixo do limite do script. Quem passa do limite sozinho já foi separado e parado antes. */
 function emLotes(envios: Envio[]): Envio[][] {
   const lotes: Envio[][] = [];
   let atual: Envio[] = [];
   let tamanho = 0;
   for (const envio of envios) {
-    const proprio = JSON.stringify({ colecao: envio.colecao, registro: envio.registro }).length + 1;
-    if (proprio > LIMITE_DO_LOTE) continue;
+    const proprio = tamanhoDoEnvio(envio);
     if (atual.length > 0 && tamanho + proprio > LIMITE_DO_LOTE) {
       lotes.push(atual);
       atual = [];
@@ -205,7 +207,10 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
     grupo.seqs.push(seq);
     grupos.set(chave, grupo);
   }
-  const lista = [...grupos.values()];
+  // Grupo só com entradas paradas não sai. Se o registro foi gravado de novo (entrada
+  // nova, sem parada), vai com as entradas velhas dele, que saem na mesma confirmação.
+  const ativos = new Set(pendentes.filter((p) => !p.parada).map(({ colecao, id }) => chaveDe(colecao, id)));
+  const lista = [...grupos.entries()].filter(([chave]) => ativos.has(chave)).map(([, grupo]) => grupo);
   const registros = await lerRegistros(lista);
   const envios: Envio[] = [];
   const semRegistro: number[] = [];
@@ -215,11 +220,14 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
     else semRegistro.push(...grupo.seqs); // nada a enviar: a loja nunca apaga sem lápide
   });
   await removerPendentes(semRegistro);
+  // Sozinho acima do limite do script: nunca caberia. Fica parado, com aviso.
+  const grandes = envios.filter((envio) => tamanhoDoEnvio(envio) > LIMITE_DO_LOTE);
+  await pararPendentes(grandes.flatMap(({ seqs }) => seqs), 'grande-demais');
   // O desde deste puxar: o servidor devolve em `substituidas` o que sobrescrever
   // de outro aparelho e que este ainda não tinha visto.
   const desde = await lerDesde();
 
-  for (const lote of emLotes(envios)) {
+  for (const lote of emLotes(envios.filter((envio) => !grandes.includes(envio)))) {
     const mudancas = lote.map(({ colecao, registro }) => ({ colecao, registro }));
     const resposta = await comTentativas(
       async () => respostaEnviar(await chamar('enviar', { desde, mudancas })),
@@ -229,6 +237,12 @@ async function enviar(chamar: Chamar, esperar: (ms: number) => Promise<void>) {
     // guarda a nossa em avisos e tira os pendentes desse registro.
     await gravarDoServidor(resposta.conflitos, resposta.agora);
     const aceitas = new Set(resposta.aceitas.map(({ colecao, id }) => chaveDe(colecao, id)));
+    // Recusada pelo script: reenviar não adianta. Só os seq lidos antes do envio.
+    const recusadas = new Set(resposta.recusadas.map(({ colecao, id }) => chaveDe(colecao, id)));
+    await pararPendentes(
+      lote.filter(({ colecao, id }) => recusadas.has(chaveDe(colecao, id)) && !aceitas.has(chaveDe(colecao, id))).flatMap(({ seqs }) => seqs),
+      'recusada',
+    );
     // Só os seq lidos antes do envio: escrita feita durante o envio fica na fila.
     // Avisos das substituídas e saída dos pendentes vão juntos (uma escrita).
     await concluirEnvio(
@@ -455,7 +469,8 @@ async function lerConclusoesDoGoogle(chamar: Chamar): Promise<boolean> {
  */
 async function temPendentes(): Promise<boolean> {
   try {
-    return (await listarPendentes()).some((p) => p.tipo !== 'espelho');
+    // Entrada parada (recusada, grande demais) não é "por enviar": o AvisoDaFila a mostra.
+    return (await listarPendentes()).some((p) => p.tipo !== 'espelho' && !(p.tipo === 'registro' && p.parada));
   } catch {
     return true;
   }

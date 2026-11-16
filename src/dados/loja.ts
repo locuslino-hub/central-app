@@ -502,6 +502,38 @@ export async function descartarPendentes(seqs: readonly number[]): Promise<void>
   });
 }
 
+/** C-05: a sincronia para de enviar estas entradas de registro (recusadas ou grandes demais). */
+export async function pararPendentes(seqs: number[], motivo: 'recusada' | 'grande-demais'): Promise<void> {
+  if (seqs.length === 0) return;
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const em = Date.now();
+    for (const seq of seqs) {
+      const atual: Pendente | undefined = await fila.get(seq);
+      if (atual?.tipo === 'registro') await fila.put({ ...atual, parada: { motivo, em } });
+    }
+    await tx.done;
+  });
+}
+
+/** C-05: "Tentar de novo": as entradas paradas voltam à fila normal. */
+export async function retomarPendentes(seqs: number[]): Promise<void> {
+  if (seqs.length === 0) return;
+  await comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    for (const seq of seqs) {
+      const atual: Pendente | undefined = await fila.get(seq);
+      if (atual?.tipo === 'registro' && atual.parada) {
+        const { parada: _parada, ...resto } = atual;
+        await fila.put(resto);
+      }
+    }
+    await tx.done;
+  });
+}
+
 /**
  * Tarefa com hora fica tarefa (decisão de 11/11). A migração antiga levava
  * essas tarefas ao Google Agenda e já não existe; os pedidos dela que ficaram

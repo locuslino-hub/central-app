@@ -1,7 +1,8 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes as listarTodosOsPendentes, salvar, salvarRelogioDoServidor } from '../../src/dados/loja';
-import { ErroConexao } from '../../src/conexao/cliente';
+import { ErroConexao, ErroScript } from '../../src/conexao/cliente';
+import { criarCompromisso } from '../../src/dados/compromisso';
 import { puxouNaUltimaRodada, sincronizar } from '../../src/dados/sincronia';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { iniciarVirada, virarDia } from '../../src/dados/virada';
@@ -576,10 +577,15 @@ describe('iniciarVirada', () => {
       parar();
     });
 
-    it('C-02: uma pendência presa (grande demais) não impede a virada, porque o puxar deu certo', async () => {
+    it('C-02: uma pendência presa (compromisso recusado pelo Google) não impede a virada, porque o puxar deu certo', async () => {
       await escritaDeOntem();
-      await salvar('tarefas', tarefa('x'.repeat(300_000))); // nunca cabe no lote: a rodada termina 'por-enviar'
-      const sincronia = () => sincronizar({ chamar: servidor.chamar, esperar: semEspera });
+      // O compromisso fica na fila da agenda (sem script neste momento) e o Google o recusa em cada rodada.
+      await criarCompromisso({ titulo: 'Reunião com a Renata', data: '2026-11-06', inicio: '11:00', fim: '12:00', salaId: null });
+      const recusaAgenda: typeof servidor.chamar = async (acao, dados) => {
+        if (acao === 'criarEvento') throw new ErroScript('interno');
+        return servidor.chamar(acao, dados);
+      };
+      const sincronia = () => sincronizar({ chamar: recusaAgenda, esperar: semEspera });
       expect(await sincronia()).toBe('por-enviar');
       const parar = iniciarVirada({ antes: sincronia, conectado, puxou: puxouNaUltimaRodada });
       await vi.waitFor(async () =>

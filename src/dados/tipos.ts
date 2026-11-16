@@ -161,6 +161,12 @@ export type PendenteRegistro = {
   tipo: 'registro';
   colecao: Colecao;
   id: string;
+  /**
+   * C-05: o script recusou o registro, ou ele passa do lote. A sincronia deixa
+   * de enviá-lo; o AvisoDaFila mostra e o dono escolhe Tentar de novo ou
+   * Descartar. Gravar o registro de novo cria outra entrada, sem `parada`.
+   */
+  parada?: { motivo: 'recusada' | 'grande-demais'; em: number };
 };
 
 /** O evento a criar na agenda principal; `id` é o do cliente (`novoIdDeEvento`). */

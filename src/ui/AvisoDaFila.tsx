@@ -4,29 +4,44 @@
 // Nada é apagado sozinho. O espelho no Google (tarefas no Google Tarefas, "✓ "
 // dos compromissos) que parou também aparece aqui; descartar não muda a Central.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { agendaEsgotada, descartarPendentes, listarPendentes, reiniciarAgendaParada } from '../dados/loja';
+import {
+  agendaEsgotada,
+  descartarPendentes,
+  listarPendentes,
+  reiniciarAgendaParada,
+  retomarPendentes,
+} from '../dados/loja';
 import { assinarEstado, sincronizar } from '../dados/sincronia';
-import type { PendenteAgenda, PendenteEspelho } from '../dados/tipos';
+import type { PendenteAgenda, PendenteEspelho, PendenteRegistro } from '../dados/tipos';
 import './tarefas.css';
 
 type Parada = PendenteAgenda | PendenteEspelho;
+// C-05: registro que o script recusou ou que é grande demais (`parada` na entrada).
+type RegistroParado = PendenteRegistro & { parada: NonNullable<PendenteRegistro['parada']> };
 
-async function lerParadas(): Promise<Parada[]> {
+async function lerParadas(): Promise<{ paradas: Parada[]; registros: RegistroParado[] }> {
   const agora = Date.now();
-  return (await listarPendentes()).filter(
-    (p): p is Parada => (p.tipo === 'agenda' || p.tipo === 'espelho') && agendaEsgotada(p, agora),
-  );
+  const fila = await listarPendentes();
+  return {
+    paradas: fila.filter((p): p is Parada => (p.tipo === 'agenda' || p.tipo === 'espelho') && agendaEsgotada(p, agora)),
+    registros: fila.filter((p): p is RegistroParado => p.tipo === 'registro' && !!p.parada),
+  };
 }
 
 const vezes = (n: number, um: string, varios: string) => (n === 1 ? um : varios.replace('#', String(n)));
 
 export function AvisoDaFila() {
   const [paradas, setParadas] = useState<Parada[]>([]);
+  const [registros, setRegistros] = useState<RegistroParado[]>([]);
   const [falha, setFalha] = useState(false);
   const ativo = useRef(true);
   const ler = () =>
     lerParadas()
-      .then((lista) => ativo.current && setParadas(lista))
+      .then((lista) => {
+        if (!ativo.current) return;
+        setParadas(lista.paradas);
+        setRegistros(lista.registros);
+      })
       .catch((erro: unknown) => console.error('Não consegui ler a fila da agenda', erro));
 
   useEffect(() => {
@@ -40,12 +55,14 @@ export function AvisoDaFila() {
     };
   }, []);
 
-  if (paradas.length === 0) return null;
+  if (paradas.length === 0 && registros.length === 0) return null;
   const naoEntraram = paradas.filter((p) => p.acao === 'criarEvento').length;
   const naoSairam = paradas.filter((p) => p.acao === 'removerEvento').length;
   // Uma tarefa pode ter várias entradas: conta tarefas.
   const tarefas = new Set(paradas.flatMap((p) => (p.acao === 'espelharTarefa' ? [p.tarefaId] : []))).size;
   const feitos = paradas.filter((p) => p.acao === 'marcarEventoFeito' || p.acao === 'marcarTarefaGoogle').length;
+  // Um registro pode ter várias entradas: conta registros.
+  const alteracoes = new Set(registros.map((p) => JSON.stringify([p.colecao, p.id]))).size;
 
   async function agir(acao: () => Promise<unknown>) {
     setFalha(false);
@@ -83,6 +100,15 @@ export function AvisoDaFila() {
             {vezes(feitos, '1 compromisso feito não foi marcado no Google Agenda.', '# compromissos feitos não foram marcados no Google Agenda.')}
           </li>
         )}
+        {alteracoes > 0 && (
+          <li class="aviso-de-conflito">
+            {vezes(
+              alteracoes,
+              '1 alteração não pôde ser enviada e está guardada neste aparelho.',
+              '# alterações não puderam ser enviadas e estão guardadas neste aparelho.',
+            )}
+          </li>
+        )}
       </ul>
       <div class="aviso-da-fila-acoes">
         <button
@@ -91,6 +117,7 @@ export function AvisoDaFila() {
           onClick={() =>
             void agir(async () => {
               await reiniciarAgendaParada();
+              await retomarPendentes(registros.map((p) => p.seq));
               void sincronizar();
             })
           }
@@ -100,7 +127,7 @@ export function AvisoDaFila() {
         <button
           type="button"
           class="tarefa-entendi"
-          onClick={() => void agir(() => descartarPendentes(paradas.map((p) => p.seq)))}
+          onClick={() => void agir(() => descartarPendentes([...paradas, ...registros].map((p) => p.seq)))}
         >
           Descartar
         </button>

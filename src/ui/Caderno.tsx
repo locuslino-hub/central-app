@@ -41,6 +41,7 @@ const SITUACAO: Record<Situacao, string> = {
   salvo: 'Salvo',
   erro: 'Não consegui salvar.',
   apagado: 'Esta página foi apagada; o texto não foi guardado.',
+  'grande-demais': 'A página ficou grande demais para sincronizar. Divida o texto em outra página.',
 };
 
 const ROTULO_DO_BLOCO = { texto: 'Texto', titulo: 'Título', lista: 'Item da lista' } as const;

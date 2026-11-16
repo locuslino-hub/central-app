@@ -10,6 +10,8 @@ import {
   lerDiferencaDeRelogio,
   listar,
   listarAvisos,
+  pararPendentes,
+  retomarPendentes,
   listarPendentes as listarTodosOsPendentes,
   salvar,
   semear,
@@ -467,13 +469,14 @@ describe('envio', () => {
     expect(await listar('tarefas')).toHaveLength(30);
   });
 
-  it('registro grande demais fica pendente e não trava os outros', async () => {
+  it('registro grande demais fica parado e não trava os outros', async () => {
     no(notebook);
     const grande = await salvar('tarefas', tarefa('x'.repeat(300_000)));
     await salvar('tarefas', tarefa('Pequena'));
 
-    expect(await sincronizarAqui()).toBe('por-enviar');
-    expect(await listarPendentes()).toMatchObject([{ id: grande.id }]);
+    // C-05: parado não conta como "por enviar" (o aviso da fila é quem o mostra).
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect(await listarPendentes()).toMatchObject([{ id: grande.id, parada: { motivo: 'grande-demais' } }]);
     expect(servidor.pedidos.every((p) => p.tamanho <= LIMITE_DO_CORPO)).toBe(true);
     no(celular);
     await sincronizarAqui();
@@ -787,12 +790,13 @@ describe('fix 1: validação do que chega do servidor', () => {
 });
 
 describe('fix 1: recusadas pelo servidor', () => {
-  it('registro recusado fica na fila e os outros seguem', async () => {
+  it('registro recusado fica na fila, parado, e os outros seguem', async () => {
     no(notebook);
     await salvar('tarefas', { id: 'id com espaço', ...tarefa('Recusada') });
     const boa = await salvar('tarefas', tarefa('Boa'));
 
-    expect(await sincronizarAqui()).toBe('por-enviar');
+    // C-05: recusada fica parada (não conta como "por enviar").
+    expect(await sincronizarAqui()).toBe('atualizado');
     const [envio] = servidor.de('enviar');
     expect(envio.dados.mudancas).toHaveLength(2);
     expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => p.id)).toEqual(['id com espaço']);
@@ -1090,5 +1094,72 @@ describe('fix 2: avisos de substituidas e pendentes juntos', () => {
     );
     expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => p.id)).toEqual(['b']);
     expect(await listarAvisos()).toMatchObject([{ registroId: 'a', perdedora: { titulo: 'A de outro' } }]);
+  });
+});
+
+describe('C-05: pendências que nunca sairão ficam paradas', () => {
+  const doRegistro = async () => (await listarPendentes()).filter((p) => p.tipo === 'registro');
+
+  it('recusada pelo script: fica parada com o motivo, não é reenviada e a rodada termina atualizado', async () => {
+    no(notebook);
+    await salvar('tarefas', { id: 'id com espaço', ...tarefa('Entrega da Marina') });
+
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect(await doRegistro()).toMatchObject([{ id: 'id com espaço', parada: { motivo: 'recusada' } }]);
+    expect((await doRegistro())[0].parada!.em).toBeTypeOf('number');
+    expect(servidor.de('enviar')).toHaveLength(1);
+
+    horario(1);
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect(servidor.de('enviar')).toHaveLength(1);
+    expect(await doRegistro()).toHaveLength(1);
+  });
+
+  it('registro gravado de novo ganha entrada sem parada e é enviado outra vez', async () => {
+    no(notebook);
+    const t = await salvar('tarefas', { id: 'id com espaço', ...tarefa('Entrega da Marina') });
+    await sincronizarAqui();
+    expect(servidor.de('enviar')).toHaveLength(1);
+
+    horario(1);
+    await salvar('tarefas', { ...t, titulo: 'Entrega da Renata' });
+    const fila = await doRegistro();
+    expect(fila.filter((p) => !p.parada)).toHaveLength(1);
+    await sincronizarAqui();
+    expect(servidor.de('enviar')).toHaveLength(2);
+  });
+
+  it('grande demais: não vai ao script, fica parada com o motivo e a rodada termina atualizado', async () => {
+    no(notebook);
+    const grande = await salvar('tarefas', tarefa('x'.repeat(300_000)));
+
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect(servidor.de('enviar')).toEqual([]);
+    expect(await doRegistro()).toMatchObject([{ id: grande.id, parada: { motivo: 'grande-demais' } }]);
+    horario(1);
+    expect(await sincronizarAqui()).toBe('atualizado');
+    expect(servidor.de('enviar')).toEqual([]);
+  });
+
+  it('retomar tira a parada e o registro volta a ser enviado', async () => {
+    no(notebook);
+    await salvar('tarefas', { id: 'id com espaço', ...tarefa('Entrega da Marina') });
+    await sincronizarAqui();
+    const seqs = (await doRegistro()).map((p) => p.seq);
+
+    await retomarPendentes(seqs);
+    expect((await doRegistro()).every((p) => !p.parada)).toBe(true);
+    horario(1);
+    await sincronizarAqui();
+    expect(servidor.de('enviar')).toHaveLength(2);
+  });
+
+  it('pararPendentes marca só os seqs dados', async () => {
+    no(notebook);
+    const a = await salvar('tarefas', tarefa('Aula do Prof. Souza'));
+    await salvar('tarefas', tarefa('Reunião da Aurora'));
+    const [primeira] = await doRegistro();
+    await pararPendentes([primeira.seq], 'recusada');
+    expect((await doRegistro()).filter((p) => p.parada).map((p) => p.id)).toEqual([a.id]);
   });
 });
