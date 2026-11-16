@@ -347,14 +347,20 @@ describe('falhas', () => {
     expect(await listarPendentes()).toEqual(antes);
   });
 
-  it('interno dá erro-codigo sem perder pendentes', async () => {
+  it.each(['puxar', 'enviar'])('interno em %s dá erro-script (não erro-codigo) sem perder pendentes', async (etapa) => {
     no(notebook);
     await salvar('tarefas', tarefa('Ligar para Renata'));
     const antes = await listarPendentes();
-    servidor.falharAntes((acao) => (acao === 'enviar' ? new ErroScript('interno') : undefined));
+    servidor.falharAntes((acao) => (acao === etapa ? new ErroScript('interno') : undefined));
 
-    expect(await sincronizarAqui()).toBe('erro-codigo');
+    expect(await sincronizarAqui()).toBe('erro-script');
     expect(await listarPendentes()).toEqual(antes);
+  });
+
+  it('resposta que não é JSON (ErroScript interno do cliente) dá erro-script, não sem-internet', async () => {
+    no(notebook);
+    const html = () => Promise.reject(new ErroScript('interno'));
+    expect(await sincronizar({ chamar: html, esperar: semEspera })).toBe('erro-script');
   });
 
   it('ocupado tenta de novo e envia', async () => {
@@ -396,7 +402,7 @@ describe('falhas', () => {
     no(notebook);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const quebrado = () => Promise.reject(new TypeError('falha qualquer'));
-    expect(await sincronizar({ chamar: quebrado, esperar: semEspera })).toBe('erro-codigo');
+    expect(await sincronizar({ chamar: quebrado, esperar: semEspera })).toBe('erro-script');
   });
 });
 

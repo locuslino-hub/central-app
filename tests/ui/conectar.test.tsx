@@ -62,6 +62,14 @@ describe('Conectar', () => {
     expect(await lerConexao()).toBeNull();
   });
 
+  it('C-04: URL que devolve página (não o script) continua pedindo para conferir a URL', async () => {
+    respondeCom('<!DOCTYPE html><html><body>Entrar na conta</body></html>');
+    render(<Conectar />);
+    preencherEEnviar();
+    await screen.findByText(/confira a URL/i);
+    expect(await lerConexao()).toBeNull();
+  });
+
   it('script ocupado pede para tentar de novo', async () => {
     respondeCom('{"ok":false,"erro":"ocupado"}');
     render(<Conectar />);
@@ -74,7 +82,7 @@ describe('Conectar', () => {
     respondeCom('{"ok":false,"erro":"interno"}');
     render(<Conectar />);
     preencherEEnviar();
-    await screen.findByText(/problema/i);
+    await screen.findByText(/não respondeu direito/i);
     expect(await lerConexao()).toBeNull();
   });
 

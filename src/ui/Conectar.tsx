@@ -8,7 +8,7 @@ const TOQUE_MINIMO = { minHeight: '44px' };
 const MENSAGEM_DO_SCRIPT: Record<ErroDoScript, string> = {
   'codigo-invalido': 'Código incorreto. Confira o código e tente de novo.',
   ocupado: 'O script está ocupado. Tente de novo em instantes.',
-  interno: 'O script teve um problema. Tente de novo em instantes.',
+  interno: 'O script não respondeu direito. Confira a URL (a da implantação, terminada em /exec) e tente de novo.',
 };
 
 export function formatarTempo(ms: number): string {

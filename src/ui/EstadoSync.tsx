@@ -9,6 +9,7 @@ export const TEXTO_DO_ESTADO: Record<EstadoSync, string> = {
   'sem-internet': 'Sem internet',
   'por-enviar': 'Por enviar',
   'erro-codigo': 'Problema com o código do aparelho',
+  'erro-script': 'O script do Google não respondeu direito. Suas alterações estão guardadas.',
 };
 
 /** Sem conexão guardada neste aparelho, "sem internet" seria enganoso: falta conectar. */
@@ -19,7 +20,7 @@ type Mostrado = EstadoSync | 'nao-conectado';
 const TEXTO: Record<Mostrado, string> = { ...TEXTO_DO_ESTADO, 'nao-conectado': TEXTO_NAO_CONECTADO };
 
 /** Só o que pede atenção vai para o leitor de tela; voltar ao normal fica em silêncio. */
-const ANUNCIADOS = new Set<Mostrado>(['sem-internet', 'por-enviar', 'erro-codigo', 'nao-conectado']);
+const ANUNCIADOS = new Set<Mostrado>(['sem-internet', 'por-enviar', 'erro-codigo', 'erro-script', 'nao-conectado']);
 
 /** Estados que levam a Conectar aparelho. */
 const LEVAM_A_CONECTAR = new Set<Mostrado>(['erro-codigo', 'nao-conectado']);

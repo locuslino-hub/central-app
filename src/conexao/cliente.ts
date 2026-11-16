@@ -10,8 +10,9 @@ const ERROS_DO_SCRIPT: readonly unknown[] = [
 ] satisfies ErroDoScript[];
 
 /**
- * Não chegou uma resposta válida do script: rede, tempo limite, página que não
- * é JSON ou JSON fora do combinado (inclusive `ok` sem `dados`).
+ * Não chegou resposta nenhuma do script: sem conexão salva, rede ou tempo limite.
+ * Página que não é JSON e JSON fora do combinado (inclusive `ok` sem `dados`)
+ * são `ErroScript('interno')`: o script respondeu, mas mal (C-04).
  */
 export class ErroConexao extends Error {
   constructor(mensagem = 'Sem conexão com o script') {
@@ -57,18 +58,18 @@ function interpretar<T>(texto: string): T {
   try {
     corpo = JSON.parse(texto);
   } catch {
-    throw new ErroConexao();
+    throw new ErroScript('interno');
   }
   if (corpo?.ok === true) {
     // Toda ação do script devolve algo (ping devolve `{}`): sem `dados`, a
     // resposta não é do combinado, e quem chamou não recebe `undefined` calado.
-    if (!Object.prototype.hasOwnProperty.call(corpo, 'dados')) throw new ErroConexao('O script respondeu sem os dados');
+    if (!Object.prototype.hasOwnProperty.call(corpo, 'dados')) throw new ErroScript('interno');
     return corpo.dados as T;
   }
   if (corpo?.ok === false && ERROS_DO_SCRIPT.includes(corpo.erro)) {
     throw new ErroScript(corpo.erro as ErroDoScript);
   }
-  throw new ErroConexao();
+  throw new ErroScript('interno');
 }
 
 async function chamarEm<T>(conexao: Conexao, acao: string, dados: object): Promise<T> {

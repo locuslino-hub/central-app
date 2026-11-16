@@ -299,6 +299,7 @@
   border-radius: 3px;
 }
 .sync[data-estado='erro-codigo'] .ponto,
+.sync[data-estado='erro-script'] .ponto,
 .sync[data-estado='nao-conectado'] .ponto {
   background: var(--alerta);
   border-radius: 2px;

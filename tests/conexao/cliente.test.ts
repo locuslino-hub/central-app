@@ -87,10 +87,13 @@ describe('chamar', () => {
     expect(String((erro as Error).message)).not.toContain(CODIGO);
   });
 
-  it('página HTML em vez de JSON lança ErroConexao', async () => {
+  it('página HTML em vez de JSON lança ErroScript interno, não ErroConexao', async () => {
     await salvarConexao(CONEXAO);
     respondeCom('<!doctype html><title>Erro</title>');
-    await expect(chamar('ping')).rejects.toBeInstanceOf(ErroConexao);
+    const lancado = await chamar('ping').catch((e: unknown) => e);
+    expect(lancado).toBeInstanceOf(ErroScript);
+    expect(lancado).not.toBeInstanceOf(ErroConexao);
+    expect((lancado as ErroScript).erro).toBe('interno');
   });
 
   it.each([
@@ -100,18 +103,20 @@ describe('chamar', () => {
     ['ok que não é booleano', '{"ok":"sim"}'],
     ['erro desconhecido', '{"ok":false,"erro":"outra-coisa"}'],
     ['ok falso sem erro', '{"ok":false}'],
-  ])('JSON fora do combinado lança ErroConexao: %s', async (_nome, corpo) => {
+  ])('JSON fora do combinado lança ErroScript interno: %s', async (_nome, corpo) => {
     await salvarConexao(CONEXAO);
     respondeCom(corpo);
-    await expect(chamar('ping')).rejects.toBeInstanceOf(ErroConexao);
+    const lancado = await chamar('ping').catch((e: unknown) => e);
+    expect(lancado).toBeInstanceOf(ErroScript);
+    expect((lancado as ErroScript).erro).toBe('interno');
   });
 
-  it('ok sem dados é resposta inválida: lança ErroConexao com motivo claro, não devolve undefined', async () => {
+  it('ok sem dados é resposta inválida: lança ErroScript interno, não devolve undefined', async () => {
     await salvarConexao(CONEXAO);
     respondeCom('{"ok":true}');
     const lancado = await chamar('puxar').catch((e: unknown) => e);
-    expect(lancado).toBeInstanceOf(ErroConexao);
-    expect((lancado as Error).message).toBe('O script respondeu sem os dados');
+    expect(lancado).toBeInstanceOf(ErroScript);
+    expect((lancado as ErroScript).erro).toBe('interno');
   });
 
   it('dados nulos ainda são uma resposta (quem chamou confere a forma)', async () => {

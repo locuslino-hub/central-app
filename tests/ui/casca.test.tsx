@@ -446,6 +446,7 @@ describe('estado da sincronia, sempre em texto', () => {
       'sem-internet': 'Sem internet',
       'por-enviar': 'Por enviar',
       'erro-codigo': 'Problema com o código do aparelho',
+      'erro-script': 'O script do Google não respondeu direito. Suas alterações estão guardadas.',
     });
     expect(TEXTO_NAO_CONECTADO).toBe('Aparelho não conectado');
   });
@@ -484,6 +485,19 @@ describe('estado da sincronia, sempre em texto', () => {
       await sincronizar({ chamar: () => Promise.reject(new ErroScript('codigo-invalido')), esperar: esperarSemRede });
     });
     expect(chip().textContent).toContain('Problema com o código do aparelho');
+    expect(chip().querySelector('a[href="#/conectar"]')).not.toBeNull();
+  });
+
+  it('erro-script mostra o texto novo e não leva a Conectar', async () => {
+    await conectarAparelho();
+    await mostrar('#/', 1280);
+    await act(async () => {
+      await sincronizar({ chamar: () => Promise.reject(new ErroScript('interno')), esperar: esperarSemRede });
+    });
+    expect(chip().textContent).toContain('O script do Google não respondeu direito. Suas alterações estão guardadas.');
+    expect(chip().textContent).not.toContain('código do aparelho');
+    expect(chip().querySelector('a')).toBeNull();
+    expect(anuncio().textContent).toBe('O script do Google não respondeu direito. Suas alterações estão guardadas.');
   });
 
   it('por-enviar: sem rede e com alteração guardada', async () => {
@@ -569,7 +583,7 @@ describe('estado da sincronia, sempre em texto', () => {
     await conectarAparelho();
     await mostrar('#/', 1280);
     await act(async () => {
-      await sincronizar({ chamar: () => Promise.reject(new ErroScript('interno')), esperar: esperarSemRede });
+      await sincronizar({ chamar: () => Promise.reject(new ErroScript('codigo-invalido')), esperar: esperarSemRede });
     });
     const alvo = within(chip()).getByRole('link', { name: /Problema com o código do aparelho/ });
     expect(alvo.getAttribute('href')).toBe('#/conectar');

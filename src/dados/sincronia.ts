@@ -57,7 +57,7 @@ import type {
   Tarefa,
 } from './tipos';
 
-export type EstadoSync = 'atualizado' | 'atualizando' | 'sem-internet' | 'por-enviar' | 'erro-codigo';
+export type EstadoSync = 'atualizado' | 'atualizando' | 'sem-internet' | 'por-enviar' | 'erro-codigo' | 'erro-script';
 
 /** Mesmo formato de `chamar` (conexao/cliente.ts). */
 export type Chamar = <T>(acao: string, dados?: object) => Promise<T>;
@@ -477,7 +477,8 @@ async function temPendentes(): Promise<boolean> {
 }
 
 /**
- * R14: código recusado ou script com problema dão `erro-codigo`; sem rede ou
+ * R14 + C-04: só `codigo-invalido` dá `erro-codigo` (leva a Conectar); script com
+ * problema, resposta fora do combinado e erro local dão `erro-script`; sem rede ou
  * script ocupado demais, `por-enviar` se há o que enviar, senão `sem-internet`.
  * Em todos os casos a fila fica como está.
  */
@@ -487,7 +488,8 @@ async function estadoDoErro(erro: unknown): Promise<EstadoSync> {
   }
   // Só o erro, nunca dados: o conteúdo é do dono.
   if (!(erro instanceof ErroScript)) console.error('Falha inesperada na sincronia', erro);
-  return 'erro-codigo';
+  if (erro instanceof ErroScript && erro.erro === 'codigo-invalido') return 'erro-codigo';
+  return 'erro-script';
 }
 
 /**
