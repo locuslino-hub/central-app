@@ -2,7 +2,7 @@
 // poder ser testado: main.tsx só liga isto e desenha a tela.
 import { lerConexao } from './conexao/guarda';
 import { enfileirarEspelhosQueFaltam, largarMigracoesDaFila, semear, semearPalavras } from './dados/loja';
-import { iniciarSincronia, sincronizar } from './dados/sincronia';
+import { iniciarSincronia, puxouNaUltimaRodada, sincronizar } from './dados/sincronia';
 import { iniciarVirada } from './dados/virada';
 
 /** Pede ao navegador que não apague os dados do app quando faltar espaço. Sem resposta na tela. */
@@ -30,6 +30,7 @@ export function iniciarApp() {
   // desfaria o que o outro aparelho mudou nesse tempo.
   iniciarVirada({
     antes: () => sincronizar(),
+    puxou: puxouNaUltimaRodada,
     conectado: async () => {
       try {
         return (await lerConexao()) != null;

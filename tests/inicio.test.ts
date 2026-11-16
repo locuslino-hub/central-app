@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const iniciarSincronia = vi.fn(() => () => {});
 const sincronizar = vi.fn(async () => 'atualizado');
+const puxouNaUltimaRodada = vi.fn(() => true);
 const iniciarVirada = vi.fn((_opcoes?: unknown) => () => {});
 
-vi.mock('../src/dados/sincronia', () => ({ iniciarSincronia, sincronizar }));
+vi.mock('../src/dados/sincronia', () => ({ iniciarSincronia, puxouNaUltimaRodada, sincronizar }));
 vi.mock('../src/dados/virada', () => ({ iniciarVirada }));
 
 beforeEach(() => {
@@ -25,6 +26,13 @@ describe('iniciarApp (o que o main.tsx liga ao abrir)', () => {
     const { antes } = iniciarVirada.mock.calls[0][0] as { antes: () => Promise<unknown> };
     await expect(antes()).resolves.toBe('atualizado');
     expect(sincronizar).toHaveBeenCalledTimes(1);
+  });
+
+  it('C-02: a virada recebe o sinal de que o puxar da sincronia deu certo', async () => {
+    const { iniciarApp } = await import('../src/inicio');
+    iniciarApp();
+    const { puxou } = iniciarVirada.mock.calls[0][0] as { puxou: () => boolean };
+    expect(puxou).toBe(puxouNaUltimaRodada);
   });
 
   it('a virada sabe se o aparelho tem conexão guardada', async () => {

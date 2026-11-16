@@ -89,6 +89,11 @@ export type OpcoesDaVirada = {
    * Sem conexão (uso só neste aparelho) vira com o que há.
    */
   conectado?: () => Promise<boolean>;
+  /**
+   * C-02: o puxar da última sincronia deu certo? Com ele, uma rodada que
+   * terminou `'por-enviar'` (pendência presa) também conta como dado em dia.
+   */
+  puxou?: () => boolean;
   agora?: () => Date;
   esperaMaximaMs?: number;
   /** Intervalo da nova tentativa quando a virada ficou pendente. */
@@ -113,6 +118,7 @@ type Espera = { terminou: true; resultado: unknown } | { terminou: false };
 export function iniciarVirada({
   antes,
   conectado,
+  puxou = () => false,
   agora = () => new Date(),
   esperaMaximaMs = ESPERA_MAXIMA_PADRAO_MS,
   tentarDeNovoEmMs = TENTAR_DE_NOVO_PADRAO_MS,
@@ -142,7 +148,8 @@ export function iniciarVirada({
   /** Dado em dia: sem conexão, qualquer um serve; conectado, só logo depois de uma sincronia que terminou. */
   const emDia = async (espera: Espera): Promise<boolean> => {
     if (!antes || !(await conectado?.())) return true;
-    if (!espera.terminou || espera.resultado !== 'atualizado') return false;
+    if (!espera.terminou) return false;
+    if (espera.resultado !== 'atualizado' && !(espera.resultado === 'por-enviar' && puxou())) return false;
     // Recém-sincronizado: o relógio do servidor (medido no puxar) e o daqui têm de concordar.
     // Sem a medida (script antigo), uma sincronia atualizada basta.
     const diferenca = await lerDiferencaDeRelogio();

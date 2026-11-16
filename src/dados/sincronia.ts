@@ -475,11 +475,23 @@ async function estadoDoErro(erro: unknown): Promise<EstadoSync> {
   return 'erro-codigo';
 }
 
+/**
+ * C-02: a última rodada puxou do servidor com sucesso? É o sinal de "dados em
+ * dia" da virada: uma pendência presa (recusada, grande demais) faz a rodada
+ * terminar `por-enviar`, mas o que veio do outro aparelho já está aqui.
+ */
+let puxou = false;
+export function puxouNaUltimaRodada(): boolean {
+  return puxou;
+}
+
 async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: OpcoesSync) {
   mudarEstado('atualizando');
   let final: EstadoSync;
+  puxou = false;
   try {
     await puxar(chamar, esperar);
+    puxou = true;
     await enviar(chamar, esperar);
     await enviarAgenda(chamar);
     // Antes do espelho: o que o dono concluiu no Google já vai concluído.

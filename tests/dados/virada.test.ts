@@ -1,7 +1,8 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apagar, gravarDoServidor, listar, listarAvisos, listarPendentes as listarTodosOsPendentes, salvar, salvarRelogioDoServidor } from '../../src/dados/loja';
-import { sincronizar } from '../../src/dados/sincronia';
+import { ErroConexao } from '../../src/conexao/cliente';
+import { puxouNaUltimaRodada, sincronizar } from '../../src/dados/sincronia';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 import { iniciarVirada, virarDia } from '../../src/dados/virada';
 import { servidorDeTeste } from '../apoio/servidor';
@@ -568,6 +569,30 @@ describe('iniciarVirada', () => {
       servidor.armazem.agora = () => AGORA; // o servidor sabe que ainda é quinta
       const antes = await listar('tarefas');
       const parar = iniciarVirada({ antes: () => sincronizar({ chamar: servidor.chamar, esperar: semEspera }), conectado });
+      await esvaziar();
+      await new Promise((r) => setTimeout(r, 100));
+      await esvaziar();
+      expect(await listar('tarefas')).toEqual(antes);
+      parar();
+    });
+
+    it('C-02: uma pendência presa (grande demais) não impede a virada, porque o puxar deu certo', async () => {
+      await escritaDeOntem();
+      await salvar('tarefas', tarefa('x'.repeat(300_000))); // nunca cabe no lote: a rodada termina 'por-enviar'
+      const sincronia = () => sincronizar({ chamar: servidor.chamar, esperar: semEspera });
+      expect(await sincronia()).toBe('por-enviar');
+      const parar = iniciarVirada({ antes: sincronia, conectado, puxou: puxouNaUltimaRodada });
+      await vi.waitFor(async () =>
+        expect((await listar('tarefas')).find((t) => t.titulo === 'Do outro dia')?.data).toBe(HOJE),
+      );
+      parar();
+    });
+
+    it('C-02: sem rede (o puxar falha), a virada continua adiada', async () => {
+      await escritaDeOntem();
+      const semRede: typeof servidor.chamar = () => Promise.reject(new ErroConexao());
+      const antes = await listar('tarefas');
+      const parar = iniciarVirada({ antes: () => sincronizar({ chamar: semRede, esperar: semEspera }), conectado, puxou: puxouNaUltimaRodada });
       await esvaziar();
       await new Promise((r) => setTimeout(r, 100));
       await esvaziar();
