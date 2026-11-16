@@ -60,7 +60,9 @@ export function AvisoDaFila() {
   const naoSairam = paradas.filter((p) => p.acao === 'removerEvento').length;
   // Uma tarefa pode ter várias entradas: conta tarefas.
   const tarefas = new Set(paradas.flatMap((p) => (p.acao === 'espelharTarefa' ? [p.tarefaId] : []))).size;
-  const feitos = paradas.filter((p) => p.acao === 'marcarEventoFeito' || p.acao === 'marcarTarefaGoogle').length;
+  const feitos = paradas.filter((p) => p.acao === 'marcarEventoFeito').length;
+  // C-19: o feito de um bloco do Google Tarefas é tarefa, não compromisso da agenda.
+  const tarefasFeitas = paradas.filter((p) => p.acao === 'marcarTarefaGoogle').length;
   // Um registro pode ter várias entradas: conta registros.
   const alteracoes = new Set(registros.map((p) => JSON.stringify([p.colecao, p.id]))).size;
 
@@ -98,6 +100,11 @@ export function AvisoDaFila() {
         {feitos > 0 && (
           <li class="aviso-de-conflito">
             {vezes(feitos, '1 compromisso feito não foi marcado no Google Agenda.', '# compromissos feitos não foram marcados no Google Agenda.')}
+          </li>
+        )}
+        {tarefasFeitas > 0 && (
+          <li class="aviso-de-conflito">
+            {vezes(tarefasFeitas, '1 tarefa feita não foi marcada no Google Tarefas.', '# tarefas feitas não foram marcadas no Google Tarefas.')}
           </li>
         )}
         {alteracoes > 0 && (

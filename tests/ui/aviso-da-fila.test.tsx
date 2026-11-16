@@ -92,3 +92,15 @@ describe('aviso da fila: espelho no Google parado', () => {
     expect((await listar('tarefas')).map((t) => t.id)).toContain(tarefa.id);
   });
 });
+
+describe('aviso da fila: feito de bloco do Google Tarefas (C-19)', () => {
+  it('cita o Google Tarefas, não o Google Agenda', async () => {
+    const { enfileirarMarcaDeTarefa } = await import('../../src/dados/loja');
+    await enfileirarMarcaDeTarefa('tarefa-google-1', true);
+    await recusarAte(...(await listarPendentes()).flatMap((p) => (p.tipo === 'espelho' ? [p.seq] : [])));
+    render(<AvisoDaFila />);
+
+    expect(await screen.findByText('1 tarefa feita não foi marcada no Google Tarefas.')).toBeTruthy();
+    expect(screen.queryByText(/Google Agenda/)).toBeNull();
+  });
+});
