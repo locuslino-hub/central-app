@@ -276,6 +276,27 @@ describe('virarDia: dois aparelhos', () => {
     await virarDia(HOJE);
     expect((await listar('tarefas')).find((t) => t.id === 'tarefa-ontem')?.data).toBe('2026-11-06');
   });
+
+  it('C-01: a virada do outro aparelho não desfaz uma conclusão ainda não enviada', async () => {
+    await prepararNosDois();
+    // O celular conclui a tarefa de ontem sem rede: ainda não envia.
+    vi.setSystemTime(AGORA + 1000);
+    no(celular);
+    const ontem = (await listar('tarefas')).find((t) => t.id === 'tarefa-ontem')!;
+    await salvar('tarefas', { ...ontem, feito: true });
+
+    // O notebook vira o dia depois, com o relógio mais adiantado, e envia.
+    vi.setSystemTime(AGORA + 5000);
+    no(notebook);
+    await virarDia(HOJE);
+    await sincronizarAqui();
+
+    // O celular volta à rede: a conclusão tem de continuar.
+    no(celular);
+    await sincronizarAqui();
+    await sincronizarAqui();
+    expect((await visivel()).find((t) => t.id === 'tarefa-ontem')?.feito).toBe(true);
+  });
 });
 
 describe('iniciarVirada', () => {

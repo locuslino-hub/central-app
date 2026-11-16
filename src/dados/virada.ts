@@ -59,7 +59,8 @@ async function virar(hoje: string): Promise<ResultadoDaVirada> {
     const [fresca] = await lerRegistros([{ colecao: 'tarefas', id: candidata.id }]);
     const mudanca = fresca && mudancaDe(fresca as Tarefa, hoje, segunda);
     if (!mudanca) continue;
-    await salvar('tarefas', mudanca.novo);
+    // C-01: carimbo mínimo, para uma conclusão feita no outro aparelho (ainda não enviada) vencer.
+    await salvar('tarefas', mudanca.novo, { carimboMinimo: true });
     resultado[mudanca.tipo]++;
   }
   return resultado;

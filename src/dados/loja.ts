@@ -179,7 +179,7 @@ function notificar(mudanca: Mudanca) {
 export async function salvar<C extends Colecao>(
   colecao: C,
   registro: ParaSalvar<Colecoes[C]>,
-  { semEspelho = false }: { semEspelho?: boolean } = {},
+  { semEspelho = false, carimboMinimo = false }: { semEspelho?: boolean; carimboMinimo?: boolean } = {},
 ): Promise<Colecoes[C]> {
   const salvo = await comBanco(async (banco) => {
     const tx = escrever(banco, [colecao, PENDENTES, LOCAL]);
@@ -188,7 +188,10 @@ export async function salvar<C extends Colecao>(
     // Config é um registro só, sempre 'geral': é esse que lerConfig lê.
     const id = colecao === 'config' ? ID_CONFIG : registro.id || crypto.randomUUID();
     const atual: Registro | undefined = id === registro.id || colecao === 'config' ? await loja.get(id) : undefined;
-    let novo = { ...registro, id, atualizadoEm: carimbo(atual), aparelho } as Colecoes[C];
+    // `carimboMinimo`: escrita automática (virada do dia) não ganha da edição
+    // humana que outro aparelho fez depois, mesmo com o relógio adiantado.
+    const hora = carimboMinimo && atual ? atual.atualizadoEm + 1 : carimbo(atual);
+    let novo = { ...registro, id, atualizadoEm: hora, aparelho } as Colecoes[C];
     if (colecao === 'tarefas' && !semEspelho) {
       const diferenca: unknown = await tx.objectStore(LOCAL).get(CHAVE_RELOGIO);
       const medida = typeof diferenca === 'number' && Number.isFinite(diferenca) ? diferenca : 0;
