@@ -13,6 +13,7 @@ import {
   listar,
   listarAvisos,
   listarPendentes as listarTodosOsPendentes,
+  recuperarAviso,
   removerPendentes,
   salvar,
   salvarDesde,
@@ -599,6 +600,66 @@ describe('loja para a sincronia', () => {
 
     await dispensarAviso(aviso.id);
     expect(await listarAvisos()).toEqual([]);
+  });
+
+  describe('recuperarAviso (C-03)', () => {
+    /** Marina edita aqui; o outro aparelho edita depois e vence. A cópia local vira aviso. */
+    async function umConflito() {
+      await gravarDoServidor([
+        { colecao: 'tarefas', registro: { id: 't1', ...tarefa('Base'), atualizadoEm: AGORA - 1, aparelho: 'outro' } },
+      ]);
+      await salvar('tarefas', { id: 't1', ...tarefa('Revisar texto da Marina') });
+      await gravarDoServidor([
+        { colecao: 'tarefas', registro: { id: 't1', ...tarefa('Texto da Marina revisto'), atualizadoEm: AGORA + 1, aparelho: 'outro' } },
+      ]);
+      const [aviso] = await listarAvisos();
+      return aviso;
+    }
+
+    it('um conflito gera aviso com a versão perdedora guardada', async () => {
+      const aviso = await umConflito();
+      expect(aviso.perdedora).toMatchObject({ id: 't1', titulo: 'Revisar texto da Marina' });
+      expect(aviso.vencedora).toMatchObject({ id: 't1', titulo: 'Texto da Marina revisto' });
+    });
+
+    it('volta a versão perdedora à loja como edição nova, entra na fila e tira o aviso', async () => {
+      const aviso = await umConflito();
+      expect((await listarPendentes()).filter((p) => p.tipo === 'registro')).toEqual([]);
+
+      await recuperarAviso(aviso.id);
+
+      const [recuperada] = await listar('tarefas');
+      expect(recuperada).toMatchObject({ id: 't1', titulo: 'Revisar texto da Marina' });
+      expect(recuperada.atualizadoEm).toBeGreaterThan(aviso.vencedora.atualizadoEm);
+      expect(await listarAvisos()).toEqual([]);
+      const fila = await listarPendentes();
+      expect(fila).toHaveLength(1);
+      expect(fila[0]).toMatchObject({ tipo: 'registro', colecao: 'tarefas', id: 't1' });
+    });
+
+    it('avisa quem ouve a loja de que o registro mudou', async () => {
+      const aviso = await umConflito();
+      const ouvidas: Mudanca[] = [];
+      ouvir((m) => ouvidas.push(m));
+      await recuperarAviso(aviso.id);
+      expect(ouvidas).toContainEqual({ colecao: 'tarefas', id: 't1' });
+    });
+
+    it('aviso que não existe não quebra nem muda nada', async () => {
+      const aviso = await umConflito();
+      await expect(recuperarAviso(9999)).resolves.toBeUndefined();
+      expect(await listarAvisos()).toHaveLength(1);
+      expect((await listar('tarefas'))[0]).toMatchObject({ titulo: 'Texto da Marina revisto' });
+      expect(aviso.id).not.toBe(9999);
+    });
+
+    it('recuperar duas vezes o mesmo aviso não regrava de novo', async () => {
+      const aviso = await umConflito();
+      await recuperarAviso(aviso.id);
+      const [depois] = await listar('tarefas');
+      await recuperarAviso(aviso.id);
+      expect((await listar('tarefas'))[0]).toEqual(depois);
+    });
   });
 
   it('falha no meio da escrita rejeita salvar e apagar, sem rejeição solta e sem meia escrita', async () => {

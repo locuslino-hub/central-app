@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
-import { gravarDoServidor, listarAvisos, salvar, semear } from '../../src/dados/loja';
+import { gravarDoServidor, listar, listarAvisos, listarPendentes, salvar, semear } from '../../src/dados/loja';
 import { AvisosDeConflito } from '../../src/ui/AvisosDeConflito';
 import { tarefa } from '../apoio/tarefas';
 
@@ -78,6 +78,70 @@ describe('aviso de conflito no Painel', () => {
     await screen.findByText(/A outra era/);
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByRole('region', { name: 'Avisos de mudanças' })).toBeTruthy();
+  });
+});
+
+describe('Ver e Recuperar a versão que perdeu (C-03)', () => {
+  /** Notas da Marina editadas nos dois aparelhos: o outro venceu, o texto local só existe no aviso. */
+  async function conflitoDeNotas() {
+    const local = await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes', notas: 'Combinar com a Renata a revisão do capítulo 2' });
+    await gravarDoServidor([
+      { colecao: 'pessoas', registro: { ...local, notas: 'Falar com o Prof. Souza', atualizadoEm: AGORA + 60_000, aparelho: 'celular' } },
+    ]);
+    return local;
+  }
+
+  it('Ver mostra o conteúdo da versão que perdeu, e só depois de clicar', async () => {
+    await conflitoDeNotas();
+    render(<AvisosDeConflito />);
+    const ver = await screen.findByRole('button', { name: /^Ver/ });
+    expect(screen.queryByText(/Combinar com a Renata/)).toBeNull();
+    fireEvent.click(ver);
+    expect(await screen.findByText(/Combinar com a Renata a revisão do capítulo 2/)).toBeTruthy();
+    // A versão que ficou não é a mostrada como perdida.
+    expect(screen.queryByText(/Falar com o Prof. Souza/)).toBeNull();
+  });
+
+  it('os botões vêm antes do Entendi', async () => {
+    await conflitoDeNotas();
+    render(<AvisosDeConflito />);
+    const nomes = (await screen.findAllByRole('button')).map((b) => b.textContent);
+    expect(nomes).toEqual(['Ver', 'Recuperar', 'Entendi']);
+  });
+
+  it('Ver de uma tarefa mostra o título da versão perdida', async () => {
+    await conflito('Rever capítulo 3', 'Rever capítulo 4');
+    render(<AvisosDeConflito />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Ver/ }));
+    expect(await screen.findByText('Título: Rever capítulo 3')).toBeTruthy();
+  });
+
+  it('Recuperar regrava a versão perdida, o aviso some e ela vai para a fila', async () => {
+    await conflitoDeNotas();
+    render(<AvisosDeConflito />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Recuperar/ }));
+    await waitFor(() => expect(screen.queryByText(/A outra era/)).toBeNull());
+    expect(await listarAvisos()).toEqual([]);
+    const [marina] = await listar('pessoas');
+    expect(marina.notas).toBe('Combinar com a Renata a revisão do capítulo 2');
+    expect((await listarPendentes()).some((p) => p.tipo === 'registro' && p.colecao === 'pessoas')).toBe(true);
+  });
+
+  it('se a recuperação falha, mostra a mensagem e o aviso continua', async () => {
+    await conflitoDeNotas();
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = IDBObjectStore.prototype.put;
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore) {
+      throw new Error('disco cheio');
+    });
+    render(<AvisosDeConflito />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Recuperar/ }));
+    expect(await screen.findByText('Não consegui recuperar. Tente de novo.')).toBeTruthy();
+    vi.mocked(IDBObjectStore.prototype.put).mockRestore();
+    expect(IDBObjectStore.prototype.put).toBe(original);
+    erro.mockRestore();
+    expect(await listarAvisos()).toHaveLength(1);
+    expect(screen.getByText(/A outra era/)).toBeTruthy();
   });
 });
 

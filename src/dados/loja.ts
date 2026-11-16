@@ -746,6 +746,20 @@ export async function dispensarAviso(id: number): Promise<void> {
   await comBanco((banco) => banco.delete(AVISOS, id));
 }
 
+/**
+ * Traz de volta a versão que perdeu num conflito: regrava a `perdedora` com
+ * `salvar`, que a torna uma edição nova (carimbo de agora), a põe na fila de
+ * envio e a sincroniza. Só depois tira o aviso: se a regravação falhar, o aviso
+ * continua e nada se perde. Aviso que não existe (já dispensado, ou apagado
+ * pelo limite) não faz nada.
+ */
+export async function recuperarAviso(id: number): Promise<void> {
+  const aviso: Aviso | undefined = await comBanco((banco) => banco.get(AVISOS, id));
+  if (!aviso) return;
+  await salvar(aviso.colecao, aviso.perdedora as ParaSalvar<Colecoes[Colecao]>);
+  await dispensarAviso(id);
+}
+
 function objeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }

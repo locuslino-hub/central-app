@@ -298,6 +298,15 @@
   min-height: var(--toque);
   font-size: 0.93rem;
 }
+.aviso-perdida {
+  flex-basis: 100%;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
 .avisos-mais {
   margin: 0 0 6px;
   color: var(--tinta2);
