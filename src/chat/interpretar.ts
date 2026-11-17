@@ -26,7 +26,7 @@ export const DURACAO_PADRAO_MIN = 60;
 
 /** O item como o cartão precisa: o das regras e mais o que a memória sabe dizer. */
 export type ItemDoChat = Item & {
-  /** `baixa`: o cartão pede confirmação antes de guardar. */
+  /** `baixa`: o item é guardado na hora do mesmo jeito; a Central só avisa para o dono conferir o cartão. */
   certeza: 'alta' | 'baixa';
   /** Nome citado que ninguém conhece, quando o item ficou sem sala: o cartão pergunta. */
   pessoaNova?: string;

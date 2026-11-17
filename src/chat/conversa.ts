@@ -211,10 +211,6 @@ export async function enviar(frase: string): Promise<void> {
     mudarMensagem(resposta, { texto: 'Não consegui ler a frase agora. Tente de novo.', esperando: false });
     return;
   }
-  if (itens.length === 0) {
-    mudarMensagem(resposta, { texto: 'Não entendi. Pode dizer de outro jeito?', esperando: false });
-    return;
-  }
   const cartoes: EstadoCartao[] = itens.map((item) => ({
     id: novoId(),
     item,
