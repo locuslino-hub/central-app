@@ -94,7 +94,7 @@ describe('salvar', () => {
       salvar('tarefas', tarefa('Revisar artigo')),
       salvar('salas', { nome: 'Aurora', ordem: 9 }),
     ]);
-    const c = await salvar('rascunhos', { texto: 'ligar para Renata' });
+    const c = await salvar('pessoas', { nome: 'Renata', salaId: 'sala-aulas' });
 
     expect(b.aparelho).toBe(a.aparelho);
     expect(c.aparelho).toBe(a.aparelho);
@@ -103,7 +103,7 @@ describe('salvar', () => {
   it('o aparelho não fica guardado junto das coleções', async () => {
     const salva = await salvar('tarefas', tarefa('Revisar artigo'));
     const colecoes = await Promise.all(
-      (['salas', 'pessoas', 'palavras', 'documentos', 'paginas', 'estadosEmail', 'rascunhos', 'config'] as const).map(
+      (['salas', 'pessoas', 'palavras', 'documentos', 'paginas', 'estadosEmail', 'config'] as const).map(
         (colecao) => listar(colecao, { comApagados: true }),
       ),
     );
@@ -135,13 +135,11 @@ describe('salvar', () => {
     expect(new Set(seqs).size).toBe(3);
   });
 
-  it('rascunhos, config e adiadaAte de e-mail entram em pendentes como o resto', async () => {
-    const rascunho = await salvar('rascunhos', { texto: 'pedir parecer ao Prof. Souza', salaId: null });
+  it('config e adiadaAte de e-mail entram em pendentes como o resto', async () => {
     const config = await salvar('config', { id: 'geral', fimDoDia: '21:00' });
     const email = await salvar('estadosEmail', { id: 'email-ficticio-1', feito: false, adiadaAte: '2026-11-06' });
 
     expect((await listarPendentes()).filter((p) => p.tipo === 'registro').map((p) => [p.colecao, p.id])).toEqual([
-      ['rascunhos', rascunho.id],
       ['config', 'geral'],
       ['estadosEmail', email.id],
     ]);
@@ -157,7 +155,6 @@ describe('salvar', () => {
     ['documentos', { titulo: 'Plano', url: 'https://exemplo.invalid/plano', arquivado: false }],
     ['paginas', { salaId: 'sala-aulas', titulo: 'Notas', blocos: [{ id: 'b1', tipo: 'painel', painel: 'agenda' }] }],
     ['estadosEmail', { feito: true }],
-    ['rascunhos', { texto: 'rascunho' }],
     ['config', { fimDoDia: '19:30' }],
   ];
   it.each(TODAS)('guarda e lista registros de %s', async (colecao, registro) => {

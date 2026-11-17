@@ -132,7 +132,7 @@ describe('leitura dos e-mails', () => {
   it('o assunto, o trecho e o endereço ficam só na memória: nada no IndexedDB nem no localStorage', async () => {
     await gmailDeTeste([email('Assunto secreto', { trecho: 'Trecho secreto', enderecoRemetente: 'quem@exemplo.invalid' })]);
     await atualizarEmails();
-    const colecoes = ['salas', 'pessoas', 'tarefas', 'palavras', 'documentos', 'paginas', 'estadosEmail', 'rascunhos', 'config'] as const;
+    const colecoes = ['salas', 'pessoas', 'tarefas', 'palavras', 'documentos', 'paginas', 'estadosEmail', 'config'] as const;
     const tudo = JSON.stringify(await Promise.all(colecoes.map((c) => listar(c, { comApagados: true }))));
     expect(tudo).not.toContain('secreto');
     expect(tudo).not.toContain('quem@');

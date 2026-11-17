@@ -4,7 +4,7 @@
 // que só existe em versões novas é opcional, para registro antigo, que não o
 // tem, continuar valendo.
 import { describe, expect, it } from 'vitest';
-import { ESQUEMAS, NOMES_DAS_COLECOES, registroValido, semCamposDesconhecidos, type NomeDaColecao } from '../../script/colecoes';
+import { ESQUEMAS, NOMES_DAS_COLECOES, colecaoConhecida, registroValido, semCamposDesconhecidos, type NomeDaColecao } from '../../script/colecoes';
 import type { Colecoes } from '../../src/dados/tipos';
 
 // Relógio fixo: quinta, 2026-11-05, 12:20 em Lisboa (WET = UTC em novembro).
@@ -46,7 +46,6 @@ const COMPLETOS: { [C in NomeDaColecao]: Colecoes[C] } = {
     ],
   },
   estadosEmail: { ...base, feito: true, adiadaAte: '2026-11-07' },
-  rascunhos: { ...base, texto: 'Ideia', salaId: null },
   config: { ...base, id: 'geral', fimDoDia: '20:00', diaFechado: '2026-11-05' },
   eventosFeitos: { ...base, eventoId: 'ev-1', agendaId: 'primary', data: '2026-11-05', feito: true, pendenteNoGoogle: true, soNaCentral: false },
   coresDasSalas: { ...base, chave: 'cor:5', salaId: 'sala-casa' },
@@ -56,6 +55,12 @@ const COMPLETOS: { [C in NomeDaColecao]: Colecoes[C] } = {
 const DA_BASE = new Set(['id', 'atualizadoEm', 'aparelho', 'apagado']);
 
 describe('esquemas do script', () => {
+  it('rascunhos não é coleção conhecida (C-16: nenhuma tela a usava)', () => {
+    expect(colecaoConhecida('rascunhos')).toBe(false);
+    expect(NOMES_DAS_COLECOES).not.toContain('rascunhos');
+    expect(ESQUEMAS).not.toHaveProperty('rascunhos');
+  });
+
   it.each(NOMES_DAS_COLECOES)('%s: todo campo que o app grava está no esquema', (colecao) => {
     const campos = Object.keys(COMPLETOS[colecao]).filter((campo) => !DA_BASE.has(campo));
     expect(campos.filter((campo) => !(campo in ESQUEMAS[colecao]))).toEqual([]);

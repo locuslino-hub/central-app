@@ -34,6 +34,7 @@ describe('montarCopia', () => {
     expect(copia.colecoes.tarefas.map((t) => t.titulo)).toEqual(['Ler o artigo da Aurora']);
     expect(copia.colecoes.agua).toHaveLength(1);
     expect(copia.colecoes.salas.length).toBeGreaterThanOrEqual(7);
+    expect(copia.colecoes).not.toHaveProperty('rascunhos');
   });
 
   it('não leva o que foi apagado', async () => {
@@ -118,6 +119,19 @@ describe('restaurarCopia', () => {
     expect(volta).not.toHaveProperty('pendenteNoGoogle');
     expect(volta).not.toHaveProperty('soNaCentral');
     expect(await listarPendentes()).toHaveLength(antes + 1); // só o registro, que sincroniza com o Drive
+  });
+});
+
+describe('cópia antiga com a coleção rascunhos (tirada na V02)', () => {
+  it('rascunhos vazio é ignorado: restaura o resto, sem recusar nada e sem quebrar', async () => {
+    const criada = await salvar('tarefas', tarefa('Ler o artigo da Aurora'));
+    const copia = await montarCopia();
+    (copia.colecoes as Record<string, unknown[]>).rascunhos = [];
+    await apagar('tarefas', criada.id);
+
+    expect(resumoDaCopia(copia).itens).toBe(1);
+    expect(await restaurarCopia(copia)).toEqual({ restaurados: 1, recusados: 0 });
+    expect((await listar('tarefas')).map((t) => t.titulo)).toEqual(['Ler o artigo da Aurora']);
   });
 });
 

@@ -77,8 +77,6 @@ export type Pagina = Base & { salaId: string; titulo: string; blocos: Bloco[] };
 
 export type EstadoEmail = Base & { feito: boolean; adiadaAte?: string };
 
-export type Rascunho = Base & { texto: string; salaId?: string | null };
-
 /**
  * Ajustes do dono. `fimDoDia`: `HH:MM`. `diaFechado` (Tarefa 16): o dia
  * (`AAAA-MM-DD`) em que o dono deu o passo final de Fechar o dia. Sincroniza
@@ -134,7 +132,6 @@ export type Colecoes = {
   documentos: Documento;
   paginas: Pagina;
   estadosEmail: EstadoEmail;
-  rascunhos: Rascunho;
   config: Config;
   eventosFeitos: EventoFeito;
   coresDasSalas: CorDaSala;

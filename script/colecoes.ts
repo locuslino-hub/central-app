@@ -23,7 +23,6 @@ type Tipo =
   | 'texto'
   | 'texto?'
   | 'textoOuNulo'
-  | 'textoOuNulo?'
   | 'url'
   | 'dia'
   | 'dia?'
@@ -69,7 +68,6 @@ export const ESQUEMAS = {
   documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?', arquivado: 'booleano?' },
   paginas: { salaId: 'texto', titulo: 'texto', blocos: 'blocos?' },
   estadosEmail: { feito: 'booleano?', adiadaAte: 'texto?' },
-  rascunhos: { texto: 'texto', salaId: 'textoOuNulo?' },
   /** `diaFechado`: o dia (AAAA-MM-DD) em que o dono fechou o dia (Tarefa 16). */
   config: { fimDoDia: 'texto', diaFechado: 'dia?' },
   eventosFeitos: {
@@ -107,8 +105,6 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || typeof valor === 'string';
     case 'textoOuNulo':
       return valor === null || typeof valor === 'string';
-    case 'textoOuNulo?':
-      return valor === undefined || valor === null || typeof valor === 'string';
     case 'url':
       return typeof valor === 'string' && URL_VALIDA.test(valor);
     case 'dia':

@@ -85,7 +85,6 @@ for (const [nome, viewport] of [
           'paginas',
           'palavras',
           'pessoas',
-          'rascunhos',
           'salas',
           'tarefas',
         ].sort(),

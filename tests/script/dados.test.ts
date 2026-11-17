@@ -70,6 +70,17 @@ describe('enviar: campos fora do esquema', () => {
 });
 
 describe('puxar', () => {
+  it('arquivo antigo com um registro de rascunhos (coleção tirada na V02) puxa sem quebrar', () => {
+    const rascunho = { colecao: 'rascunhos', recebidoEm: T0, registro: { id: 'r', texto: 'x', atualizadoEm: T0, aparelho: 'a' } };
+    const armazem = armazemNaMemoria({
+      conteudo: JSON.stringify({ versao: 1, ultimo: T0, registros: [rascunho, { colecao: 'tarefas', recebidoEm: T0, registro: tarefa('t1', 'Ler', T0) }] }),
+    });
+    const { registros } = puxar({ desde: 0 }, armazem);
+    expect(registros.map((r) => r.colecao)).toContain('tarefas');
+    // Quem o recebe (o app) o ignora: ver tests/dados/sincronia.test.ts.
+    expect(() => enviar({ mudancas: [item(tarefa('t2', 'Outra', T0 + 1))] }, armazem)).not.toThrow();
+  });
+
   it('sem arquivo no Drive devolve lista vazia e agora 0', () => {
     const armazem = armazemNaMemoria();
     expect(puxar({ desde: 0 }, armazem)).toEqual({ registros: [], agora: 0, agoraDoServidor: armazem.agora() });
@@ -347,6 +358,7 @@ describe('ações pelo tratar', () => {
     ['coleção toString', item(tarefa('t', 'a', T0), 'toString')],
     ['coleção desconhecida', item(tarefa('t', 'a', T0), 'naoExiste')],
     ['coleção avisos (só local)', item(tarefa('t', 'a', T0), 'avisos')],
+    ['coleção rascunhos (tirada na V02)', { colecao: 'rascunhos', registro: { id: 'r', texto: '', atualizadoEm: T0, aparelho: 'a' } }],
     ['coleção vazia', item(tarefa('t', 'a', T0), '')],
     ['tarefa sem titulo', { colecao: 'tarefas', registro: { id: 't', salaId: null, atualizadoEm: T0, aparelho: 'a' } }],
     ['titulo número', { colecao: 'tarefas', registro: { ...tarefa('t', 'a', T0), titulo: 5 } }],
@@ -388,7 +400,6 @@ describe('ações pelo tratar', () => {
     ['config', { colecao: 'config', registro: { id: 'geral', fimDoDia: '21:00', atualizadoEm: T0, aparelho: 'a' } }],
     ['compromisso com inicio', item({ ...tarefa('t', 'a', T0), data: '2026-11-06', inicio: '11:00', duracaoMin: 60 })],
     ['tarefa com aviso de semana vencida', item({ ...tarefa('t', 'a', T0), semanaVencida: '2026-10-26' })],
-    ['rascunho sem sala', { colecao: 'rascunhos', registro: { id: 'r', texto: '', atualizadoEm: T0, aparelho: 'a' } }],
     ['id de UUID', item(tarefa('0b6f6a8e-3c1d-4c55-9a51-2f7c1d2e3f40', 'a', T0, '9d1c2b3a-0000-4000-8000-000000000000'))],
   ])('item válido (%s) é aceito', (_nome, mudanca) => {
     const armazem = armazemNaMemoria();

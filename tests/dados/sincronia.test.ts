@@ -643,6 +643,7 @@ describe('gravarDoServidor (mesclagem)', () => {
       { colecao: 'tarefas', registro: { id: 't2', atualizadoEm: '1', aparelho: 'x' } },
       { colecao: 'naoExiste', registro: { id: 't3', atualizadoEm: 1, aparelho: 'x' } },
       { colecao: 'avisos', registro: { id: 't4', atualizadoEm: 1, aparelho: 'x' } },
+      { colecao: 'rascunhos', registro: { id: 'r1', texto: 'sobra de arquivo antigo', atualizadoEm: 1, aparelho: 'x' } },
       remota({ titulo: 'Válida' }),
     ]);
     expect((await listar('tarefas')).map((t) => t.titulo)).toEqual(['Válida']);
