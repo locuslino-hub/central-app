@@ -13,6 +13,8 @@ Antes, duas ideias simples:
 
 Guarde o endereço e o código num lugar seguro (por exemplo, no seu gerenciador de senhas). Não mande por mensagem a ninguém e não escreva em documentos compartilhados.
 
+**Regra de publicação:** não publique nenhum outro site no GitHub Pages desta conta. O armazenamento do navegador (onde ficam o endereço do script e o código do aparelho) é partilhado por todos os sites de `<conta>.github.io`, e qualquer outro site da mesma conta poderia lê-lo. Outra instalação da Central vai para outra conta do GitHub.
+
 ---
 
 ## 1. Conectar um aparelho novo
