@@ -580,36 +580,9 @@
   background: var(--coral2);
   animation: vivo 2.8s ease-in-out infinite;
 }
-.painel-direito .foco-vazio {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  margin: 0;
-  padding: 16px 18px;
-  color: var(--tinta);
-}
-.cartao-agora .foco-vazio {
-  border-radius: 22px 22px 64px 22px;
-  background: var(--agua);
-}
-.cartao-agora .foco-vazio::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  top: -58px;
-  right: -46px;
-  width: 170px;
-  height: 170px;
-  border-radius: 50%;
-  background: var(--agua2);
-}
 .cartao-chat {
   flex: 1;
   min-height: 12rem;
-}
-.cartao-chat .foco-vazio {
-  padding: 0;
-  color: var(--tinta2);
 }
 
 /* Seis itens na barra de 390 px (ou 360): cada nome cabe numa linha, sem quebrar "Sem prazo". */

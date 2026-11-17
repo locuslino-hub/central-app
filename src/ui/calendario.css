@@ -167,25 +167,6 @@
 .cal-tarefa .cal-hora:empty + .cal-corpo {
   grid-column: 1 / -1;
 }
-/* Prazo: um marcador na hora, sem bloco. */
-.cal-prazo {
-  padding: 4px 12px 5px;
-  border-color: transparent;
-  border-left-color: transparent;
-  background: none;
-}
-.cal-prazo .cal-hora {
-  font-size: 1.15rem;
-}
-.cal-prazo .cal-hora::before {
-  content: '';
-  display: inline-block;
-  width: 0.5em;
-  height: 0.5em;
-  margin-right: 0.4em;
-  background: var(--c, var(--tinta2));
-  transform: rotate(45deg);
-}
 .cal-tarefa[data-feita='true'] .cal-titulo {
   color: var(--tinta2);
   text-decoration: line-through;
@@ -198,9 +179,6 @@
 }
 .cal-item[data-passado='true'] .cal-titulo {
   color: var(--tinta2);
-}
-.cal-prazo[data-passado='true'] {
-  background: none;
 }
 /* Livre: só o contorno, mais leve. */
 .cal-item[data-livre='true'] {
@@ -512,14 +490,9 @@
     color: var(--c, var(--tinta2));
     font-size: 0.68rem;
   }
-  /* Tarefa com hora: bloco branco com o filete da sala; prazo: marcador. */
+  /* Tarefa com hora: bloco branco com o filete da sala. */
   .sem-blocos .cal-tarefa {
     border-radius: 6px 10px 10px 6px;
-  }
-  .sem-blocos .cal-prazo {
-    border: 1px solid var(--c, var(--campo));
-    border-radius: 10px;
-    background: var(--folha);
   }
 }
 
