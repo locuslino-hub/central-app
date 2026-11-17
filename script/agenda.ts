@@ -21,7 +21,7 @@
 // - o id de uma agenda que não é a principal nunca sai do script: o app
 //   recebe um apelido opaco e estável (`agenda-…`).
 
-/** O dono vive em Lisboa: horas do app são de Lisboa. */
+/** As horas do app são do fuso Europe/Lisbon. */
 export const FUSO = 'Europe/Lisbon';
 /** As 7 salas fixas (mesmos ids da semente em src/dados/loja.ts). */
 export const SALAS_FIXAS: readonly string[] = [

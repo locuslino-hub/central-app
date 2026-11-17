@@ -32,7 +32,7 @@ Links do OneDrive (link copiado pelo OneDrive, colado em `teste-links.html`):
 | Notebook | Abriu | Abriu |
 | Celular | Não testado | Não testado |
 
-O dono abre arquivos pelo Explorador; a Central depende do link copiado.
+O dono abre arquivos pelo gerenciador de arquivos; a Central depende do link copiado.
 Celular fica para a prova da Tarefa 22.
 
 ## Sincronização (8/11/2026)

@@ -131,7 +131,7 @@ function linhaDasPessoas(contexto: ContextoIA, frase: string): string {
 export function montarInstrucoes(contexto: ContextoIA, frase = ''): string {
   const casa = contexto.salas.find((sala) => sala.id === 'sala-casa');
   const salaDoExemplo = casa ? daLoja(casa.nome, MAX_NOME) : '';
-  return `Você organiza a agenda de um doutorando. Hoje é ${hojePorExtenso(contexto.hoje)}.
+  return `Você organiza a agenda de uma pessoa. Hoje é ${hojePorExtenso(contexto.hoje)}.
 Transforme a frase em itens. Responda SOMENTE com JSON, sem explicação, neste formato:
 {"itens":[{"tipo":"tarefa","titulo":"","sala":"","quando":"","inicio":"","fim":""}]}
 

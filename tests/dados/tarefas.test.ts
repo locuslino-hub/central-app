@@ -45,7 +45,7 @@ beforeEach(() => {
 
 describe('concluir e reabrir', () => {
   it('concluir grava feito pela loja e devolve o desfazer, que reabre', async () => {
-    const t = await salvar('tarefas', tarefa('Validar dados do lagar'));
+    const t = await salvar('tarefas', tarefa('Validar dados do projeto Aurora'));
     vi.setSystemTime(AGORA + 1000);
 
     const entrada = await concluirTarefa(t.id);
@@ -53,7 +53,7 @@ describe('concluir e reabrir', () => {
     expect(await unica()).toMatchObject({ id: t.id, feito: true });
     expect((await unica()).atualizadoEm).toBeGreaterThan(t.atualizadoEm);
     expect(await listarPendentes()).toHaveLength(2);
-    expect(entrada?.rotulo).toBe('Tarefa concluída: Validar dados do lagar');
+    expect(entrada?.rotulo).toBe('Tarefa concluída: Validar dados do projeto Aurora');
     expect(desfazer.ultimo()).toBe(entrada);
 
     await entrada!.reverter();
