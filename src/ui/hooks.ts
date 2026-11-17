@@ -40,7 +40,8 @@ export function useHoje(): Date {
     const renovar = () =>
       setHoje((antes) => {
         const agora = new Date();
-        return agora.toDateString() === antes.toDateString() ? antes : agora;
+        // C-18: o dia que vale é o de Lisboa, como no menu e nas rotas, não o do fuso do aparelho.
+        return hojeEmLisboa(agora) === hojeEmLisboa(antes) ? antes : agora;
       });
     document.addEventListener('visibilitychange', renovar);
     const relogio = setInterval(renovar, 60_000);
