@@ -14,7 +14,7 @@
 // A IA é opcional: `interpretar` nunca lança erro. Sem IA pronta, resposta
 // quebrada, falha ou desistência, devolve `null` e o chat usa as regras.
 
-import { lerResposta, montarInstrucoes, type ContextoIA, type ItemIA } from './instrucoes';
+import { lerResposta, montarInstrucoes, type ContextoIA, type RespostaIA } from './instrucoes';
 import { novaVersaoPronta } from '../pwa';
 import type { Motivo, Pedido, Resposta } from './trabalhador';
 
@@ -23,7 +23,7 @@ export type EstadoIA = 'ausente' | 'baixando' | 'carregando' | 'pronta' | 'indis
 /** O que o chat usa da IA. */
 export type IA = {
   estado(): EstadoIA;
-  interpretar(frase: string, contexto: ContextoIA): Promise<ItemIA[] | null>;
+  interpretar(frase: string, contexto: ContextoIA): Promise<RespostaIA | null>;
 };
 
 /** Por que a IA está indisponível: os do trabalhador e `desatualizado` (versão nova do app ativa). */

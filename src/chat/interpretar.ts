@@ -75,7 +75,7 @@ const contarPalavras = (frase: string) => frase.trim().split(/\s+/).filter(Boole
  * Pergunta à IA com o que a loja sabe. `null` se a loja falhar, ou a IA não
  * responder a tempo ou falhar: o chat segue com as regras.
  */
-async function perguntarIA(frase: string, hoje: string): Promise<{ itens: ItemIA[]; salas: Sala[] } | null> {
+async function perguntarIA(frase: string, hoje: string): Promise<{ itens: ItemIA[]; cortada: boolean; salas: Sala[] } | null> {
   const controle = new AbortController();
   let relogio: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -92,8 +92,8 @@ async function perguntarIA(frase: string, hoje: string): Promise<{ itens: ItemIA
         resolver(null);
       }, LIMITE_IA_MS);
     });
-    const itens = await Promise.race([motor.interpretar(frase, contexto), limite]);
-    return itens?.length ? { itens, salas } : null;
+    const resposta = await Promise.race([motor.interpretar(frase, contexto), limite]);
+    return resposta?.itens.length ? { itens: resposta.itens, cortada: resposta.cortada, salas } : null;
   } catch (erro) {
     console.error('A IA local não respondeu; seguem as regras', erro);
     return null;
@@ -154,8 +154,19 @@ function dividir(frase: string, titulos: string[]): string[] {
   return titulos.map((_, item) => pedacos.filter((_, i) => dono[i] === item).join(', '));
 }
 
-/** Cada item da IA, com data, hora e tipo das regras do seu trecho. */
-function mesclar(frase: string, hoje: string, daIA: ItemIA[], memoria: MemoriaDoChat, salas: Sala[]): ItemDoChat[] {
+/**
+ * Cada item da IA, com data, hora e tipo das regras do seu trecho. Resposta
+ * cortada: o que vinha depois do corte se perdeu, então todo item fica com
+ * certeza baixa e o chat manda conferir o cartão.
+ */
+function mesclar(
+  frase: string,
+  hoje: string,
+  daIA: ItemIA[],
+  memoria: MemoriaDoChat,
+  salas: Sala[],
+  cortada = false,
+): ItemDoChat[] {
   const varios = daIA.length > 1;
   const trechos = varios ? dividir(frase, daIA.map((item) => item.titulo)) : [frase];
   return daIA.map((sugestao, i) => {
@@ -166,7 +177,7 @@ function mesclar(frase: string, hoje: string, daIA: ItemIA[], memoria: MemoriaDo
     const item: Item = achado
       ? { ...achado, titulo: sugestao.titulo }
       : { tipo: 'tarefa', titulo: sugestao.titulo, salaId: null, data: hoje, diaAssumido: true, marcar: false };
-    let certeza: ItemDoChat['certeza'] = !achado || regras!.certeza === 'baixa' || varios ? 'baixa' : 'alta';
+    let certeza: ItemDoChat['certeza'] = !achado || regras!.certeza === 'baixa' || varios || cortada ? 'baixa' : 'alta';
 
     const pessoa = item.pessoaId ? memoria.pessoaPorId(item.pessoaId) : undefined;
     if (pessoa) item.titulo = garantirNome(item.titulo, pessoa.nome);
@@ -199,7 +210,7 @@ export async function interpretar(frase: string): Promise<ItemDoChat[]> {
     contarPalavras(frase) > PALAVRAS_PARA_IA;
   if (precisa && motor.estado() === 'pronta') {
     const daIA = await perguntarIA(frase, hoje);
-    if (daIA) return mesclar(frase, hoje, daIA.itens, memoria, daIA.salas);
+    if (daIA) return mesclar(frase, hoje, daIA.itens, memoria, daIA.salas, daIA.cortada);
   }
   return pelasRegras.itens.map((item) => paraChat(item, frase, pelasRegras.certeza, memoria));
 }

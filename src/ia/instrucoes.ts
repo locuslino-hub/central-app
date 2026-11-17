@@ -26,6 +26,12 @@ export type ItemIA = {
   fim: string;
 };
 
+/**
+ * O que a IA respondeu: os itens inteiros e se a resposta veio cortada (limite
+ * de tamanho do modelo). Cortada: o que vinha depois do corte se perdeu.
+ */
+export type RespostaIA = { itens: ItemIA[]; cortada: boolean };
+
 /** Itens demais numa resposta: o resto é descartado. */
 export const MAX_ITENS = 8;
 const MAX_TITULO = 120;
@@ -200,21 +206,22 @@ function objetosCompletos(texto: string, inicio: number): unknown[] {
 
 /**
  * O primeiro JSON do texto (objeto ou lista), sem o que vem depois. Se a
- * resposta foi cortada no meio, guarda os itens que chegaram inteiros.
+ * resposta foi cortada no meio, guarda os itens que chegaram inteiros e diz
+ * `cortada: true`: o que veio depois do corte se perdeu.
  */
-function acharJson(resposta: string): unknown {
+function acharJson(resposta: string): { json: unknown; cortada: boolean } | undefined {
   const inicio = resposta.search(/[{[]/);
   if (inicio < 0) return undefined;
   const fim = fimBalanceado(resposta, inicio);
   if (fim >= 0) {
     const inteiro = lerJson(resposta.slice(inicio, fim + 1));
-    if (inteiro !== undefined) return inteiro;
+    if (inteiro !== undefined) return { json: inteiro, cortada: false };
   }
   // Cortada (ou quebrada): a lista de itens, do jeito que der.
   const lista = resposta[inicio] === '[' ? inicio : resposta.slice(inicio).search(/"itens"\s*:\s*\[/);
   if (lista < 0) return undefined;
   const abre = resposta[inicio] === '[' ? inicio : resposta.indexOf('[', inicio + lista);
-  return objetosCompletos(resposta, abre);
+  return { json: objetosCompletos(resposta, abre), cortada: true };
 }
 
 /** A lista de itens em qualquer das formas aceitas: lista no topo, `itens` lista ou `itens` objeto único. */
@@ -235,9 +242,10 @@ const chaveDoItem = (item: ItemIA) => `${semAcento(umaLinha(item.titulo))}|${sem
  * inválido, sem lista de itens, nenhum item com título). Campos estranhos
  * viram vazios: quem usa decide o que fazer com eles. Item repetido sai uma vez.
  */
-export function lerResposta(resposta: string): ItemIA[] | null {
-  const lista = listaDeItens(acharJson(resposta));
-  if (!lista) return null;
+export function lerResposta(resposta: string): RespostaIA | null {
+  const achado = acharJson(resposta);
+  const lista = achado ? listaDeItens(achado.json) : null;
+  if (!achado || !lista) return null;
   const itens: ItemIA[] = [];
   const vistos = new Set<string>();
   for (const bruto of lista) {
@@ -259,5 +267,5 @@ export function lerResposta(resposta: string): ItemIA[] | null {
     itens.push(item);
     if (itens.length === MAX_ITENS) break;
   }
-  return itens.length ? itens : null;
+  return itens.length ? { itens, cortada: achado.cortada } : null;
 }

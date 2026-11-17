@@ -192,8 +192,11 @@ describe('interpretar', () => {
     });
     const ia = criarIA(ambiente);
     await ia.iniciar();
-    const itens = await ia.interpretar('Comprar pão', CONTEXTO);
-    expect(itens).toEqual([{ tipo: 'tarefa', titulo: 'Comprar pão', sala: 'Casa', quando: '', inicio: '', fim: '' }]);
+    const resposta = await ia.interpretar('Comprar pão', CONTEXTO);
+    expect(resposta).toEqual({
+      itens: [{ tipo: 'tarefa', titulo: 'Comprar pão', sala: 'Casa', quando: '', inicio: '', fim: '' }],
+      cortada: false,
+    });
     const [pergunta] = ambiente.perguntas;
     expect(pergunta.frase).toBe('Comprar pão');
     expect(pergunta.sistema).toContain('Hoje é quinta-feira, 5 de novembro de 2026.');

@@ -16,6 +16,9 @@ const CONTEXTO: ContextoIA = {
   ],
 };
 
+/** Só os itens da resposta (ou `null`), sem o aviso de corte. */
+const itensDe = (texto: string) => lerResposta(texto)?.itens ?? null;
+
 describe('montarInstrucoes', () => {
   it('diz o dia de hoje por extenso', () => {
     expect(montarInstrucoes(CONTEXTO)).toContain('Hoje é quinta-feira, 5 de novembro de 2026.');
@@ -57,7 +60,7 @@ describe('montarInstrucoes', () => {
 
 describe('lerResposta', () => {
   it('lê o JSON do modelo', () => {
-    const itens = lerResposta(
+    const itens = itensDe(
       '{"itens":[{"tipo":"tarefa","titulo":"Trocar a torneira","sala":"Casa","quando":"amanhã","inicio":"","fim":""}]}',
     );
     expect(itens).toEqual([
@@ -66,7 +69,7 @@ describe('lerResposta', () => {
   });
 
   it('acha o JSON no meio de texto e de cerca de código', () => {
-    const itens = lerResposta('Claro!\n```json\n{"itens":[{"titulo":"Comprar lâmpada","sala":"Casa"}]}\n```');
+    const itens = itensDe('Claro!\n```json\n{"itens":[{"titulo":"Comprar lâmpada","sala":"Casa"}]}\n```');
     expect(itens).toEqual([{ tipo: 'tarefa', titulo: 'Comprar lâmpada', sala: 'Casa', quando: '', inicio: '', fim: '' }]);
   });
 
@@ -79,23 +82,23 @@ describe('lerResposta', () => {
     ['lista vazia', '{"itens":[]}'],
     ['itens sem título', '{"itens":[{"titulo":""},{"sala":"Casa"},null,7]}'],
   ])('%s volta null', (_nome, texto) => {
-    expect(lerResposta(texto)).toBeNull();
+    expect(itensDe(texto)).toBeNull();
   });
 
   it('descarta só os itens sem título e limpa o resto', () => {
-    const itens = lerResposta(
+    const itens = itensDe(
       '{"itens":[{"titulo":"  ligar   pro dentista ","sala":7,"tipo":"reunião"},{"titulo":""}]}',
     );
     expect(itens).toEqual([{ tipo: 'tarefa', titulo: 'Ligar pro dentista', sala: '', quando: '', inicio: '', fim: '' }]);
   });
 
   it('título muito longo é cortado', () => {
-    const itens = lerResposta(JSON.stringify({ itens: [{ titulo: 'a'.repeat(500) }] }));
+    const itens = itensDe(JSON.stringify({ itens: [{ titulo: 'a'.repeat(500) }] }));
     expect(itens![0].titulo.length).toBeLessThanOrEqual(120);
   });
 
   it('no máximo 8 itens', () => {
-    const itens = lerResposta(JSON.stringify({ itens: Array.from({ length: 20 }, (_, i) => ({ titulo: `Item ${i}` })) }));
+    const itens = itensDe(JSON.stringify({ itens: Array.from({ length: 20 }, (_, i) => ({ titulo: `Item ${i}` })) }));
     expect(itens).toHaveLength(8);
   });
 });
@@ -168,31 +171,51 @@ describe('lerResposta: formas e cortes', () => {
   const ITEM = { tipo: 'tarefa', titulo: 'Comprar pão', sala: 'Casa', quando: '', inicio: '', fim: '' };
 
   it('pega o primeiro objeto, mesmo com outro JSON depois', () => {
-    expect(lerResposta('{"itens":[{"titulo":"Comprar pão","sala":"Casa"}]} e também {"x":1}')).toEqual([ITEM]);
+    expect(itensDe('{"itens":[{"titulo":"Comprar pão","sala":"Casa"}]} e também {"x":1}')).toEqual([ITEM]);
   });
 
   it('chave dentro de texto não confunde', () => {
-    expect(lerResposta('{"itens":[{"titulo":"Revisar {capítulo} }","sala":""}]}')).toEqual([
+    expect(itensDe('{"itens":[{"titulo":"Revisar {capítulo} }","sala":""}]}')).toEqual([
       { ...ITEM, titulo: 'Revisar {capítulo} }', sala: '' },
     ]);
   });
 
   it('resposta cortada guarda os itens completos', () => {
-    expect(lerResposta('{"itens":[{"titulo":"Comprar pão","sala":"Casa"},{"titulo":"Ligar pro den')).toEqual([ITEM]);
+    expect(itensDe('{"itens":[{"titulo":"Comprar pão","sala":"Casa"},{"titulo":"Ligar pro den')).toEqual([ITEM]);
   });
 
   it('aceita lista no topo', () => {
-    expect(lerResposta('[{"titulo":"Comprar pão","sala":"Casa"}]')).toEqual([ITEM]);
+    expect(itensDe('[{"titulo":"Comprar pão","sala":"Casa"}]')).toEqual([ITEM]);
   });
 
   it('aceita "itens" com um objeto só', () => {
-    expect(lerResposta('{"itens":{"titulo":"Comprar pão","sala":"Casa"}}')).toEqual([ITEM]);
+    expect(itensDe('{"itens":{"titulo":"Comprar pão","sala":"Casa"}}')).toEqual([ITEM]);
   });
 
   it('item repetido (mesmo título e mesmo quando) sai uma vez só', () => {
-    const itens = lerResposta(
+    const itens = itensDe(
       '{"itens":[{"titulo":"Comprar pão","sala":"Casa"},{"titulo":"comprar  PÃO","sala":"Pessoal"},{"titulo":"Comprar pão","quando":"amanhã"}]}',
     );
     expect(itens).toEqual([ITEM, { ...ITEM, sala: '', quando: 'amanhã' }]);
+  });
+});
+
+describe('lerResposta: resposta cortada (C-08)', () => {
+  const ITEM = { tipo: 'tarefa', titulo: 'Comprar pão', sala: 'Casa', quando: '', inicio: '', fim: '' };
+
+  it('resposta inteira: cortada é false', () => {
+    expect(lerResposta('{"itens":[{"titulo":"Comprar pão","sala":"Casa"}]}')).toEqual({ itens: [ITEM], cortada: false });
+    expect(lerResposta('[{"titulo":"Comprar pão","sala":"Casa"}]')).toEqual({ itens: [ITEM], cortada: false });
+  });
+
+  it('resposta cortada no meio do segundo item: só o primeiro volta, e cortada é true', () => {
+    expect(lerResposta('{"itens":[{"titulo":"Comprar pão","sala":"Casa"},{"titulo":"Ligar pro den')).toEqual({
+      itens: [ITEM],
+      cortada: true,
+    });
+  });
+
+  it('lista no topo cortada também diz cortada', () => {
+    expect(lerResposta('[{"titulo":"Comprar pão","sala":"Casa"},{"titulo":"Ligar')).toEqual({ itens: [ITEM], cortada: true });
   });
 });

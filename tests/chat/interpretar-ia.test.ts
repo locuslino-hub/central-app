@@ -1,6 +1,7 @@
 // A IA local no chat (Tarefa 21), sempre com uma IA falsa. Data, hora e tipo
 // vêm das regras; a IA dá título, sala e a divisão de frases longas.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fala } from '../../src/chat/conversa';
 import { interpretar, LIMITE_IA_MS, usarIA, type ItemDoChat } from '../../src/chat/interpretar';
 import * as loja from '../../src/dados/loja';
 import { salvar, semear, semearPalavras } from '../../src/dados/loja';
@@ -17,7 +18,11 @@ function iaFalsa(itens: Partial<ItemIA>[] | null) {
     estado: () => 'pronta',
     interpretar: async (frase, contexto) => {
       chamadas.push({ frase, contexto });
-      return itens?.map((item) => ({ tipo: 'tarefa', titulo: '', sala: '', quando: '', inicio: '', fim: '', ...item })) ?? null;
+      if (!itens) return null;
+      return {
+        itens: itens.map((item) => ({ tipo: 'tarefa', titulo: '', sala: '', quando: '', inicio: '', fim: '', ...item })),
+        cortada: false,
+      };
     },
   };
   return { ia, chamadas };
@@ -107,6 +112,39 @@ describe('mesclagem', () => {
     expect(ia.estado()).toBe('pronta');
     usarIA(ia);
     expect(await interpretar(frase)).toEqual(esperado);
+  });
+
+  it('resposta cortada da IA, com um único item inteiro: certeza baixa e o cartão manda conferir (C-08)', async () => {
+    const frase = 'Preciso organizar os papéis do escritório';
+    const ia = criarIA(
+      trabalhadorFalso({
+        guardado: true,
+        resposta:
+          '{"itens":[{"tipo":"tarefa","titulo":"Organizar os papéis do escritório","sala":"Casa"},{"titulo":"Ligar pro den',
+      }),
+    );
+    await ia.iniciar();
+    usarIA(ia);
+
+    const itens = await interpretar(frase);
+
+    expect(itens).toHaveLength(1);
+    expect(itens[0]).toMatchObject({ titulo: 'Organizar os papéis do escritório', salaId: 'sala-casa', certeza: 'baixa' });
+    expect(fala(itens)).toBe('Anotei. Confira o cartão.');
+  });
+
+  it('resposta inteira com um item e sala da IA segue com certeza alta', async () => {
+    const frase = 'Preciso organizar os papéis do escritório';
+    const ia = criarIA(
+      trabalhadorFalso({
+        guardado: true,
+        resposta: '{"itens":[{"tipo":"tarefa","titulo":"Organizar os papéis do escritório","sala":"Casa"}]}',
+      }),
+    );
+    await ia.iniciar();
+    usarIA(ia);
+    const [item] = await interpretar(frase);
+    expect(item.certeza).toBe('alta');
   });
 
   it('loja que falha ao montar a pergunta à IA volta para as regras', async () => {
