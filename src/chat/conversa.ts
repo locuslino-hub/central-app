@@ -338,7 +338,7 @@ export function escolherSala(id: string, salaId: string): Promise<void> {
       }
     }
     concluir(id, 'escolher', { item: novo, trocando: false, escolha, pendente: guardado ? undefined : aprendizado });
-    if (guardado && cartao.tarefaId) await moverTarefa(id, cartao.tarefaId, novo);
+    if (guardado && cartao.tarefaId) await moverTarefa(id, cartao.tarefaId, novo, cartao);
     else if (guardado && cartao.eventoId) await moverCompromisso(id, cartao.eventoId, novo);
   });
 }
@@ -346,9 +346,10 @@ export function escolherSala(id: string, salaId: string): Promise<void> {
 /**
  * Lê a tarefa na hora (pode ter mudado no outro aparelho) e troca só sala e
  * pessoa. Confere de novo, logo antes de gravar, que o cartão segue guardado:
- * nunca regrava um item desfeito.
+ * nunca regrava um item desfeito. Se não gravar, o cartão volta à sala antiga
+ * (`antes`) e avisa, como em moverCompromisso.
  */
-async function moverTarefa(cartaoId: string, tarefaId: string, item: ItemDoChat) {
+async function moverTarefa(cartaoId: string, tarefaId: string, item: ItemDoChat, antes: EstadoCartao) {
   try {
     const [guardada] = (await lerRegistros([{ colecao: 'tarefas', id: tarefaId }])) as (Tarefa | undefined)[];
     if (!guardada || guardada.apagado) return;
@@ -358,6 +359,13 @@ async function moverTarefa(cartaoId: string, tarefaId: string, item: ItemDoChat)
     await salvar('tarefas', tarefa);
   } catch (erro) {
     console.error('Não consegui trocar a sala do item', erro);
+    // O cartão já mostrava a sala nova: volta à antiga, que é a que a tarefa tem.
+    mudarCartao(cartaoId, {
+      item: antes.item,
+      escolha: antes.escolha,
+      pendente: antes.pendente,
+      aviso: 'Não consegui trocar a sala. Tente de novo.',
+    });
   }
 }
 

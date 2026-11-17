@@ -382,6 +382,28 @@ describe('erros, foco e campo (rodada 1)', () => {
     expect(await esperarTarefas(1)).toHaveLength(1);
   });
 
+  it('Trocar sala: se a tarefa não grava, o cartão avisa e volta à sala antiga', async () => {
+    render(<Chat />);
+    dizer('Trocar a lâmpada da garagem');
+    const cartao = await ultimoCartao();
+    const [salva] = await esperarTarefas(1);
+    expect(within(cartao).getByText('Casa')).toBeTruthy();
+
+    // A partir daqui, gravar tarefa falha (o resto da loja segue normal).
+    const real = loja.salvar;
+    vi.spyOn(loja, 'salvar').mockImplementation(((colecao: string, registro: unknown) =>
+      colecao === 'tarefas' ? Promise.reject(new Error('disco cheio')) : (real as any)(colecao, registro)) as typeof loja.salvar);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Trocar sala' }));
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Pessoal' }));
+
+    await within(cartao).findByText('Não consegui trocar a sala. Tente de novo.');
+    expect(within(cartao).getByText('Casa')).toBeTruthy();
+    expect(within(cartao).queryByText('Pessoal')).toBeNull();
+    expect((await tarefas())[0]).toMatchObject({ id: salva.id, salaId: 'sala-casa' });
+  });
+
   it('erro ao desfazer: o item continua guardado, com aviso, e Desfazer tenta de novo', async () => {
     render(<Chat />);
     dizer('Preciso parafusar o apoio do banheiro');
