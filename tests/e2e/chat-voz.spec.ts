@@ -131,6 +131,17 @@ test.describe('celular, 390 px', () => {
   });
 });
 
+/** Espera a página parar de mexer (o painel do início carrega em partes) antes de medir. */
+async function semMexer(page: Page, area: ReturnType<Page['getByRole']>) {
+  let anterior = '';
+  for (let i = 0; i < 20; i++) {
+    const agora = JSON.stringify([await caixasDoCampo(area), (await area.locator('.chat').boundingBox())?.height]);
+    if (agora === anterior) return;
+    anterior = agora;
+    await page.waitForTimeout(250);
+  }
+}
+
 /** As caixas do campo, do microfone, da chave e do Enviar: o que não pode pular quando a escuta liga. */
 async function caixasDoCampo(area: ReturnType<Page['getByRole']>) {
   const lugar = async (alvo: ReturnType<Page['getByRole']>) => {
@@ -156,6 +167,7 @@ for (const [onde, largura, altura, abrir] of [
       await reconhecimentoFalso(page, null);
       await page.goto(abrir);
       const area = await areaDoChat(page);
+      await semMexer(page, area);
 
       const antes = await caixasDoCampo(area);
       expect(antes.campo.w).toBeGreaterThan(200); // no painel estreito já foi de 65 px de texto
@@ -174,9 +186,15 @@ for (const [onde, largura, altura, abrir] of [
 
     test('ouvindo com "Gravar áudio" ligado: o bloco de baixo também não muda de altura', async ({ page }) => {
       await reconhecimentoFalso(page, null);
+      // O navegador de teste não tem microfone: sem isto, às vezes aparece "Não consegui gravar o áudio" (aviso certo,
+      // mas outro assunto) e o campo sobe. Um microfone mudo deixa a gravação acontecer de verdade.
+      await page.addInitScript(() => {
+        navigator.mediaDevices.getUserMedia = async () => new AudioContext().createMediaStreamDestination().stream;
+      });
       await page.goto(abrir);
       const area = await areaDoChat(page);
       await area.getByRole('switch', { name: 'Gravar áudio' }).check();
+      await semMexer(page, area);
       const antes = await caixasDoCampo(area);
       const formulario = area.locator('form');
       const alturaAntes = Math.round((await area.locator('.chat').boundingBox())!.height);
