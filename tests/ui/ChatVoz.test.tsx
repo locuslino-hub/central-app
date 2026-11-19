@@ -58,7 +58,7 @@ function escutaFalsa(textoFinal = '') {
   };
 }
 
-const microfone = () => screen.getByRole('button', { name: 'Falar' });
+const microfone = () => screen.getByRole('button', { name: 'Falar no chat' });
 const campo = () => screen.getByRole('textbox', { name: 'Escreva ou dite' }) as HTMLInputElement;
 const botaoEnviar = () => screen.getByRole('button', { name: 'Enviar' });
 const escrever = (texto: string) => fireEvent.input(campo(), { target: { value: texto } });
@@ -171,11 +171,11 @@ describe('o microfone do chat', () => {
     voz.dizer('olá');
 
     expect(container.querySelector('p[role="status"].so-leitor')).toBe(estado);
-    expect(microfone().getAttribute('aria-label')).toBe('Falar');
+    expect(microfone().getAttribute('aria-label')).toBe('Falar no chat');
     expect(microfone().getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('a região de estado diz "Ouvindo…", "Gravando áudio…" e, ao parar, "Parei. Texto: …"', async () => {
+  it('a região de estado diz "Ouvindo…", "Gravando áudio…" e, ao parar, "Parei. Texto no campo." (sem ler a frase)', async () => {
     const voz = escutaFalsa('usar o artigo do Prof. Souza');
     gravacaoMock.mockResolvedValue({ parar: vi.fn(async () => ({ blob: new Blob(['x']), segundos: 3 })), cancelar: vi.fn() });
     const { container } = render(<Chat />);
@@ -187,7 +187,8 @@ describe('o microfone do chat', () => {
     expect(estado.textContent).toBe('Ouvindo…');
 
     fireEvent.click(microfone()); // parar
-    await waitFor(() => expect(estado.textContent).toBe('Parei. Texto: usar o artigo do Prof. Souza'));
+    await waitFor(() => expect(estado.textContent).toBe('Parei. Texto no campo.'));
+    expect(campo().value).toBe('usar o artigo do Prof. Souza');
 
     fireEvent.click(chave());
     fireEvent.click(microfone());
@@ -220,7 +221,8 @@ describe('o microfone do chat', () => {
     expect(microfone().getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(botaoEnviar());
     await screen.findByText('Guardado em Ideias');
-    expect((await listar('ideias'))[0]!.texto).toBe('usar o artigo');
+    // A escuta fechou sozinha: vale o texto final dela, não só o último parcial.
+    expect((await listar('ideias'))[0]!.texto).toBe(TEXTO_DA_IDEIA);
   });
 
   it('parar no microfone e apertar Enviar logo em seguida espera a parada: as últimas palavras não se perdem', async () => {

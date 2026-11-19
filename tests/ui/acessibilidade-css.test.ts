@@ -90,3 +90,39 @@ describe('cores forçadas (alto contraste)', () => {
     expect(corpo).toMatch(/background:\s*CanvasText/);
   });
 });
+
+describe('o campo do chat (revisão da V02.1)', () => {
+  it('ouvindo se vê sem animação: fundo escuro e contorno de 2 px; a animação só reforça e respeita prefers-reduced-motion', () => {
+    const ouvindo = regra(chat, ".chat-mic[aria-pressed='true']");
+    expect(ouvindo).toMatch(/background:\s*var\(--tinta\)/);
+    expect(ouvindo).toMatch(/0 0 0 2px var\(--folha\), 0 0 0 4px var\(--tinta\)/);
+    const reduzido = chat.slice(chat.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduzido).toMatch(/\.chat-mic\[aria-pressed='true'\]\s*\{\s*animation:\s*none/);
+  });
+
+  it('a chave ligada usa a cor de ação (sálvia), não a de alerta; o aviso de privacidade tem pelo menos 0,8rem', () => {
+    expect(regra(chat, '.chat-gravar input:checked')).toMatch(/background:\s*var\(--acao\)/);
+    const tamanho = /font-size:\s*([\d.]+)rem/.exec(regra(chat, '.chat-aviso-voz'))![1]!;
+    expect(parseFloat(tamanho)).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('a categoria comprida quebra a linha dentro do botão em vez de estourar o cartão', () => {
+    const corpo = regra(chat, '.chat-categorias .botao-pilula');
+    expect(corpo).toMatch(/max-width:\s*100%/);
+    expect(corpo).toMatch(/white-space:\s*normal/);
+    expect(corpo).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
+  it('cores forçadas: o cartão e a fala do dono ganham borda do sistema, e o ponto de gravando e o microfone ligado ficam à vista', () => {
+    const bloco = coresForcadas(chat);
+    expect(regra(bloco, '.chat-cartao, .chat-dono')).toMatch(/border:\s*1px solid CanvasText/);
+    expect(regra(bloco, '.chat-gravando::before')).toMatch(/background:\s*CanvasText/);
+    expect(regra(bloco, ".chat-mic[aria-pressed='true']")).toMatch(/background:\s*Highlight/);
+  });
+
+  it('a região viva do aviso do áudio, vazia, só some da vista (continua na árvore de acessibilidade)', () => {
+    const corpo = regra(chat, '.chat-aviso-audio:empty');
+    expect(corpo).toMatch(/clip-path:\s*inset\(50%\)/);
+    expect(corpo).not.toMatch(/display:\s*none/);
+  });
+});

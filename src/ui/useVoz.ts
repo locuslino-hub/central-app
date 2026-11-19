@@ -30,13 +30,16 @@ export type Voz = {
   gravando: boolean;
   gravarAudio: boolean;
   setGravarAudio: (ligado: boolean) => void;
-  /** A frase curta de estado que a região viva diz ("Ouvindo…", "Parei. Texto: …"). Nunca o texto parcial. */
+  /** A frase curta de estado que a região viva diz ("Ouvindo…", "Parei. Texto no campo."). Nunca o texto parcial. */
   anuncio: string;
   aviso: string | null;
   avisoDoAudio: string | null;
   /** Limpa os avisos (ao enviar de novo). */
   limparAvisos: () => void;
-  /** O toque no microfone: é aqui, e só aqui (ou na tecla do atalho), que a escuta começa. */
+  /**
+   * O toque no microfone: é aqui, e só aqui (ou na tecla do atalho), que a escuta começa. O toque alterna (liga e desliga);
+   * o atalho (`'atalho'`) só liga: com a escuta já ligada, não faz nada.
+   */
   tocar: (origem?: 'toque' | 'atalho') => void;
   /** Está ouvindo, ou ainda fechando a escuta? Então Enviar precisa esperar o texto final (`parar`). */
   ocupada: () => boolean;
@@ -46,6 +49,8 @@ export type Voz = {
   pegarAudio: () => AudioGravado | null;
   /** Solta o microfone e esquece o áudio. */
   soltar: () => void;
+  /** O campo foi editado à mão (ou esvaziado): o áudio retido já não diz o que o campo diz, e sai. */
+  aoEditarOCampo: () => void;
 };
 
 /**
@@ -67,6 +72,10 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
   const audioGravado = useRef<AudioGravado | null>(null);
   /** A parada da escuta em curso: quem pede de novo espera a mesma. */
   const parada = useRef<Promise<string> | null>(null);
+  /** O campo foi editado à mão depois de a escuta começar a parar: o texto final não passa por cima do que se digitou. */
+  const digitou = useRef(false);
+  /** Muda quando o áudio retido perde o sentido: o fechamento de uma gravação mais antiga não o guarda. */
+  const epoca = useRef(0);
   /** O campo, sempre o mais novo (a parada é assíncrona). */
   const textoAtual = useRef(texto);
   textoAtual.current = texto;
@@ -88,10 +97,13 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
     gravacao.current = null;
     setGravando(false);
     if (!pendente) return;
+    const minha = epoca.current;
     const g = await pendente;
     if (!g) return;
     try {
-      audioGravado.current = await g.parar();
+      const audio = await g.parar();
+      // O campo foi editado, o áudio desligado ou outra escuta começou enquanto o áudio fechava: este já não vale.
+      if (minha === epoca.current) audioGravado.current = audio;
     } catch {
       setAvisoDoAudio('Não consegui fechar o áudio. Só o texto será guardado.');
     }
@@ -101,21 +113,34 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
     const pendente = gravacao.current;
     gravacao.current = null;
     setGravando(false);
+    epoca.current++;
     audioGravado.current = null;
     void pendente?.then((g) => g?.cancelar());
   }
 
-  function parar(): Promise<string> {
-    if (parada.current) return parada.current;
-    const atual = escuta.current;
-    escuta.current = null;
-    setEscutando(false);
+  /** Descarta o áudio retido (e o que ainda está fechando), sem mexer na gravação em andamento. */
+  function descartarAudio() {
+    epoca.current++;
+    audioGravado.current = null;
+  }
+
+  /**
+   * A parada em curso (uma só, quem pede de novo espera a mesma): o texto final, depois o fechamento do áudio. `anunciar`
+   * é falso quando a escuta parou sozinha (o aviso do limite já diz o que houve).
+   */
+  function encerrar(atual: Escuta | null, anunciar: boolean): Promise<string> {
+    digitou.current = false;
     const andamento = (async () => {
       let final = textoAtual.current;
       if (atual) {
-        final = juntar(antes.current, await atual.parar());
-        mudar.current(final);
-        setAnuncio(final.trim() ? `Parei. Texto: ${final}` : 'Parei. Ainda não ouvi nada.');
+        const falado = juntar(antes.current, await atual.parar());
+        // O campo ganhou texto digitado enquanto a escuta fechava: o que se digitou vale mais que o ditado.
+        if (digitou.current) final = textoAtual.current;
+        else {
+          final = falado;
+          mudar.current(final);
+        }
+        if (anunciar) setAnuncio(final.trim() ? 'Parei. Texto no campo.' : 'Parei. Ainda não ouvi nada.');
       }
       await fecharGravacao();
       return final;
@@ -128,14 +153,24 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
     return andamento;
   }
 
+  function parar(): Promise<string> {
+    if (parada.current) return parada.current;
+    const atual = escuta.current;
+    escuta.current = null;
+    setEscutando(false);
+    return encerrar(atual, true);
+  }
+
   function tocar(origem: 'toque' | 'atalho' = 'toque') {
     if (parada.current) return; // a escuta anterior ainda está fechando
     if (escuta.current) {
-      void parar();
+      if (origem === 'toque') void parar(); // o atalho só liga: com a escuta ligada, só mantém
       return;
     }
     setAviso(null);
     setAvisoDoAudio(null);
+    // O áudio retido de uma escuta anterior (que não foi enviado) nunca gruda na frase desta.
+    descartarAudio();
     antes.current = textoAtual.current;
     setEscutando(true);
     setAnuncio(gravarAudio ? 'Ouvindo… Gravando áudio…' : 'Ouvindo…');
@@ -157,9 +192,11 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
         aoAviso: () => {
           setAnuncio('');
           setAviso('Passou de 3 minutos de fala e parei de ouvir. Confira o texto e toque em Enviar.');
+          // Enviar logo em seguida espera o texto final e o áudio fechar (`ocupada` fica verdadeira até lá).
+          const atual = escuta.current;
           escuta.current = null;
           setEscutando(false);
-          void fecharGravacao();
+          void encerrar(atual, false);
         },
       },
     );
@@ -167,7 +204,6 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
     escuta.current = nova;
     // Uma gravação nova troca a anterior: o áudio é sempre o da última escuta.
     if (gravarAudio) {
-      audioGravado.current = null;
       gravacao.current = iniciarGravacao((tipo) => {
         if (tipo === 'quase_no_limite') setAvisoDoAudio('O áudio está perto do limite de 3 minutos.');
       }).catch((erro: unknown) => {
@@ -194,10 +230,37 @@ export function useVoz(texto: string, mudarTexto: (texto: string) => void): Voz 
     return audio;
   }
 
+  /** O campo foi editado à mão: o texto digitado vale mais que o ditado, e o áudio retido sai. */
+  function aoEditarOCampo() {
+    digitou.current = true;
+    descartarAudio();
+  }
+
   function limparAvisos() {
     setAviso(null);
     setAvisoDoAudio(null);
   }
 
-  return { escutando, gravando, gravarAudio, setGravarAudio, anuncio, aviso, avisoDoAudio, limparAvisos, tocar, ocupada, parar, pegarAudio, soltar };
+  /** "Gravar áudio" desligado: o áudio que ficou retido sai (ligado, só vale para a próxima escuta). */
+  function mudarGravarAudio(ligado: boolean) {
+    if (!ligado) descartarAudio();
+    setGravarAudio(ligado);
+  }
+
+  return {
+    escutando,
+    gravando,
+    gravarAudio,
+    setGravarAudio: mudarGravarAudio,
+    anuncio,
+    aviso,
+    avisoDoAudio,
+    limparAvisos,
+    tocar,
+    ocupada,
+    parar,
+    pegarAudio,
+    soltar,
+    aoEditarOCampo,
+  };
 }

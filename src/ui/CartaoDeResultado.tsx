@@ -18,6 +18,7 @@ export function CartaoDeResultado({ estado }: { estado: EstadoResultado }) {
   const { id, resultado, desfeito, ocupado, aviso, avisoDoAudio, foco } = estado;
   const raiz = useRef<HTMLElement>(null);
   const campoOutra = useRef<HTMLInputElement>(null);
+  const categorias = useRef<HTMLDivElement>(null);
   /**
    * O painel "Trocar categoria" está aberto para este cartão, e o que se digitou nele. Aberto "para" um cartão: quando o
    * cartão muda (a categoria trocada, outro cartão, o desfeito) o painel fecha na mesma hora. Troca que falhou só põe um
@@ -36,7 +37,8 @@ export function CartaoDeResultado({ estado }: { estado: EstadoResultado }) {
     if (!trocando) setOutra('');
   }, [trocando]);
   useEffect(() => {
-    if (trocando) campoOutra.current?.focus();
+    // Ao abrir, o foco vai para a primeira categoria (a lista de escolhas); o campo de "outra" vem depois, no Tab.
+    if (trocando) (categorias.current?.querySelector<HTMLElement>('button:not(:disabled)') ?? campoOutra.current)?.focus();
     else setErroDaCategoria(null);
   }, [trocando]);
 
@@ -68,12 +70,12 @@ export function CartaoDeResultado({ estado }: { estado: EstadoResultado }) {
           <p class="chat-quando chat-resultado-detalhe" id={idDoDetalhe}>
             {resultado.detalhe}
           </p>
-          {/* Sempre aqui, vazio até haver o que dizer: o avanço do envio do áudio é anunciado. */}
-          <p class="chat-motivo chat-resultado-vivo" role="status">
-            {avisoDoAudio}
-          </p>
         </>
       )}
+      {/* Sempre aqui (também desfeito), vazio até haver o que dizer: o avanço do envio do áudio é anunciado. */}
+      <p class="chat-motivo chat-resultado-vivo" role="status">
+        {desfeito ? null : avisoDoAudio}
+      </p>
       {aviso && (
         <p class="chat-pergunta" role="alert">
           {aviso}
@@ -109,7 +111,7 @@ export function CartaoDeResultado({ estado }: { estado: EstadoResultado }) {
       {!desfeito && trocando && troca && (
         <div class="chat-troca-categoria" role="group" aria-label="Trocar categoria">
           <p class="chat-motivo">Escolha a categoria ou digite outra.</p>
-          <div class="chat-categorias">
+          <div class="chat-categorias" ref={categorias}>
             {troca.opcoes.map((categoria) => (
               <button
                 key={categoria}

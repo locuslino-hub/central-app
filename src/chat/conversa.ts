@@ -110,6 +110,27 @@ const filas = new Map<string, Promise<void>>();
 const ouvintes = new Set<() => void>();
 /** O áudio gravado cuja frase não virou ideia, por mensagem da Central: espera o "Guardar como ideia" (ou se perde). */
 const audiosEsperando = new Map<string, AudioGravado>();
+/** Quantos áudios esperam no máximo (cada um pode ter minutos de gravação): o mais antigo sai quando chega o 21º. */
+const AUDIOS_ESPERANDO_NO_MAXIMO = 20;
+
+/** Guarda o áudio de uma mensagem que esperará o "Guardar como ideia", com o limite. */
+function esperarAudio(mensagemId: string, audio: AudioGravado) {
+  audiosEsperando.delete(mensagemId); // reinserir põe no fim (o mais novo)
+  audiosEsperando.set(mensagemId, audio);
+  while (audiosEsperando.size > AUDIOS_ESPERANDO_NO_MAXIMO) {
+    const maisAntigo = audiosEsperando.keys().next().value;
+    if (maisAntigo === undefined) break;
+    audiosEsperando.delete(maisAntigo);
+  }
+}
+
+/** Tudo da mensagem foi desfeito ou descartado: não sobrou onde o "Guardar como ideia" pudesse usar o áudio. */
+function soltarAudioSeNadaRestou(mensagem: MensagemDaCentral | undefined) {
+  if (!mensagem || !audiosEsperando.has(mensagem.id)) return;
+  const cartoesAcabaram = mensagem.cartoes.every((c) => c.situacao === 'desfeito' || c.situacao === 'descartado');
+  const resultadosAcabaram = mensagem.resultados.every((r) => r.desfeito);
+  if (cartoesAcabaram && resultadosAcabaram) audiosEsperando.delete(mensagem.id);
+}
 /** Ids de áudio cujo Desfazer já foi feito: se o envio voltar tarde, nada fica nem aparece. */
 const cancelados = new Set<string>();
 
@@ -129,6 +150,11 @@ export function assinarConversa(ouvinte: () => void): () => void {
   return () => {
     ouvintes.delete(ouvinte);
   };
+}
+
+/** Quantos áudios esperam o "Guardar como ideia" (testes). */
+export function audiosEsperandoAgora(): number {
+  return audiosEsperando.size;
 }
 
 /** Começa uma conversa vazia (testes). */
@@ -362,7 +388,7 @@ export async function enviar(frase: string, opcoes: OpcoesDaFrase = {}): Promise
     });
     if (saida.tipo === 'resultado') {
       // O texto já está gravado; só então o áudio vai ao Drive (se a frase virou ideia).
-      if (audio && !saida.resultado.audioId) audiosEsperando.set(resposta, audio);
+      if (audio && !saida.resultado.audioId) esperarAudio(resposta, audio);
       mudarMensagem(resposta, { texto: 'Anotei.' });
       const estado = mostrarResultado(resposta, texto, saida.resultado, audio);
       avisarPlanilhaMudou(); // a pasta aberta ao lado (Lista, Registro, Financeiro) relê
@@ -385,7 +411,7 @@ export async function enviar(frase: string, opcoes: OpcoesDaFrase = {}): Promise
     return;
   }
   if (audio) {
-    audiosEsperando.set(resposta, audio);
+    esperarAudio(resposta, audio);
     nota = [nota, TEXTO_DO_AUDIO_SEM_IDEIA].filter(Boolean).join(' ');
   }
   const cartoes: EstadoCartao[] = itens.map((item) => ({
@@ -417,6 +443,7 @@ export function descartar(id: string): Promise<void> {
     const situacao = acharCartao(id)?.situacao;
     if (situacao === 'erro') {
       concluir(id, 'descartar', { situacao: 'descartado', pendente: undefined });
+      soltarAudioSeNadaRestou(mensagemDoCartao(id));
     } else concluir(id, 'descartar');
   });
 }
@@ -438,6 +465,7 @@ export function desfazerCartao(id: string): Promise<void> {
       await reverter();
       desfazeres.delete(id);
       concluir(id, 'desfazer', { situacao: 'desfeito' });
+      soltarAudioSeNadaRestou(mensagemDoCartao(id));
     } catch (erro) {
       console.error('Não consegui desfazer o item do chat', erro);
       concluir(id, 'desfazer', { situacao: 'salvo', aviso: 'Não consegui desfazer. Tente de novo.' });
@@ -631,6 +659,7 @@ export function desfazerResultado(id: string): Promise<void> {
         apagarDoDrive(idDoAudio, id);
       }
       concluirResultado(id, { desfeito: true, avisoDoAudio: null });
+      soltarAudioSeNadaRestou(mensagemDoResultado(id));
     } catch (erro) {
       if (idDoAudio) cancelados.delete(idDoAudio);
       console.error('Não consegui desfazer', erro);

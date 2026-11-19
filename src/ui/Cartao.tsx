@@ -132,9 +132,16 @@ export function Cartao({ cartao, salas, hoje, podeIdeia = true }: { cartao: Esta
           {situacao === 'desfeito'
             ? 'Desfeito. Nada ficou guardado.'
             : situacao === 'trocado'
-              ? 'Trocado por uma ideia. Veja em Ideias.'
+              ? 'Trocado por uma ideia.'
               : 'Descartado. Nada ficou guardado.'}
         </p>
+        {situacao === 'trocado' && (
+          <div class="chat-acoes">
+            <a class="botao-link" href="#/ideias">
+              Ver em Ideias
+            </a>
+          </div>
+        )}
       </article>
     );
   }

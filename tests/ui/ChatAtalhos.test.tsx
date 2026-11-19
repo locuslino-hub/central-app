@@ -52,7 +52,7 @@ const atalho = (alvo: Window | Element = window, extra: KeyboardEventInit = {}) 
   fireEvent.keyDown(alvo, { key: 'n', code: 'KeyN', ctrlKey: true, altKey: true, bubbles: true, ...extra });
 const painel = () => screen.getByRole('complementary', { name: 'Agora, água e chat' });
 const campoDoPainel = () => within(painel()).getByRole('textbox', { name: 'Escreva ou dite' }) as HTMLInputElement;
-const microfone = () => screen.getByRole('button', { name: 'Falar' });
+const microfone = () => screen.getByRole('button', { name: 'Falar no chat' });
 
 describe('Ctrl+Alt+N no computador', () => {
   it('abre o chat recolhido do painel, põe o foco no campo e liga o microfone', async () => {
@@ -69,7 +69,7 @@ describe('Ctrl+Alt+N no computador', () => {
     expect(location.hash).toBe('#/'); // o chat é o painel: nenhuma página nova
   });
 
-  it('com o chat do painel já aberto, também foca e liga; o atalho de novo para a escuta', async () => {
+  it('com o chat do painel já aberto, também foca e liga; o atalho de novo só mantém a escuta (quem para é o microfone)', async () => {
     const voz = escutaFalsa();
     localStorage.setItem(CHAVE_DO_CHAT, '1');
     mostrar('#/semana', 1280);
@@ -78,7 +78,14 @@ describe('Ctrl+Alt+N no computador', () => {
     await waitFor(() => expect(escutaMock).toHaveBeenCalledTimes(1));
     expect(document.activeElement).toBe(campoDoPainel());
 
-    atalho(campoDoPainel()); // dentro do campo do chat o atalho vale
+    atalho(campoDoPainel()); // dentro do campo do chat o atalho vale, mas só liga: já ligado, não para nem recomeça
+    await new Promise((pronto) => setTimeout(pronto, 30));
+    expect(voz.escuta.parar).not.toHaveBeenCalled();
+    expect(escutaMock).toHaveBeenCalledTimes(1);
+    expect(microfone().getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(campoDoPainel());
+
+    fireEvent.click(microfone()); // o botão alterna
     await waitFor(() => expect(voz.escuta.parar).toHaveBeenCalled());
     expect(microfone().getAttribute('aria-pressed')).toBe('false');
   });

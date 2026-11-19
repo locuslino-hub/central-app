@@ -80,7 +80,9 @@ describe('cartão do gasto no chat', () => {
 
     fireEvent.click(cartao.getByRole('button', { name: 'Trocar categoria' }));
     const campo = await screen.findByRole('textbox', { name: 'Outra categoria' });
-    expect(document.activeElement).toBe(campo);
+    // O foco vai para a primeira categoria (as escolhas), não para o campo de digitar outra.
+    const grupo = screen.getByRole('group', { name: 'Trocar categoria' });
+    expect(document.activeElement).toBe(within(grupo).getAllByRole('button')[0]);
     fireEvent.input(campo, { target: { value: ' lazer ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Trocar' }));
 

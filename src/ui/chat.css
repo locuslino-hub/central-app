@@ -139,26 +139,33 @@
   font-size: 0.9rem;
 }
 
-/* Campo e Enviar. O campo tem 16 px ou mais: o celular não aproxima a tela. */
+/*
+ * Campo, microfone, "Gravar áudio" e Enviar. O campo tem 16 px ou mais (o celular não aproxima a tela) e a linha toda, para
+ * caber o que se diz; embaixo, na ordem do Tab, vêm o microfone, a chave e o Enviar.
+ */
 .chat-form {
   /* Ao rolar o campo para a vista no celular, deixa a altura da barra de baixo livre (barra 56 px + margens). */
   scroll-margin-bottom: calc(96px + env(safe-area-inset-bottom));
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
 }
 .chat-entrada {
-  flex: 1;
+  flex: 1 1 100%;
   width: auto;
   min-width: 0;
   font-size: max(16px, 1rem);
 }
 .chat-enviar {
-  flex: none;
-  padding: 0 18px;
+  flex: 1 0 3.6rem;
+  padding: 0 12px;
 }
 
-/* O microfone do chat (V02.1): a escuta só começa neste toque. Coral; pulsa enquanto ouve. */
+/*
+ * O microfone do chat (V02.1): a escuta só começa neste toque. Coral. Ouvindo (aria-pressed), o botão escurece, ganha um
+ * contorno de 2 px e o ícone vira um quadrado de parar: o estado se vê sem animação. O anel que pulsa só reforça.
+ */
 .chat-mic {
   display: grid;
   flex: none;
@@ -178,27 +185,27 @@
   background: var(--coral2);
 }
 .chat-mic[aria-pressed='true'] {
+  background: var(--tinta);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--folha), 0 0 0 4px var(--tinta);
   animation: chat-pulsa 1.6s ease-in-out infinite;
+}
+.chat-mic[aria-pressed='true'] .icone path {
+  fill: currentColor;
 }
 @keyframes chat-pulsa {
   50% {
-    box-shadow: 0 0 0 8px rgb(var(--coral-rgb) / 0.25);
+    box-shadow: 0 0 0 2px var(--folha), 0 0 0 4px var(--tinta), 0 0 0 9px rgb(var(--coral-rgb) / 0.35);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-mic[aria-pressed='true'] {
     animation: none;
-    box-shadow: 0 0 0 5px rgb(var(--coral-rgb) / 0.25);
   }
 }
 .chat-ouvindo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 8px;
-  margin: 0;
-  color: var(--tinta2);
-  font-weight: 500;
+  color: var(--tinta);
+  font-weight: 600;
 }
 .chat-aviso,
 .chat-aviso-audio {
@@ -209,20 +216,24 @@
 .chat-aviso-audio {
   color: var(--tinta2);
 }
-/* "Gravar áudio" e o aviso de privacidade: discretos, numa linha só, junto do microfone. */
-.chat-voz-extra {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 12px;
+/* Região viva sempre montada (o leitor de tela acompanha o primeiro aviso): vazia, só some da vista. */
+.chat-aviso-audio:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
+/* "Gravar áudio": a chave fica no lugar ouvindo ou não (desligada enquanto ouve), então nada pula ao ligar a escuta. */
 .chat-gravar {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: var(--toque);
   color: var(--tinta2);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -250,7 +261,12 @@
   transition: left 0.2s ease;
 }
 .chat-gravar input:checked {
-  background: var(--alerta);
+  background: var(--acao);
+}
+.chat-gravar input:disabled,
+.chat-gravar input:disabled + span {
+  opacity: 0.6;
+  cursor: default;
 }
 .chat-gravar input:checked::after {
   left: 19px;
@@ -258,9 +274,10 @@
 .chat-gravando {
   display: inline-flex;
   align-items: center;
+  height: 1.3em; /* a altura da linha: o ponto não a faz crescer */
+  vertical-align: top;
   gap: 6px;
   color: var(--alerta);
-  font-size: 0.9rem;
   font-weight: 600;
 }
 .chat-gravando::before {
@@ -270,12 +287,20 @@
   border-radius: 50%;
   background: var(--alerta);
 }
+/* O aviso de privacidade. Tem a mesma altura nos dois estados (frase de privacidade ou "Ouvindo…" mais a frase curta). */
 .chat-aviso-voz {
-  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: calc(2 * 1.3 * 0.82rem + 2px);
   margin: 0 0 4px;
   color: var(--tinta2);
-  font-size: 0.72rem;
-  line-height: 1.25;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+/* A coluna estreita do computador quebra o texto em mais linhas. */
+.cartao-chat .chat-aviso-voz {
+  min-height: calc(3 * 1.3 * 0.82rem + 4px);
 }
 
 /* O cartão de resultado (ideia, lista, leitura, gasto) é o cartão do chat, com mais botões. */
@@ -310,6 +335,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* Categoria comprida não estoura a largura do cartão: quebra a linha dentro do botão. */
+.chat-categorias .botao-pilula {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .chat-categorias .botao-pilula[aria-pressed='true'] {
   border-color: var(--acao);
@@ -357,6 +388,22 @@
   }
   .chat-mic {
     border: 2px solid ButtonText;
+  }
+  .chat-mic[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: HighlightText;
+    box-shadow: 0 0 0 2px Highlight;
+  }
+  /* O cartão e a fala do dono só têm fundo: a borda do sistema os mantém à vista. */
+  .chat-cartao,
+  .chat-dono {
+    border: 1px solid CanvasText;
+  }
+  .chat-gravando::before {
+    forced-color-adjust: none;
+    background: CanvasText;
   }
 }
 

@@ -569,7 +569,7 @@ describe('conversa', () => {
   it('o campo tem o microfone ("Falar") e o Enviar, nessa ordem (a voz em si é testada em ChatVoz.test.tsx)', () => {
     render(<Chat />);
     const formulario = campo().closest('form')!;
-    expect(within(formulario).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Falar', 'Enviar']);
+    expect(within(formulario).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Falar no chat', 'Enviar']);
   });
 
   it('pessoa desconhecida: a resposta avisa que ainda não conhece', async () => {

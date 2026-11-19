@@ -13,6 +13,7 @@ import { Cartao } from './Cartao';
 import { CartaoDeResultado } from './CartaoDeResultado';
 import { useSalas } from './hooks';
 import { Icone } from './icones';
+import { pastaDaTela } from './pasta-do-chat';
 import { pegarPedidoDeVoz, usePedidoDeVoz } from './pedido-de-voz';
 import { useVoz } from './useVoz';
 import './chat.css';
@@ -27,16 +28,8 @@ export function useConversa(): readonly Mensagem[] {
   return conversa;
 }
 
-/** A pasta onde o dono está (`#/sala/:id/pasta/:pastaId`): a fala vai direto para ela. */
-function pastaDaTela(): string | undefined {
-  const achada = /^#\/sala\/[^/?]+\/pasta\/([^/?]+)/.exec(location.hash);
-  if (!achada) return undefined;
-  try {
-    return decodeURIComponent(achada[1]!);
-  } catch {
-    return undefined;
-  }
-}
+/** O "Guardar como ideia" vai no primeiro cartão já guardado da frase (o de cima pode ter falhado ou estar a guardar). */
+const primeiroGuardado = (cartoes: readonly { id: string; situacao: string }[]) => cartoes.find((c) => c.situacao === 'salvo')?.id;
 
 const TEXTO_VAZIO = 'Ainda não ouvi nada. Fale ou escreva o que quer guardar.';
 const textoLongo = () => `Texto longo demais (máximo ${IDEIA_NO_MAXIMO} caracteres). Divida em partes.`;
@@ -67,7 +60,9 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
   // Cartão que termina de guardar sozinho ganha o Desfazer e cresce: se for um
   // de cima, empurra a mensagem nova para baixo. Ao terminar, rola de novo.
   const guardando = conversa.reduce((n, m) => n + (m.de === 'central' ? m.cartoes.filter((c) => c.situacao === 'salvando').length : 0), 0);
-  useEffect(() => {
+  /** Leva a última mensagem e o campo à vista (acima da barra de baixo, no celular). */
+  const irAoFim = useRef(() => {});
+  irAoFim.current = () => {
     const ultima = log.current?.lastElementChild as HTMLElement | null | undefined;
     // Mensagem mais alta que a conversa visível (coluna baixa, com a água e o Agora em cima): vale o pé
     // dela, onde ficam os botões, e não o topo.
@@ -76,27 +71,40 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
     // No celular a página rola e a barra de baixo é fixa: o campo (logo abaixo da mensagem nova)
     // também precisa ficar à vista, acima da barra. `scroll-margin` em chat.css reserva o espaço dela.
     if (ultima) formulario.current?.scrollIntoView?.({ block: 'end' });
-  }, [ultimaMensagem, guardando]);
+  };
+  useEffect(() => irAoFim.current(), [ultimaMensagem, guardando]);
 
-  // A coluna do painel muda de altura depois (o Agora cresce ou encolhe quando a tarefa nova entra): quem estava no fim da
-  // conversa continua no fim, em vez de ver a mensagem nova cortada.
+  // A conversa muda de altura depois (o Agora cresce ou encolhe quando a tarefa nova entra; um cartão ganha o Desfazer):
+  // quem estava no fim da conversa continua no fim, em vez de ver a mensagem nova cortada ou escondida atrás da barra.
+  // Vale o mesmo caminho da mensagem nova (`irAoFim`): rolar só a mensagem até o pé da tela a deixaria atrás da barra.
   const noFim = useRef(true);
   useEffect(() => {
     const area = log.current;
     if (!area || typeof ResizeObserver === 'undefined') return;
-    const aoRolar = () => {
-      noFim.current = area.scrollHeight - area.scrollTop - area.clientHeight < 48;
+    const medir = () => {
+      const rolaNoLog = area.scrollHeight > area.clientHeight + 1;
+      // O painel rola a própria conversa; a página (celular, tablet) rola a janela, e o fim é o campo à vista.
+      noFim.current = rolaNoLog
+        ? area.scrollHeight - area.scrollTop - area.clientHeight < 48
+        : (formulario.current?.getBoundingClientRect().bottom ?? 0) <= window.innerHeight + 48;
     };
-    area.addEventListener('scroll', aoRolar, { passive: true });
+    area.addEventListener('scroll', medir, { passive: true });
+    window.addEventListener('scroll', medir, { passive: true });
     const observador = new ResizeObserver(() => {
-      if (noFim.current) (area.lastElementChild as HTMLElement | null)?.scrollIntoView?.({ block: 'end' });
+      if (noFim.current) irAoFim.current();
     });
     observador.observe(area);
     return () => {
-      area.removeEventListener('scroll', aoRolar);
+      area.removeEventListener('scroll', medir);
+      window.removeEventListener('scroll', medir);
       observador.disconnect();
     };
   }, []);
+
+  // O texto ao vivo cresce para a direita: o fim da frase (o que acabou de ser dito) fica à vista no campo.
+  useEffect(() => {
+    if (voz.escutando && campo.current) campo.current.scrollLeft = campo.current.scrollWidth;
+  }, [texto, voz.escutando]);
 
   // Ctrl+Alt+N e o atalho do ícone pedem para ouvir: o campo ganha o foco e o microfone liga.
   const pedido = usePedidoDeVoz();
@@ -162,7 +170,6 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
   return (
     <div
       class="chat"
-      data-escutando={voz.escutando ? 'sim' : 'nao'}
       onKeyDown={(evento) => {
         // Esc com o microfone ligado só para de ouvir (o painel não recolhe junto).
         if (evento.key !== 'Escape' || !voz.escutando) return;
@@ -189,8 +196,8 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
               ) : (
                 <p class="chat-fala">{mensagem.texto}</p>
               )}
-              {mensagem.cartoes.map((cartao, i) => (
-                <Cartao key={cartao.id} cartao={cartao} salas={salas} hoje={hoje} podeIdeia={i === 0} />
+              {mensagem.cartoes.map((cartao) => (
+                <Cartao key={cartao.id} cartao={cartao} salas={salas} hoje={hoje} podeIdeia={cartao.id === primeiroGuardado(mensagem.cartoes)} />
               ))}
               {mensagem.resultados.map((resultado) => (
                 <CartaoDeResultado key={resultado.id} estado={resultado} />
@@ -219,11 +226,30 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
           onInput={(evento) => {
             setTexto(evento.currentTarget.value);
             setErroDoTexto(null);
+            voz.aoEditarOCampo(); // o áudio retido não diz mais o que o campo diz
           }}
         />
-        <button type="button" class="chat-mic" aria-label="Falar" aria-pressed={voz.escutando} onClick={() => voz.tocar()}>
-          <Icone nome="microfone" />
+        <button
+          type="button"
+          class="chat-mic"
+          aria-label="Falar no chat"
+          aria-keyshortcuts="Control+Alt+N"
+          title="Ctrl+Alt+N"
+          aria-pressed={voz.escutando}
+          onClick={() => voz.tocar()}
+        >
+          <Icone nome={voz.escutando ? 'parar' : 'microfone'} />
         </button>
+        <label class="chat-gravar">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={voz.gravarAudio}
+            disabled={voz.escutando}
+            onChange={(e) => voz.setGravarAudio((e.currentTarget as HTMLInputElement).checked)}
+          />
+          <span>Gravar áudio</span>
+        </label>
         <button type="submit" class="botao primario chat-enviar">
           Enviar
         </button>
@@ -238,27 +264,23 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
           {voz.aviso}
         </p>
       )}
-      {voz.escutando ? (
-        // Ouvindo, a chave e o aviso de privacidade dão lugar a uma linha só: a conversa precisa do espaço.
-        <p class="chat-ouvindo" aria-hidden="true">
-          Ouvindo…
-          {voz.gravando && <span class="chat-gravando">gravando</span>}
-          toque para parar
-        </p>
-      ) : (
-        <div class="chat-voz-extra">
-          <label class="chat-gravar">
-            <input type="checkbox" role="switch" checked={voz.gravarAudio} onChange={(e) => voz.setGravarAudio((e.currentTarget as HTMLInputElement).checked)} />
-            <span>Gravar áudio</span>
-          </label>
-          <p class="chat-aviso-voz">O reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva.</p>
-        </div>
-      )}
-      {voz.avisoDoAudio && (
-        <p class="chat-aviso-audio" role="status">
-          {voz.avisoDoAudio}
-        </p>
-      )}
+      {/* A mesma altura ouvindo ou não (a chave fica no lugar, desligada enquanto ouve): só o texto troca. */}
+      <p class="chat-aviso-voz">
+        {voz.escutando ? (
+          <>
+            <span class="chat-ouvindo" aria-hidden="true">
+              Ouvindo… {voz.gravando && <span class="chat-gravando">gravando</span>} toque no microfone para parar
+            </span>
+            <span>O navegador envia o áudio ao Google.</span>
+          </>
+        ) : (
+          'O reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva.'
+        )}
+      </p>
+      {/* Sempre montada, vazia até haver o que dizer: o avanço do áudio é anunciado. */}
+      <p class="chat-aviso-audio" role="status">
+        {voz.avisoDoAudio}
+      </p>
     </div>
   );
 }

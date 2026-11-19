@@ -8,6 +8,7 @@ import { Icone } from './icones';
 import { Atalhos, MenuLateral } from './Menu';
 import { NovaVersao } from './NovaVersao';
 import { PainelDireito } from './PainelDireito';
+import { lembrarATela } from './pasta-do-chat';
 import { abrirOChat, pedidoRecente } from './pedido-de-voz';
 import { Vista } from './Vista';
 
@@ -37,6 +38,11 @@ export function Casca() {
   const tela = useTela();
   const principal = useRef<HTMLElement>(null);
   const primeira = useRef(true);
+
+  // O chat do celular e do tablet (`#/chat`) não tem pasta: lembra a tela de onde o dono veio.
+  useEffect(() => {
+    lembrarATela(location.hash);
+  }, [rota.id, rota.param]);
 
   // Ao trocar de página o foco vai para o título (leitor de tela e teclado
   // sabem onde estão). Ao abrir o app, não: nada foi escolhido ainda.
