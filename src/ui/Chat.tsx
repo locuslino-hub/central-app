@@ -94,10 +94,18 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
       if (noFim.current) irAoFim.current();
     });
     observador.observe(area);
+    // Uma mensagem que cresce por dentro (o cartão ganha o Desfazer) não muda o tamanho da conversa que rola:
+    // cada mensagem também é observada, inclusive as que chegam depois.
+    for (const filho of Array.from(area.children)) observador.observe(filho);
+    const novas = typeof MutationObserver === 'undefined' ? null : new MutationObserver((mudancas) => {
+      for (const m of mudancas) m.addedNodes.forEach((no) => { if (no instanceof Element) observador.observe(no); });
+    });
+    novas?.observe(area, { childList: true });
     return () => {
       area.removeEventListener('scroll', medir);
       window.removeEventListener('scroll', medir);
       observador.disconnect();
+      novas?.disconnect();
     };
   }, []);
 

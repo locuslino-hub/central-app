@@ -92,6 +92,8 @@ test.describe('celular, 390 px', () => {
     await page.goto('/central-app/#/chat');
 
     await page.getByRole('button', { name: 'Falar no chat' }).click();
+    // Espera a frase "dita" chegar ao campo: Enviar antes disso é "Ainda não ouvi nada" (certo, mas outro teste).
+    await expect(page.getByRole('textbox', { name: 'Escreva ou dite' })).toHaveValue(/Prof\. Souza/);
     await page.getByRole('button', { name: 'Enviar' }).click();
 
     const cartao = page.getByRole('article');
