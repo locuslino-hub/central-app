@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const ler = (arquivo: string) => readFileSync(resolve(process.cwd(), 'src/ui', arquivo), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const ler = (arquivo: string) => readFileSync(resolve(process.cwd(), 'src/ui', arquivo), 'utf8').replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
 const pastas = ler('pastas.css');
 const falar = ler('pode-falar.css');
 const ideias = ler('ideias.css');
