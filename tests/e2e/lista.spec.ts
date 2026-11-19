@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { planilhasNaMemoria } from '../apoio/planilhas-e2e';
+import { falarNoChat } from '../apoio/chat-e2e';
 import { conectar, scriptFalso } from '../apoio/script-e2e';
 
 // Lista de compras (V02, Tarefa 14), no navegador: a pasta Lista de Compras Semanais lê a planilha, marca comprado, limpa os
@@ -98,19 +99,16 @@ test.describe('computador, 1280 px', () => {
     expect(erros).toEqual([]);
   });
 
-  test('o Pode falar dentro da pasta manda "leite e pão" para ela, e repetido pergunta antes', async ({ page }) => {
+  test('o chat dentro da pasta manda "leite e pão" para ela, e repetido pergunta antes', async ({ page }) => {
     const { planilhas } = await abrirListaSemanal(page);
     await expect(page.getByRole('list', { name: 'Itens a comprar' })).toBeVisible();
 
-    await page.keyboard.press('Control+Alt+KeyN');
-    await expect(page).toHaveURL(/#\/falar$/);
-    await page.getByRole('textbox', { name: 'Texto falado' }).fill('café e leite');
-    await page.getByRole('button', { name: 'Pronto' }).click();
+    const { area } = await falarNoChat(page, 'café e leite');
 
-    await expect(page.getByText('Item guardado')).toBeVisible();
-    await expect(page.getByText(/Já estava na lista: “leite”/)).toBeVisible();
+    await expect(area.getByText('Item guardado')).toBeVisible();
+    await expect(area.getByText(/Já estava na lista: “leite”/)).toBeVisible();
     expect(planilhas.linhas(1).map((l) => l.valores['Item'])).toEqual(['Leite', 'Pão', 'Ovos', 'café']);
-    await page.getByRole('button', { name: 'Pôr mesmo assim' }).click();
+    await area.getByRole('button', { name: 'Pôr mesmo assim' }).click();
     await expect.poll(() => planilhas.linhas(1).map((l) => l.valores['Item'])).toEqual(['Leite', 'Pão', 'Ovos', 'café', 'leite']);
   });
 });

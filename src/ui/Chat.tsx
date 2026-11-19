@@ -78,6 +78,26 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
     if (ultima) formulario.current?.scrollIntoView?.({ block: 'end' });
   }, [ultimaMensagem, guardando]);
 
+  // A coluna do painel muda de altura depois (o Agora cresce ou encolhe quando a tarefa nova entra): quem estava no fim da
+  // conversa continua no fim, em vez de ver a mensagem nova cortada.
+  const noFim = useRef(true);
+  useEffect(() => {
+    const area = log.current;
+    if (!area || typeof ResizeObserver === 'undefined') return;
+    const aoRolar = () => {
+      noFim.current = area.scrollHeight - area.scrollTop - area.clientHeight < 48;
+    };
+    area.addEventListener('scroll', aoRolar, { passive: true });
+    const observador = new ResizeObserver(() => {
+      if (noFim.current) (area.lastElementChild as HTMLElement | null)?.scrollIntoView?.({ block: 'end' });
+    });
+    observador.observe(area);
+    return () => {
+      area.removeEventListener('scroll', aoRolar);
+      observador.disconnect();
+    };
+  }, []);
+
   // Ctrl+Alt+N e o atalho do ícone pedem para ouvir: o campo ganha o foco e o microfone liga.
   const pedido = usePedidoDeVoz();
   useEffect(() => {
@@ -110,6 +130,7 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
     const audio = voz.pegarAudio();
     const pastaAtual = pastaDaTela();
     setTexto('');
+    textoAtual.current = ''; // um segundo toque antes de a tela redesenhar não manda de novo
     void enviar(frase.trim(), { ...(pastaAtual ? { pastaAtual } : {}), ...(audio ? { audio } : {}) });
   }
 
@@ -207,11 +228,6 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
           Enviar
         </button>
       </form>
-      {voz.escutando && (
-        <p class="chat-ouvindo" aria-hidden="true">
-          Ouvindo… toque no microfone para parar
-        </p>
-      )}
       {erroDoTexto && (
         <p class="chat-aviso" id="chat-erro-texto" role="alert">
           {erroDoTexto}
@@ -222,20 +238,22 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
           {voz.aviso}
         </p>
       )}
-      <div class="chat-voz-extra">
-        <label class="chat-gravar">
-          <input
-            type="checkbox"
-            role="switch"
-            checked={voz.gravarAudio}
-            disabled={voz.escutando}
-            onChange={(e) => voz.setGravarAudio((e.currentTarget as HTMLInputElement).checked)}
-          />
-          <span>Gravar áudio</span>
-        </label>
-        {voz.gravando && <span class="chat-gravando">gravando</span>}
-        <p class="chat-aviso-voz">O reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva.</p>
-      </div>
+      {voz.escutando ? (
+        // Ouvindo, a chave e o aviso de privacidade dão lugar a uma linha só: a conversa precisa do espaço.
+        <p class="chat-ouvindo" aria-hidden="true">
+          Ouvindo…
+          {voz.gravando && <span class="chat-gravando">gravando</span>}
+          toque para parar
+        </p>
+      ) : (
+        <div class="chat-voz-extra">
+          <label class="chat-gravar">
+            <input type="checkbox" role="switch" checked={voz.gravarAudio} onChange={(e) => voz.setGravarAudio((e.currentTarget as HTMLInputElement).checked)} />
+            <span>Gravar áudio</span>
+          </label>
+          <p class="chat-aviso-voz">O reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva.</p>
+        </div>
+      )}
       {voz.avisoDoAudio && (
         <p class="chat-aviso-audio" role="status">
           {voz.avisoDoAudio}

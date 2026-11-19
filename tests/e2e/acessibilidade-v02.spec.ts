@@ -1,7 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { areaDoChat, falarNoChat } from '../apoio/chat-e2e';
 import { planilhasNaMemoria } from '../apoio/planilhas-e2e';
 import { conectar, scriptFalso } from '../apoio/script-e2e';
+import { reconhecimentoFalso } from '../apoio/voz-e2e';
 
 // Acessibilidade das telas novas da V02 (Tarefa 19), no navegador, com o Google de mentira: axe sem erro grave (todas as
 // regras, em 1280 e 375 px), foco visível em cada parada do Tab e uso completo pelo teclado (Tab, Enter, Espaço, Esc) nos
@@ -57,11 +59,10 @@ async function criarMetodologia(page: Page) {
   await expect(page.getByRole('heading', { level: 1, name: 'Metodologia' })).toBeVisible();
 }
 
+/** Escreve a frase no chat (painel no computador, página no celular) e manda. Devolve o cartão que ela cria. */
 async function falar(page: Page, frase: string) {
-  await page.goto('/central-app/#/');
-  await page.goto('/central-app/#/falar');
-  await page.getByRole('textbox', { name: 'Texto falado' }).fill(frase);
-  await page.getByRole('button', { name: 'Pronto' }).click();
+  const { cartao } = await falarNoChat(page, frase);
+  return cartao;
 }
 
 /** Erros graves do axe (todas as regras), no formato que diz onde olhar. */
@@ -161,8 +162,7 @@ for (const [nome, viewport] of [
 
     test('Ideias (com ideia, com a escolha de sala aberta)', async ({ page }) => {
       await abrirApp(page, '#/');
-      await falar(page, 'Pensar no artigo da Aurora');
-      await expect(page.getByRole('article').getByText('Guardado em Ideias')).toBeVisible();
+      await expect((await falar(page, 'ideia: Pensar no artigo da Aurora')).getByText('Guardado em Ideias')).toBeVisible();
       await page.goto('/central-app/#/ideias');
       await expect(page.getByRole('heading', { level: 1, name: 'Ideias' })).toBeVisible();
       await page.getByRole('main').getByRole('button', { name: /^(Outra sala|Escolher sala):/ }).click();
@@ -171,13 +171,33 @@ for (const [nome, viewport] of [
       expect(await paradasSemSinal(page)).toEqual([]);
     });
 
-    test('Pode falar, antes e com o cartão aberto', async ({ page }) => {
-      await abrirApp(page, '#/falar');
+    test('Chat com o microfone, antes e com os cartões abertos (ideia, tarefa e gasto)', async ({ page }) => {
+      await abrirApp(page, '#/');
+      // O campo, o microfone, a chave "Gravar áudio" e o aviso de privacidade ficam à vista (painel aberto ou página do chat).
+      const area = await areaDoChat(page);
+      await expect(area.getByRole('button', { name: 'Falar' })).toBeVisible();
+      await expect(area.getByRole('switch', { name: 'Gravar áudio' })).toBeVisible();
       await semAchados(page);
       expect(await paradasSemSinal(page)).toEqual([]);
-      await page.getByRole('textbox', { name: 'Texto falado' }).fill('Pensar no artigo da Aurora');
-      await page.getByRole('button', { name: 'Pronto' }).click();
-      await expect(page.getByRole('article').getByText('Guardado em Ideias')).toBeVisible();
+
+      await expect((await falar(page, 'ideia: Pensar no artigo da Aurora')).getByText('Guardado em Ideias')).toBeVisible();
+      await semAchados(page);
+      expect(await paradasSemSinal(page)).toEqual([]);
+
+      // O cartão da tarefa (com Trocar sala, Guardar como ideia e Desfazer) também passa.
+      const tarefa = await falar(page, 'Preciso parafusar o apoio do banheiro');
+      await expect(tarefa.getByRole('button', { name: 'Guardar como ideia' })).toBeVisible();
+      await semAchados(page);
+      expect(await paradasSemSinal(page)).toEqual([]);
+    });
+
+    test('Chat ouvindo (microfone ligado, texto ao vivo no campo)', async ({ page }) => {
+      await reconhecimentoFalso(page, 'revisar o capítulo dois');
+      await abrirApp(page, '#/');
+      const area = await areaDoChat(page);
+      await area.getByRole('button', { name: 'Falar' }).click();
+      await expect(area.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+      await expect(area.getByRole('textbox', { name: 'Escreva ou dite' })).toHaveValue('revisar o capítulo dois');
       await semAchados(page);
       expect(await paradasSemSinal(page)).toEqual([]);
     });
@@ -230,38 +250,57 @@ for (const [nome, viewport] of [
 test.describe('só com o teclado, computador', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test('Pode falar: atalho, escrever, Enter grava, o foco vai ao cartão e Espaço em Desfazer desfaz', async ({ page }) => {
+  test('Chat: Ctrl+Alt+N foca o campo e liga o microfone, Esc para, Enter grava, e Espaço em Desfazer desfaz', async ({ page }) => {
+    await reconhecimentoFalso(page, null);
     await abrirApp(page, '#/');
     await page.keyboard.press('Control+Alt+KeyN');
-    await expect(page.getByRole('heading', { level: 1, name: 'Pode falar' })).toBeVisible();
-    const campo = page.getByRole('textbox', { name: 'Texto falado' });
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
+    const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
+    const mic = painel.getByRole('button', { name: 'Falar' });
+    await expect(campo).toBeFocused();
+    await expect(mic).toHaveAttribute('aria-pressed', 'true');
+    // Esc só para de ouvir (o painel não recolhe), e o foco continua no campo.
+    await page.keyboard.press('Escape');
+    await expect(mic).toHaveAttribute('aria-pressed', 'false');
+    await expect(campo).toBeFocused();
+    await expect(painel.getByRole('button', { name: /^Chat/ })).toHaveAttribute('aria-expanded', 'true');
+
     const semSinal: string[] = [];
-    await tabAte(page, campo, 40, semSinal);
-    await page.keyboard.type('Pensar no artigo da Aurora');
+    await page.keyboard.type('ideia: Pensar no artigo da Aurora');
     await page.keyboard.press('Enter');
-    const cartao = page.getByRole('article');
+    const cartao = painel.getByRole('article');
     await expect(cartao.getByText('Guardado em Ideias')).toBeVisible();
-    await expect(cartao).toBeFocused();
-    await tabAte(page, cartao.getByRole('button', { name: 'Desfazer' }), 20, semSinal);
+    // De volta, a partir do campo: o último botão do cartão é o Desfazer.
+    await page.keyboard.press('Shift+Tab');
+    await expect(cartao.getByRole('button', { name: 'Desfazer' })).toBeFocused();
+    const sinal = await focoVisivel(page);
+    if (!sinal.ok) semSinal.push(sinal.quem);
     await page.keyboard.press('Space');
-    await expect(page.getByText('Desfeito. Nada ficou guardado.')).toBeVisible();
+    await expect(painel.getByText('Desfeito. Nada ficou guardado.')).toBeVisible();
+    await expect(cartao).toBeFocused();
     expect(semSinal).toEqual([]);
   });
 
-  test('Pode falar: Corrigir pelo teclado devolve o texto ao campo', async ({ page }) => {
+  test('Chat: o microfone e a chave de áudio se alcançam e se usam só com o teclado (Tab e Espaço)', async ({ page }) => {
+    await reconhecimentoFalso(page, null);
     await abrirApp(page, '#/');
-    await falar(page, 'Pensar no artigo da Aurora');
-    const cartao = page.getByRole('article');
-    await expect(cartao.getByText('Guardado em Ideias')).toBeVisible();
-    await tabAte(page, cartao.getByRole('button', { name: 'Corrigir' }), 20);
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('textbox', { name: 'Texto falado' })).toHaveValue('Pensar no artigo da Aurora');
+    const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
+    await painel.getByRole('button', { name: /^Chat/ }).click();
+    const semSinal: string[] = [];
+    await tabAte(page, painel.getByRole('button', { name: 'Falar' }), 80, semSinal);
+    await page.keyboard.press('Space');
+    await expect(painel.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Space');
+    await expect(painel.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'false');
+    await tabAte(page, painel.getByRole('switch', { name: 'Gravar áudio' }), 5, semSinal);
+    await page.keyboard.press('Space');
+    await expect(painel.getByRole('switch', { name: 'Gravar áudio' })).toBeChecked();
+    expect(semSinal).toEqual([]);
   });
 
   test('Ideias: escolher sala, levar, Desfazer e virar tarefa, tudo com Tab, Enter e Espaço', async ({ page }) => {
     await abrirApp(page, '#/');
-    await falar(page, 'Pensar no artigo da Aurora');
-    await expect(page.getByRole('article').getByText('Guardado em Ideias')).toBeVisible();
+    await expect((await falar(page, 'ideia: Pensar no artigo da Aurora')).getByText('Guardado em Ideias')).toBeVisible();
     await page.goto('/central-app/#/ideias');
     await expect(page.getByRole('heading', { level: 1, name: 'Ideias' })).toBeVisible();
     const semSinal: string[] = [];
@@ -272,7 +311,7 @@ test.describe('só com o teclado, computador', () => {
     await expect(escolha).toBeVisible();
     await tabAte(page, escolha.getByRole('button', { name: 'Casa' }), 20, semSinal);
     await page.keyboard.press('Space');
-    const cartao = page.getByRole('article');
+    const cartao = page.getByRole('main').getByRole('article');
     await expect(cartao.getByText('Levada para Casa')).toBeVisible();
     await expect(cartao).toBeFocused();
     await tabAte(page, cartao.getByRole('button', { name: 'Desfazer' }), 20, semSinal);
@@ -394,12 +433,11 @@ test.describe('foco que não se perde, só com o teclado (computador)', () => {
 
   test('Ideias: Fechar o cartão leva o foco ao título da seção', async ({ page }) => {
     await abrirApp(page, '#/');
-    await falar(page, 'Pensar no artigo da Aurora');
-    await expect(page.getByRole('article').getByText('Guardado em Ideias')).toBeVisible();
+    await expect((await falar(page, 'ideia: Pensar no artigo da Aurora')).getByText('Guardado em Ideias')).toBeVisible();
     await page.goto('/central-app/#/ideias');
     await tabAte(page, page.getByRole('main').getByRole('button', { name: /^Virar tarefa:/ }), 70);
     await page.keyboard.press('Enter');
-    const cartao = page.getByRole('article');
+    const cartao = page.getByRole('main').getByRole('article');
     await expect(cartao).toBeFocused();
     await tabAte(page, cartao.getByRole('button', { name: 'Fechar' }), 20);
     await page.keyboard.press('Enter');
@@ -539,13 +577,17 @@ test.describe('foco que não se perde, só com o teclado (computador)', () => {
     expect(await focoEm(page)).toContain('Renomear');
   });
 
-  test('Pode falar: Falar outra leva o foco ao campo de texto', async ({ page }) => {
+  test('Chat: Guardar como ideia, no cartão da tarefa, leva o foco ao cartão (o botão apertado some)', async ({ page }) => {
     await abrirApp(page, '#/');
-    await falar(page, 'Pensar no artigo da Aurora');
-    const cartao = page.getByRole('article');
-    await expect(cartao.getByText('Guardado em Ideias')).toBeVisible();
-    await tabAte(page, cartao.getByRole('button', { name: 'Falar outra' }), 20);
+    const cartao = await falar(page, 'Preciso parafusar o apoio do banheiro');
+    await expect(cartao.getByRole('button', { name: 'Guardar como ideia' })).toBeVisible();
+    // O campo do chat vem logo depois do cartão: de lá, Shift+Tab chega ao último botão dele.
+    await page.getByRole('complementary', { name: 'Agora, água e chat' }).getByRole('textbox', { name: 'Escreva ou dite' }).focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(cartao.getByRole('button', { name: 'Guardar como ideia' })).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('textbox', { name: 'Texto falado' })).toBeFocused();
+    await expect(cartao.getByText(/Trocado por uma ideia/)).toBeVisible();
+    await foraDoBody(page);
+    await expect(cartao).toBeFocused();
   });
 });

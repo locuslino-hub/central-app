@@ -192,6 +192,10 @@
   }
 }
 .chat-ouvindo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
   margin: 0;
   color: var(--tinta2);
   font-weight: 500;
@@ -205,12 +209,12 @@
 .chat-aviso-audio {
   color: var(--tinta2);
 }
-/* "Gravar áudio" e o aviso de privacidade: discretos, junto do microfone. */
+/* "Gravar áudio" e o aviso de privacidade: discretos, numa linha só, junto do microfone. */
 .chat-voz-extra {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 14px;
+  gap: 0 12px;
 }
 .chat-gravar {
   display: inline-flex;
@@ -251,10 +255,6 @@
 .chat-gravar input:checked::after {
   left: 19px;
 }
-.chat-gravar input:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
 .chat-gravando {
   display: inline-flex;
   align-items: center;
@@ -272,10 +272,10 @@
 }
 .chat-aviso-voz {
   flex: 1 1 100%;
-  margin: 0;
+  margin: 0 0 4px;
   color: var(--tinta2);
-  font-size: 0.8rem;
-  line-height: 1.35;
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 /* O cartão de resultado (ideia, lista, leitura, gasto) é o cartão do chat, com mais botões. */
@@ -372,7 +372,7 @@
 .cartao-chat .chat {
   flex: 1;
   min-height: 0;
-  gap: 10px;
+  gap: 6px;
 }
 .cartao-chat .chat-log {
   flex: 1;

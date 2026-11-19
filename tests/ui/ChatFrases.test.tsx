@@ -80,6 +80,17 @@ describe('as frases do dono no chat: tarefas e compromissos (o chat de sempre)',
     await waitFor(async () => expect((await listar('tarefas'))[0]).toMatchObject({ salaId: 'sala-doutoramento' }));
   });
 
+  it('"Marcar reunião com a Marina": tarefa diária de marcar, na sala da pessoa (Orientações)', async () => {
+    await salvar('pessoas', { nome: 'Marina', salaId: 'sala-orientacoes' });
+    render(<Chat />);
+    dizer('Marcar reunião com a Marina');
+    const cartao = await ultimoCartao();
+    expect(cartao.getByText('Marcar reunião com a Marina')).toBeTruthy();
+    expect(cartao.getByText('Orientações')).toBeTruthy();
+    await waitFor(async () => expect((await listar('tarefas'))[0]).toMatchObject({ salaId: 'sala-orientacoes', marcar: true, data: '2026-11-05' }));
+    expect(await listar('ideias')).toEqual([]);
+  });
+
   it('"Preciso parafusar o apoio do banheiro": tarefa na sala Casa, com Guardar como ideia no cartão', async () => {
     render(<Chat />);
     dizer('Preciso parafusar o apoio do banheiro');

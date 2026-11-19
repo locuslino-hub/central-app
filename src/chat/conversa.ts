@@ -17,6 +17,7 @@ import { horaEmLisboa } from '../../script/agenda';
 import { ErroAgenda } from '../dados/agenda';
 import { avisoDaAgenda, trocarSalaDoCompromisso } from '../dados/compromisso';
 import { lerRegistros, listar, salvar } from '../dados/loja';
+import { avisarPlanilhaMudou } from '../dados/planilha-mudou';
 import type { Tarefa } from '../dados/tipos';
 import { apagarAudioDoDrive } from '../voz/apagar-audio';
 import { limparProblemaDeAudio, marcarProblemaDeAudio, removerAudio } from '../voz/audios-pendentes';
@@ -210,6 +211,7 @@ function mudarResultado(id: string, mudanca: Partial<EstadoResultado>) {
 function concluirResultado(id: string, mudanca: Partial<EstadoResultado> = {}) {
   const atual = acharResultado(id);
   if (atual) mudarResultado(id, { ...mudanca, ocupado: false, foco: atual.foco + 1 });
+  avisarPlanilhaMudou(); // desfazer, trocar categoria, pôr mesmo assim e guardar como ideia mexem na planilha
 }
 
 function novoResultado(frase: string, resultado: ResultadoDaFrase): EstadoResultado {
@@ -363,6 +365,7 @@ export async function enviar(frase: string, opcoes: OpcoesDaFrase = {}): Promise
       if (audio && !saida.resultado.audioId) audiosEsperando.set(resposta, audio);
       mudarMensagem(resposta, { texto: 'Anotei.' });
       const estado = mostrarResultado(resposta, texto, saida.resultado, audio);
+      avisarPlanilhaMudou(); // a pasta aberta ao lado (Lista, Registro, Financeiro) relê
       if (audio && !saida.resultado.audioId) mudarResultado(estado.id, { avisoDoAudio: TEXTO_DO_AUDIO_SEM_IDEIA });
       return;
     }

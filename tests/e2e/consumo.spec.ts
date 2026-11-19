@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { planilhasNaMemoria } from '../apoio/planilhas-e2e';
+import { falarNoChat } from '../apoio/chat-e2e';
 import { conectar, scriptFalso } from '../apoio/script-e2e';
 
 // Registro de consumo (V02, Tarefa 13), no navegador: a pasta Consumo de Água lê a planilha, mostra tabela e gráfico por
@@ -75,16 +76,13 @@ test.describe('computador, 1280 px', () => {
     expect(erros).toEqual([]);
   });
 
-  test('o Pode falar dentro da pasta manda a frase direto para ela', async ({ page }) => {
+  test('o chat dentro da pasta manda a frase direto para ela', async ({ page }) => {
     const { planilhas } = await abrirConsumoDeAgua(page);
     await expect(page.getByRole('table', { name: 'Leituras registradas' })).toBeVisible();
 
-    await page.keyboard.press('Control+Alt+KeyN');
-    await expect(page).toHaveURL(/#\/falar$/);
-    await page.getByRole('textbox', { name: 'Texto falado' }).fill('leitura 1018');
-    await page.getByRole('button', { name: 'Pronto' }).click();
+    const { area } = await falarNoChat(page, 'leitura 1018');
 
-    await expect(page.getByText('Leitura guardada')).toBeVisible();
+    await expect(area.getByText('Leitura guardada')).toBeVisible();
     expect(planilhas.linhas(3).at(-1)?.valores).toMatchObject({ Leitura: '1018', Data: '2026-11-05' });
   });
 });

@@ -21,10 +21,13 @@ async function pequenos(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const achados: string[] = [];
     for (const controle of document.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, summary')) {
-      const caixa = controle.getBoundingClientRect();
+      // A chave "Gravar áudio" é pequena por natureza: vale a etiqueta que a envolve.
+      const alvo = controle instanceof HTMLInputElement && controle.type === 'checkbox' ? controle.closest('label') : controle;
+      if (!alvo) continue;
+      const caixa = alvo.getBoundingClientRect();
       if (caixa.width === 0 && caixa.height === 0) continue;
       if (caixa.height < 43.5 || caixa.width < 43.5) {
-        achados.push(`${controle.textContent?.trim().slice(0, 30) || controle.outerHTML.slice(0, 60)} (${Math.round(caixa.width)}x${Math.round(caixa.height)})`);
+        achados.push(`${alvo.textContent?.trim().slice(0, 30) || alvo.outerHTML.slice(0, 60)} (${Math.round(caixa.width)}x${Math.round(caixa.height)})`);
       }
     }
     return achados;
@@ -119,10 +122,11 @@ test.describe('celular, 390 px', () => {
     expect(await regiao.evaluate((el) => getComputedStyle(el).visibility)).toBe('visible');
   });
 
-  test('não há botão de microfone', async ({ page }) => {
+  test('o campo tem o microfone ("Falar") e o Enviar; a voz em si é testada em chat-voz.spec.ts', async ({ page }) => {
     await page.goto('/central-app/#/chat');
     const formulario = page.getByRole('main').locator('form');
-    await expect(formulario.getByRole('button')).toHaveText(['Enviar']);
+    await expect(formulario.getByRole('button')).toHaveText(['', 'Enviar']);
+    await expect(formulario.getByRole('button', { name: 'Falar' })).toBeVisible();
   });
 });
 

@@ -18,6 +18,7 @@ import {
   type ResultadoDaLeitura,
 } from '../dados/leituras';
 import { lerPlanilha, type LeituraDePlanilha } from '../dados/planilhas';
+import { PLANILHA_MUDOU } from '../dados/planilha-mudou';
 import type { Pasta } from '../dados/tipos';
 import { AvisoVivo } from './AvisoVivo';
 import { useDia } from './hooks';
@@ -77,7 +78,12 @@ export function RegistroPasta({ pasta }: { pasta: Pasta }) {
   useEffect(() => {
     const reler = () => setVersao((v) => v + 1);
     window.addEventListener('online', reler);
-    return () => window.removeEventListener('online', reler);
+    // O chat (ao lado da pasta) gravou ou desfez algo na planilha: relê.
+    window.addEventListener(PLANILHA_MUDOU, reler);
+    return () => {
+      window.removeEventListener('online', reler);
+      window.removeEventListener(PLANILHA_MUDOU, reler);
+    };
   }, []);
   useEffect(() => {
     if (cartao) cartaoRef.current?.focus();

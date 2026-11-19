@@ -20,7 +20,7 @@ const ouvintes = new Set<() => void>();
 export function pedirVoz(pedido: PedidoDeVoz = {}) {
   pendente = pedido;
   numero++;
-  pedidoEm = Date.now();
+  pedidoEm = performance.now();
   for (const ouvinte of [...ouvintes]) ouvinte();
 }
 
@@ -32,7 +32,7 @@ export function abrirOChat(tela: string, rota: string, pedido: PedidoDeVoz = {})
 
 /** Pediram para ouvir agora há pouco? A casca não leva o foco ao título da página nova: o foco é do campo do chat. */
 export function pedidoRecente(): boolean {
-  return Date.now() - pedidoEm < 1000;
+  return pedidoEm > 0 && performance.now() - pedidoEm < 1000;
 }
 
 /** O chat que está à vista pega o pedido (só um pega). */

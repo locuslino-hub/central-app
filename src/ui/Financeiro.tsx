@@ -28,6 +28,7 @@ import {
   type LeituraDeLancamentos,
 } from '../dados/financeiro';
 import { dataDeTexto, dataEmBr } from '../dados/leituras';
+import { PLANILHA_MUDOU } from '../dados/planilha-mudou';
 import type { Pasta } from '../dados/tipos';
 import { AvisoVivo } from './AvisoVivo';
 import { useAparelhoCelular, useDia } from './hooks';
@@ -119,7 +120,12 @@ export function Financeiro({ pasta }: { pasta: Pasta }) {
     if (celular) return;
     const reler = () => setVersao((v) => v + 1);
     window.addEventListener('online', reler);
-    return () => window.removeEventListener('online', reler);
+    // O chat (ao lado da pasta) gravou, desfez ou trocou uma categoria: relê.
+    window.addEventListener(PLANILHA_MUDOU, reler);
+    return () => {
+      window.removeEventListener('online', reler);
+      window.removeEventListener(PLANILHA_MUDOU, reler);
+    };
   }, [celular]);
   useEffect(() => {
     if (cartao) cartaoRef.current?.focus();

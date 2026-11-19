@@ -137,7 +137,9 @@ async function pequenos(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const achados: string[] = [];
     for (const controle of document.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, summary')) {
-      const caixa = controle.getBoundingClientRect();
+      // A chave "Gravar áudio" do chat é pequena por natureza: vale a etiqueta que a envolve.
+      const alvo = controle instanceof HTMLInputElement && controle.getAttribute('role') === 'switch' ? (controle.closest('label') ?? controle) : controle;
+      const caixa = alvo.getBoundingClientRect();
       if (caixa.width === 0 && caixa.height === 0) continue;
       if (caixa.height < 43.5 || caixa.width < 43.5) {
         achados.push(

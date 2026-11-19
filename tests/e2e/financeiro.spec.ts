@@ -3,10 +3,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { planilhasNaMemoria } from '../apoio/planilhas-e2e';
+import { falarNoChat } from '../apoio/chat-e2e';
 import { conectar, scriptFalso } from '../apoio/script-e2e';
 
 // Financeiro (V02, Tarefa 16), no navegador: a pasta Financeiro lê a planilha, mostra cartões, barras e tabela do mês,
-// recebe um gasto por voz (Pode falar) ou pelo formulário e deixa trocar a categoria. No celular só diz "Abra no computador".
+// recebe um gasto falado no chat ou pelo formulário e deixa trocar a categoria. No celular só diz "Abra no computador".
 // As planilhas são de mentira (`planilhas-e2e.ts`); o resto é o código de verdade. Quinta-feira, 2026-11-05, 12:20 em
 // Lisboa. Descrições, nomes e valores fictícios.
 const AGORA = '2026-11-05T12:20:00+00:00';
@@ -98,12 +99,9 @@ test.describe('computador, 1280 px', () => {
     const tabela = page.getByRole('table', { name: 'Gastos do mês' });
     await expect(tabela.getByRole('row')).toHaveCount(4);
 
-    await page.keyboard.press('Control+Alt+KeyN');
-    await expect(page).toHaveURL(/#\/falar$/);
-    await page.getByRole('textbox', { name: 'Texto falado' }).fill('gastei 5,50 hoje comprando salgado');
-    await page.getByRole('button', { name: 'Pronto' }).click();
+    const { area } = await falarNoChat(page, 'gastei 5,50 hoje comprando salgado');
 
-    const cartao = page.getByRole('article');
+    const cartao = area.getByRole('article');
     await expect(cartao).toContainText('Gasto guardado');
     await expect(cartao).toContainText('€ 5,50 · Alimentação · Débito');
     expect(planilhas.linhas(6).at(-1)?.valores).toMatchObject({ Data: '2026-11-05', Descrição: 'salgado', Categoria: 'Alimentação', Tipo: 'Débito', Valor: '5.5', Quem: 'Central' });
@@ -117,8 +115,7 @@ test.describe('computador, 1280 px', () => {
     await expect(cartao).toContainText('€ 5,50 · Lazer · Débito');
     await expect.poll(() => planilhas.linhas(6).at(-1)?.valores['Categoria']).toBe('Lazer');
 
-    // Volta para a pasta: o gasto novo está na tabela, a data mais recente primeiro.
-    await cartao.getByRole('button', { name: 'Fechar' }).click();
+    // A pasta continua aberta ao lado do chat: o gasto novo está na tabela, a data mais recente primeiro.
     await expect(page.getByRole('heading', { level: 1, name: 'Financeiro' })).toBeVisible();
     await expect(tabela.getByRole('row')).toHaveCount(5);
     await expect(tabela.getByRole('row').nth(1)).toContainText('salgado');
@@ -130,14 +127,13 @@ test.describe('computador, 1280 px', () => {
     const { planilhas } = await abrirFinanceiro(page);
     await expect(page.getByRole('table', { name: 'Gastos do mês' })).toBeVisible();
 
-    for (const frase of ['preciso pagar 50 de luz amanhã', 'gastei 3 horas revisando o capítulo 2', 'será que gastei 20 euros?', 'paguei 2 contas']) {
-      await page.keyboard.press('Control+Alt+KeyN');
-      await page.getByRole('textbox', { name: 'Texto falado' }).fill(frase);
-      await page.getByRole('button', { name: 'Pronto' }).click();
-      await expect(page.getByRole('article')).toBeVisible();
-      await expect(page.getByRole('article')).not.toContainText('Gasto guardado');
+    const frases = ['preciso pagar 50 de luz amanhã', 'gastei 3 horas revisando o capítulo 2', 'será que gastei 20 euros?', 'paguei 2 contas'];
+    for (const [i, frase] of frases.entries()) {
+      const { area } = await falarNoChat(page, frase);
+      await expect(area.getByRole('article')).toHaveCount(i + 1);
+      const cartao = area.getByRole('article').last();
+      await expect(cartao).not.toContainText('Gasto guardado');
       expect(planilhas.linhas(6)).toHaveLength(4);
-      await page.getByRole('article').getByRole('button', { name: 'Fechar' }).click();
       await expect(page.getByRole('heading', { level: 1, name: 'Financeiro' })).toBeVisible();
     }
   });
@@ -181,10 +177,8 @@ test.describe('celular, 375 px', () => {
     await capturar(page, 'financeiro-celular');
     await semAchadosDoAxe(page);
 
-    await page.getByRole('link', { name: 'Pode falar' }).click();
-    await page.getByRole('textbox', { name: 'Texto falado' }).fill('gastei 5,50 hoje comprando salgado');
-    await page.getByRole('button', { name: 'Pronto' }).click();
-    await expect(page.getByRole('article')).toContainText('€ 5,50 · Alimentação · Débito');
+    const { area } = await falarNoChat(page, 'gastei 5,50 hoje comprando salgado');
+    await expect(area.getByRole('article')).toContainText('€ 5,50 · Alimentação · Débito');
     expect(planilhas.linhas(6).at(-1)?.valores).toMatchObject({ Descrição: 'salgado', Valor: '5.5' });
     expect(await semRolagemDeLado(page)).toBe(true);
     await semAchadosDoAxe(page);

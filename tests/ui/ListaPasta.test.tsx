@@ -530,6 +530,19 @@ describe('chat (falado ou escrito) dentro da pasta', () => {
     expect(planilhas.linhas(PLANILHA).map((l) => l.valores['Item'])).toEqual(['Café', 'leite', 'pão']);
   });
 
+  it('o item dito no chat aparece na lista que está aberta ao lado', async () => {
+    await pastaDeCompras();
+    planilhas.planilha(PLANILHA, [compra('Café')], CABECALHO_COMPRAS);
+    mostrar(HASH);
+    const aComprar = await itensAComprar();
+    expect(aComprar.queryByText('leite')).toBeNull();
+
+    escreverNoChatDoPainel('leite e pão');
+
+    expect(await aComprar.findByText('leite')).toBeTruthy();
+    expect(aComprar.getByText('pão')).toBeTruthy();
+  });
+
   it('o cartão do chat tem "Pôr mesmo assim" para o item repetido', async () => {
     await pastaDeCompras();
     planilhas.planilha(PLANILHA, [compra('Café')], CABECALHO_COMPRAS);

@@ -8,6 +8,7 @@
 // - Sem rede: mostra o que o aparelho guardou; o item novo e as marcas esperam na fila e a tela avisa.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { dataEmBr } from '../dados/leituras';
+import { PLANILHA_MUDOU } from '../dados/planilha-mudou';
 import { adicionarItens, ITEM_NO_MAXIMO, itemDeTexto, marcarComprado, QUANTIDADE_NO_MAXIMO, resumirLista, type ItemDaLista, type ResultadoDosItens } from '../dados/lista';
 import { chaveDosOcultos } from '../dados/pastas';
 import { lerPlanilha, type LeituraDePlanilha } from '../dados/planilhas';
@@ -130,7 +131,12 @@ export function ListaPasta({ pasta }: { pasta: Pasta }) {
   useEffect(() => {
     const reler = () => setVersao((v) => v + 1);
     window.addEventListener('online', reler);
-    return () => window.removeEventListener('online', reler);
+    // O chat (ao lado da pasta) gravou ou desfez algo na planilha: relê.
+    window.addEventListener(PLANILHA_MUDOU, reler);
+    return () => {
+      window.removeEventListener('online', reler);
+      window.removeEventListener(PLANILHA_MUDOU, reler);
+    };
   }, []);
   useEffect(() => {
     if (cartao) cartaoRef.current?.focus();

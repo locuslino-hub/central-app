@@ -179,6 +179,19 @@ describe('cartão do gasto no chat', () => {
   });
 });
 
+describe('a pasta aberta ao lado do chat se atualiza', () => {
+  it('o gasto falado no chat aparece na tabela do Financeiro que está aberto, e o Desfazer o marca como desfeito', async () => {
+    const cartao = await abrirComFrase('gastei 3 hoje no café', '#/sala/sala-casa/pasta/pasta-financeiro');
+    const tabela = await screen.findByRole('table', { name: 'Gastos do mês' });
+
+    await waitFor(() => expect(within(tabela).getByText('café')).toBeTruthy());
+
+    fireEvent.click(await cartao.findByRole('button', { name: 'Desfazer' }));
+    await screen.findByText('Desfeito. Nada ficou guardado.');
+    await waitFor(() => expect(linhas()[2]!.valores['Observação']).toBe('desfeito'));
+  });
+});
+
 describe('uma ação do cartão por vez', () => {
   it('durante o Desfazer os outros botões ficam desligados e um segundo toque não repete', async () => {
     const cartao = await abrirComFrase('gastei 5,50 hoje comprando salgado');
