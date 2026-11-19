@@ -5,7 +5,7 @@ Este guia é para quem usa o app, sem precisar saber programar. Ele explica:
 1. [Conectar um aparelho novo](#1-conectar-um-aparelho-novo)
 2. [Trocar o código de acesso](#2-trocar-o-código-de-acesso)
 3. [Restaurar uma cópia dos dados](#3-restaurar-uma-cópia-dos-dados)
-4. [Pode falar](#4-pode-falar)
+4. [Falar no chat](#4-falar-no-chat)
 5. [Ideias](#5-ideias)
 6. [Pastas nas salas](#6-pastas-nas-salas)
 7. [Compartilhar a pasta "Casa (partilhada)" com outra pessoa](#7-compartilhar-a-pasta-casa-partilhada-com-outra-pessoa)
@@ -101,24 +101,25 @@ Como a restauração funciona:
 
 ---
 
-## 4. Pode falar
+## 4. Falar no chat
 
-É o jeito mais rápido de anotar: você fala (ou escreve) e a Central decide para onde vai.
+Não há mais uma tela "Pode falar": a voz é um **botão de microfone dentro do chat**. Você fala (ou escreve) no mesmo campo, e a Central decide para onde vai.
 
-- **Como abrir:** no celular, o botão redondo **Pode falar**, acima da barra de baixo. No computador, o botão **Pode falar** no alto da página, ou o atalho **Ctrl + Alt + N**. Com o app instalado no celular, segurar o ícone também mostra **Pode falar**. Em alguns celulares dá para abrir o app com duplo toque na tecla lateral (nas configurações do aparelho: tecla lateral, duplo toque, abrir app).
-- **Falar:** toque no microfone, fale e toque em **Pronto**. O texto aparece enquanto você fala. A escuta só começa depois do seu toque; para parar, toque de novo.
-- **Privacidade da voz:** o reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva no campo de texto (a tela avisa isso perto do microfone).
-- **Escrever:** o campo de texto está sempre ali. Se o microfone estiver negado, sem internet ou sem suporte, é só digitar. Enter também grava.
-- **Gravar áudio (opcional):** ligue **Gravar áudio** antes de falar se quiser guardar também a gravação (até 3 minutos). O áudio vai para a pasta `Central/Audios` do seu Drive e toca na tela Ideias, no botão ▶. Vem desligado.
-- **Para onde vai:** tarefa ou compromisso, como no Chat; leitura de água, luz ou gás, compras e gasto vão para a pasta certa da Casa (veja a parte 8); **qualquer outra frase vira uma ideia** (parte 5). A Central nunca grava em silêncio: depois de **Pronto** aparece um cartão dizendo o que fez.
-- **No cartão:** **Desfazer** (tira o que foi gravado), **Corrigir** (devolve o texto ao campo), **Guardar como ideia** (se foi para o lugar errado), **Falar outra** e **Fechar**.
-- Frase vazia ou muito longa (mais de 2.000 letras) não é gravada, e o app avisa.
+- **Onde está o chat:** no computador, na coluna da direita (se estiver recolhido, toque na barra **Chat**). No celular e no tablet, na página **Chat** da barra de baixo.
+- **Como abrir já ouvindo:** no computador, o atalho **Ctrl + Alt + N** (de qualquer tela) abre o chat, põe o cursor no campo e liga o microfone. Com o app instalado no celular, segurar o ícone mostra **Falar no chat**, e em alguns celulares dá para abrir o app com duplo toque na tecla lateral (nas configurações do aparelho: tecla lateral, duplo toque, abrir app) e já cair no chat ouvindo. Se o celular não deixar o microfone começar sozinho, o chat avisa: é só tocar no microfone.
+- **Falar:** toque no microfone (ao lado do campo), fale e toque em **Enviar**. O texto aparece no campo enquanto você fala; para parar sem enviar, toque de novo no microfone (ou aperte **Esc**) e confira o texto antes de enviar. A escuta só começa depois do seu toque ou do atalho.
+- **Privacidade da voz:** o reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva no campo (o chat avisa isso, em letra pequena, junto do microfone).
+- **Escrever:** o campo é o mesmo de sempre. Se o microfone estiver negado, sem internet ou sem suporte, é só digitar. Enter também envia.
+- **Gravar áudio (opcional):** ligue **Gravar áudio**, abaixo do campo, antes de falar se quiser guardar também a gravação (até 3 minutos). O áudio vai para a pasta `Central/Audios` do seu Drive e toca na tela Ideias, no botão ▶. Vem desligado. Só ideias guardam áudio: se a frase virou tarefa, o cartão avisa, e **Guardar como ideia** leva o áudio junto.
+- **Para onde vai:** leitura de água, luz ou gás, lista de compras e gasto vão para a pasta certa da Casa (veja a parte 8). Frase que começa com **"ideia"** ("ideia: app de receitas", "anota uma ideia ...") vai para Ideias (parte 5). **Todo o resto vira tarefa de hoje** (ou compromisso, se tiver dia e hora), como sempre foi no chat. "Comprar pão" vira item da lista de compras se você tem uma pasta de Lista; se não tem, vira a tarefa "Comprar pão". A Central nunca grava em silêncio: depois de **Enviar** aparece um cartão dizendo o que fez.
+- **No cartão:** **Desfazer** (tira o que foi gravado), **Trocar sala** (tarefa e compromisso), **Trocar categoria** (gasto), **Pôr mesmo assim** (item que já estava na lista) e **Guardar como ideia** (se foi para o lugar errado; não aparece no cartão da própria ideia).
+- Frase vazia ou muito longa (mais de 2.000 letras) não é enviada, e o app avisa.
 
 ---
 
 ## 5. Ideias
 
-**Ideias** (no menu; no celular, em **Mais**) é a caixa de entrada de tudo o que você falou e ainda não tem lugar. O número ao lado do nome mostra quantas esperam.
+**Ideias** (no menu; no celular, em **Mais**) é a caixa de entrada das frases que você disse como ideia ("ideia: ...") ou mandou para lá com **Guardar como ideia**. O botão **Nova ideia** abre o chat com "Ideia: " já escrito, e você completa (falando ou escrevendo). O número ao lado do nome mostra quantas esperam.
 
 Em cada ideia:
 
@@ -134,7 +135,7 @@ Em cada ideia:
 
 Cada sala tem a área **Pastas**. Toque em **Nova pasta**, escolha um nome e crie.
 
-- **Pasta comum** (em todas as salas): reúne **tarefas, documentos e notas de um tema** (por exemplo, "Metodologia" em Doutoramento). O que você cria dentro dela já fica ligado ao tema. No Chat e no Pode falar, "adicione revisar capítulo nas tarefas do tema Metodologia" põe a tarefa lá.
+- **Pasta comum** (em todas as salas): reúne **tarefas, documentos e notas de um tema** (por exemplo, "Metodologia" em Doutoramento). O que você cria dentro dela já fica ligado ao tema. No chat (escrevendo ou falando), "adicione revisar capítulo nas tarefas do tema Metodologia" põe a tarefa lá.
 - **Lista, Registro e Planilha** só existem na sala **Casa**, porque as planilhas ficam todas na mesma pasta do Drive, a "Casa (partilhada)", dentro da "Central" (parte 7):
   - **Lista**: itens a comprar.
   - **Registro**: leituras de consumo (água, luz, gás), com tabela e gráfico por mês.
@@ -184,8 +185,8 @@ Cuidados:
 **Financeiro (só no computador):**
 
 - A tela mostra o mês escolhido: o total, os gastos por categoria e a tabela. Use **Mês anterior** e **Mês seguinte**.
-- Para lançar, use o formulário **Novo gasto**, ou diga "gastei 5,50 hoje comprando salgado". **Falar um gasto funciona no celular também**; só a tela do Financeiro pede o computador ("Abra no computador").
-- A moeda é o **€** (euro). Gasto em outra moeda (R$, US$) não é gravado: vira uma ideia.
+- Para lançar, use o formulário **Novo gasto**, ou diga "gastei 5,50 hoje comprando salgado". **Falar um gasto no chat funciona no celular também**; só a tela do Financeiro pede o computador ("Abra no computador").
+- A moeda é o **€** (euro). Gasto em outra moeda (R$, US$) não é gravado na planilha: a frase vira tarefa de hoje, com um aviso no cartão (e **Guardar como ideia**, se você preferir). O mesmo vale para lista, leitura ou gasto quando a pasta ou a planilha não está pronta: nada vai para a planilha e nada se perde.
 - No cartão do gasto falado, **Trocar categoria** corrige a categoria na planilha.
 - Gasto desfeito continua na planilha, marcado como desfeito em **Observação**; a Central não soma, mas fórmulas da planilha somam.
 
