@@ -49,12 +49,15 @@ test.describe('celular, 390 px', () => {
     await page.goto('/central-app/#/chat');
 
     const campo = page.getByRole('textbox', { name: 'Escreva ou dite' });
-    const mic = page.getByRole('button', { name: 'Falar' });
+    const mic = page.getByRole('button', { name: 'Falar no chat' });
     await expect(mic).toBeVisible();
-    // O microfone fica ao lado do campo, na mesma linha, antes do Enviar.
+    // O campo tem a linha toda; o microfone, a chave e o Enviar vêm logo abaixo, na mesma linha.
     const caixaDoCampo = (await campo.boundingBox())!;
     const caixaDoMic = (await mic.boundingBox())!;
-    expect(Math.abs(caixaDoMic.y + caixaDoMic.height / 2 - (caixaDoCampo.y + caixaDoCampo.height / 2))).toBeLessThan(8);
+    const caixaDoEnviar = (await page.getByRole('button', { name: 'Enviar' }).boundingBox())!;
+    expect(caixaDoMic.y).toBeGreaterThanOrEqual(caixaDoCampo.y + caixaDoCampo.height - 1);
+    expect(Math.abs(caixaDoMic.y + caixaDoMic.height / 2 - (caixaDoEnviar.y + caixaDoEnviar.height / 2))).toBeLessThan(8);
+    expect(caixaDoCampo.width).toBeGreaterThan(300);
     expect(await inicios(page)).toBe(0);
     await expect(page.getByRole('switch', { name: 'Gravar áudio' })).not.toBeChecked();
     await expect(page.getByText(/envia o áudio ao Google/)).toBeVisible();
@@ -69,9 +72,9 @@ test.describe('celular, 390 px', () => {
     await reconhecimentoFalso(page, 'ideia: usar o artigo do Prof. Souza no capítulo 2');
     await page.goto('/central-app/#/chat');
 
-    await page.getByRole('button', { name: 'Falar' }).click();
+    await page.getByRole('button', { name: 'Falar no chat' }).click();
     await expect(page.getByRole('textbox', { name: 'Escreva ou dite' })).toHaveValue('ideia: usar o artigo do Prof. Souza no capítulo 2');
-    await expect(page.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
 
     await page.getByRole('button', { name: 'Enviar' }).click();
     const cartao = page.getByRole('article');
@@ -88,7 +91,7 @@ test.describe('celular, 390 px', () => {
     await reconhecimentoFalso(page, 'usar o artigo do Prof. Souza no capítulo 2');
     await page.goto('/central-app/#/chat');
 
-    await page.getByRole('button', { name: 'Falar' }).click();
+    await page.getByRole('button', { name: 'Falar no chat' }).click();
     await page.getByRole('button', { name: 'Enviar' }).click();
 
     const cartao = page.getByRole('article');
@@ -114,7 +117,7 @@ test.describe('celular, 390 px', () => {
 
     await expect(page).toHaveURL(/#\/chat$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Chat' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
     expect(await inicios(page)).toBe(1);
   });
 
@@ -123,10 +126,70 @@ test.describe('celular, 390 px', () => {
     await page.goto('/central-app/#/?falar=1');
 
     await expect(page).toHaveURL(/#\/chat$/);
-    await expect(page.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
     expect(await inicios(page)).toBe(1);
   });
 });
+
+/** As caixas do campo, do microfone, da chave e do Enviar: o que não pode pular quando a escuta liga. */
+async function caixasDoCampo(area: ReturnType<Page['getByRole']>) {
+  const lugar = async (alvo: ReturnType<Page['getByRole']>) => {
+    const c = (await alvo.boundingBox())!;
+    return { x: Math.round(c.x), y: Math.round(c.y), w: Math.round(c.width), h: Math.round(c.height) };
+  };
+  return {
+    campo: await lugar(area.getByRole('textbox', { name: 'Escreva ou dite' })),
+    mic: await lugar(area.getByRole('button', { name: 'Falar no chat' })),
+    chave: await lugar(area.getByRole('switch', { name: 'Gravar áudio' })),
+    enviar: await lugar(area.getByRole('button', { name: 'Enviar' })),
+  };
+}
+
+for (const [onde, largura, altura, abrir] of [
+  ['celular, 390 px', 390, 844, '/central-app/#/chat'],
+  ['computador, 1280 px (painel)', 1280, 900, '/central-app/#/'],
+] as const) {
+  test.describe(`o campo do chat, ${onde}`, () => {
+    test.use({ viewport: { width: largura, height: altura } });
+
+    test('o campo tem largura útil, e o campo, o microfone e a chave não pulam ao ligar a escuta', async ({ page }) => {
+      await reconhecimentoFalso(page, null);
+      await page.goto(abrir);
+      const area = await areaDoChat(page);
+
+      const antes = await caixasDoCampo(area);
+      expect(antes.campo.w).toBeGreaterThan(200); // no painel estreito já foi de 65 px de texto
+      expect(antes.mic.y).toBeGreaterThanOrEqual(antes.campo.y + antes.campo.h - 1); // microfone e Enviar abaixo do campo
+
+      await area.getByRole('button', { name: 'Falar no chat' }).click();
+      await expect(area.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
+      expect(await caixasDoCampo(area)).toEqual(antes);
+      await expect(area.getByText('O navegador envia o áudio ao Google.')).toBeVisible();
+      await expect(area.getByText(/toque no microfone para parar/)).toBeVisible();
+
+      await area.getByRole('button', { name: 'Falar no chat' }).click();
+      await expect(area.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'false');
+      expect(await caixasDoCampo(area)).toEqual(antes);
+    });
+
+    test('ouvindo com "Gravar áudio" ligado: o bloco de baixo também não muda de altura', async ({ page }) => {
+      await reconhecimentoFalso(page, null);
+      await page.goto(abrir);
+      const area = await areaDoChat(page);
+      await area.getByRole('switch', { name: 'Gravar áudio' }).check();
+      const antes = await caixasDoCampo(area);
+      const formulario = area.locator('form');
+      const alturaAntes = Math.round((await area.locator('.chat').boundingBox())!.height);
+
+      await area.getByRole('button', { name: 'Falar no chat' }).click();
+      await expect(area.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
+
+      expect(await caixasDoCampo(area)).toEqual(antes);
+      expect(Math.round((await area.locator('.chat').boundingBox())!.height)).toBe(alturaAntes);
+      await expect(formulario.getByRole('switch', { name: 'Gravar áudio' })).toBeDisabled();
+    });
+  });
+}
 
 test.describe('computador, 1280 px', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
@@ -143,7 +206,7 @@ test.describe('computador, 1280 px', () => {
     await expect(painel.getByRole('button', { name: /^Chat/ })).toHaveAttribute('aria-expanded', 'true');
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
     await expect(campo).toBeFocused();
-    await expect(painel.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(painel.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
     await expect(campo).toHaveValue('revisar o capítulo dois');
     expect(await inicios(page)).toBe(1);
     await expect(page).toHaveURL(/#\/semana$/); // o chat é o painel: a página não muda
@@ -162,7 +225,7 @@ test.describe('computador, 1280 px', () => {
     await page.goto('/central-app/#/?falar=1');
 
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
-    await expect(painel.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(painel.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
     await expect(painel.getByRole('textbox', { name: 'Escreva ou dite' })).toBeFocused();
     await expect(page).toHaveURL(/#\/$/);
     expect(await inicios(page)).toBe(1);

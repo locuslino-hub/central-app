@@ -175,7 +175,7 @@ for (const [nome, viewport] of [
       await abrirApp(page, '#/');
       // O campo, o microfone, a chave "Gravar áudio" e o aviso de privacidade ficam à vista (painel aberto ou página do chat).
       const area = await areaDoChat(page);
-      await expect(area.getByRole('button', { name: 'Falar' })).toBeVisible();
+      await expect(area.getByRole('button', { name: 'Falar no chat' })).toBeVisible();
       await expect(area.getByRole('switch', { name: 'Gravar áudio' })).toBeVisible();
       await semAchados(page);
       expect(await paradasSemSinal(page)).toEqual([]);
@@ -195,8 +195,8 @@ for (const [nome, viewport] of [
       await reconhecimentoFalso(page, 'revisar o capítulo dois');
       await abrirApp(page, '#/');
       const area = await areaDoChat(page);
-      await area.getByRole('button', { name: 'Falar' }).click();
-      await expect(area.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+      await area.getByRole('button', { name: 'Falar no chat' }).click();
+      await expect(area.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
       await expect(area.getByRole('textbox', { name: 'Escreva ou dite' })).toHaveValue('revisar o capítulo dois');
       await semAchados(page);
       expect(await paradasSemSinal(page)).toEqual([]);
@@ -256,7 +256,7 @@ test.describe('só com o teclado, computador', () => {
     await page.keyboard.press('Control+Alt+KeyN');
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
-    const mic = painel.getByRole('button', { name: 'Falar' });
+    const mic = painel.getByRole('button', { name: 'Falar no chat' });
     await expect(campo).toBeFocused();
     await expect(mic).toHaveAttribute('aria-pressed', 'true');
     // Esc só para de ouvir (o painel não recolhe), e o foco continua no campo.
@@ -287,11 +287,11 @@ test.describe('só com o teclado, computador', () => {
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
     await painel.getByRole('button', { name: /^Chat/ }).click();
     const semSinal: string[] = [];
-    await tabAte(page, painel.getByRole('button', { name: 'Falar' }), 80, semSinal);
+    await tabAte(page, painel.getByRole('button', { name: 'Falar no chat' }), 80, semSinal);
     await page.keyboard.press('Space');
-    await expect(painel.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(painel.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('Space');
-    await expect(painel.getByRole('button', { name: 'Falar' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(painel.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'false');
     await tabAte(page, painel.getByRole('switch', { name: 'Gravar áudio' }), 5, semSinal);
     await page.keyboard.press('Space');
     await expect(painel.getByRole('switch', { name: 'Gravar áudio' })).toBeChecked();

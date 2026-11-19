@@ -126,7 +126,7 @@ test.describe('celular, 390 px', () => {
     await page.goto('/central-app/#/chat');
     const formulario = page.getByRole('main').locator('form');
     await expect(formulario.getByRole('button')).toHaveText(['', 'Enviar']);
-    await expect(formulario.getByRole('button', { name: 'Falar' })).toBeVisible();
+    await expect(formulario.getByRole('button', { name: 'Falar no chat' })).toBeVisible();
   });
 });
 
@@ -137,7 +137,7 @@ test.describe('computador, 1280 px', () => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/');
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
-    const botao = painel.getByRole('button', { name: 'Chat' });
+    const botao = painel.getByRole('button', { name: 'Chat', exact: true });
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
 
     // Recolhido: a barra fica no pé da coluna e o Agora ocupa o resto.
@@ -166,7 +166,7 @@ test.describe('computador, 1280 px', () => {
     // Aberto fica guardado no aparelho.
     await botao.click();
     await page.reload();
-    await expect(painel.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(painel.getByRole('button', { name: 'Chat', exact: true })).toHaveAttribute('aria-expanded', 'true');
     await expect(campo).toBeVisible();
     expect(erros).toEqual([]);
   });
@@ -175,7 +175,7 @@ test.describe('computador, 1280 px', () => {
     const erros = vigiarErros(page);
     await page.goto('/central-app/');
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
-    await painel.getByRole('button', { name: 'Chat' }).click();
+    await painel.getByRole('button', { name: 'Chat', exact: true }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
 
     await campo.fill('Adicione reunião sobre o projeto na sexta feira com inicio às 11:00 e termino 12:00');
@@ -195,7 +195,7 @@ test.describe('computador, 1280 px', () => {
   test('conversa longa no painel: a conversa rola dentro do cartão e o campo fica à vista', async ({ page }) => {
     await page.goto('/central-app/');
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
-    await painel.getByRole('button', { name: 'Chat' }).click();
+    await painel.getByRole('button', { name: 'Chat', exact: true }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
     for (const frase of ['Comprar pão', 'Mandar mensagem para Renata', 'Preciso parafusar o apoio do banheiro', 'asdf qwer']) {
       await campo.fill(frase);
@@ -225,7 +225,7 @@ test.describe('computador 1280×800, conversa longa', () => {
   test('depois de várias mensagens só o log rola: nada mais da janela desloca', async ({ page }) => {
     await page.goto('/central-app/');
     const painel = page.getByRole('complementary', { name: 'Agora, água e chat' });
-    await painel.getByRole('button', { name: 'Chat' }).click();
+    await painel.getByRole('button', { name: 'Chat', exact: true }).click();
     const campo = painel.getByRole('textbox', { name: 'Escreva ou dite' });
     const frases = ['Comprar pão', 'Mandar mensagem para Renata', 'Preciso parafusar o apoio do banheiro', 'asdf qwer', 'Ligar para a Aurora amanhã às 15h', 'Comprar leite'];
     for (const frase of frases) {
