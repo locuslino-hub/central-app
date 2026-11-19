@@ -197,12 +197,8 @@ function mesclar(
   });
 }
 
-/**
- * Interpreta a frase com o dia de hoje em Lisboa e a memória atual da loja.
- * `semIA`: só regras e memória, nunca a IA (o Pode falar decide "ideia ou não"
- * antes de a IA poder dar sala ou dividir a frase).
- */
-export async function interpretar(frase: string, opcoes: { semIA?: boolean } = {}): Promise<ItemDoChat[]> {
+/** Interpreta a frase com o dia de hoje em Lisboa e a memória atual da loja. */
+export async function interpretar(frase: string): Promise<ItemDoChat[]> {
   const memoria = await carregarMemoria();
   const hoje = hojeEmLisboa();
   const pelasRegras = interpretarRegras(frase, hoje, memoria);
@@ -212,7 +208,7 @@ export async function interpretar(frase: string, opcoes: { semIA?: boolean } = {
     pelasRegras.certeza === 'baixa' ||
     pelasRegras.itens.some((item) => item.salaId === null) ||
     contarPalavras(frase) > PALAVRAS_PARA_IA;
-  if (precisa && !opcoes.semIA && motor.estado() === 'pronta') {
+  if (precisa && motor.estado() === 'pronta') {
     const daIA = await perguntarIA(frase, hoje);
     if (daIA) return mesclar(frase, hoje, daIA.itens, memoria, daIA.salas, daIA.cortada);
   }

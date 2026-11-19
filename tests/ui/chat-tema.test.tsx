@@ -1,8 +1,7 @@
-// "nas tarefas do tema X" no Chat e no Pode falar (V02, Tarefa 17). Quinta-feira, 2026-11-05, 12:20 em Lisboa. Nomes fictícios.
+// "nas tarefas do tema X" no Chat (V02, Tarefa 17; desde a V02.1 o Pode falar é o microfone do chat). Quinta-feira, 2026-11-05, 12:20 em Lisboa. Nomes fictícios.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { limparConversa } from '../../src/chat/conversa';
-import { executarFrase } from '../../src/chat/executar';
+import { enviar, limparConversa } from '../../src/chat/conversa';
 import { listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
 import { apagarPasta } from '../../src/dados/pastas';
 import { Chat } from '../../src/ui/Chat';
@@ -116,30 +115,6 @@ describe('Chat: tema', () => {
   });
 });
 
-describe('Pode falar: tema', () => {
-  it('a frase vira tarefa do tema (não ideia), e o cartão leva à pasta', async () => {
-    await metodologia();
-    const r = await executarFrase(FRASE);
-
-    expect(r.titulo).toBe('Tarefa guardada');
-    expect(r.detalhe).toContain('Revisar capítulo');
-    expect(r.detalhe).toContain('Doutoramento');
-    expect(r.detalhe).toContain('Tema Metodologia');
-    expect(r.ver).toBe('#/sala/sala-doutoramento/pasta/pasta-metodologia');
-    expect((await listar('tarefas'))[0]).toMatchObject({ pastaId: 'pasta-metodologia' });
-    expect(await listar('ideias')).toHaveLength(0);
-  });
-
-  it('tema inexistente: a tarefa fica na sala, com o aviso no cartão (frase com o pedido de tarefa não vira ideia)', async () => {
-    const r = await executarFrase(FRASE);
-    expect(r.titulo).toBe('Tarefa guardada');
-    expect(r.detalhe).toContain('Não achei o tema Metodologia');
-    expect(r.ver).toBe('#/atividades');
-    expect(await listar('ideias')).toHaveLength(0);
-    expect(await listar('tarefas')).toHaveLength(1);
-  });
-});
-
 describe('as frases de sempre seguem iguais com pastas de tema no banco', () => {
   it.each([
     ['Adicione em atividades do dia mandar mensagem para Renata', { titulo: 'Mandar mensagem para Renata', data: '2026-11-05' }],
@@ -148,7 +123,7 @@ describe('as frases de sempre seguem iguais com pastas de tema no banco', () => 
   ])('%s', async (frase, esperado) => {
     await metodologia();
     await salvar('pastas', { id: 'pasta-doutoramento', salaId: 'sala-doutoramento', tipo: 'comum', nome: 'Doutoramento', ordem: 2 });
-    await executarFrase(frase);
+    await enviar(frase);
     const [tarefa] = await listar('tarefas');
     expect(tarefa).toMatchObject(esperado);
     expect(Object.keys(tarefa!)).not.toContain('pastaId');

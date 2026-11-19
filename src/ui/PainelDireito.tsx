@@ -11,6 +11,7 @@ import { AguaCurta, CartaoAgua } from './Agua';
 import { AguaPagina } from './AguaPagina';
 import { Chat, useConversa } from './Chat';
 import { Icone } from './icones';
+import { assinarPedidoDeVoz } from './pedido-de-voz';
 
 const TITULO: Record<Painel, string> = { agora: 'Agora', agua: 'Água', chat: 'Chat' };
 
@@ -46,6 +47,15 @@ export function PainelDireito({ semChat = false, semAgora = false }: { semChat?:
     setChatAberto(aberto);
     guardarChatAberto(aberto);
   };
+  // Ctrl+Alt+N e o atalho do ícone pedem para ouvir: o chat recolhido abre (o chat à vista pega o pedido).
+  useEffect(
+    () =>
+      assinarPedidoDeVoz(() => {
+        setChatAberto(true);
+        guardarChatAberto(true);
+      }),
+    [],
+  );
   // O chat que a página já é (`semChat`) não está na coluna: com ele fora, a água não precisa encolher.
   const aguaCurta = chatAberto && !semChat;
   // A água aparece sempre (também em #/agora e #/chat, que não a repetem).
@@ -153,7 +163,7 @@ function ChatDoPainel({ aberto, aoMudar }: { aberto: boolean; aoMudar: (aberto: 
         {novidade ? 'Resposta nova no chat.' : ''}
       </p>
       <div id="chat-do-painel" class="chat-corpo" ref={corpo} hidden={!aberto}>
-        <Chat />
+        <Chat ativo={aberto} />
       </div>
     </section>
   );

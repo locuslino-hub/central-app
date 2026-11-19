@@ -553,7 +553,7 @@ describe('conversa', () => {
 
   it('sem conversa, diz o que fazer', () => {
     render(<Chat />);
-    expect(screen.getByText(/Escreva o que precisa fazer/)).toBeTruthy();
+    expect(screen.getByText(/Escreva ou fale o que precisa fazer/)).toBeTruthy();
   });
 
   it('o texto é mostrado como texto: nada de HTML da frase vira elemento', async () => {
@@ -566,11 +566,10 @@ describe('conversa', () => {
     expect(literais.filter((el) => !el.closest('article'))).toHaveLength(1);
   });
 
-  it('não tem botão de microfone: o ditado é o do teclado', () => {
+  it('o campo tem o microfone ("Falar") e o Enviar, nessa ordem (a voz em si é testada em ChatVoz.test.tsx)', () => {
     render(<Chat />);
-    expect(screen.queryByRole('button', { name: /microfone|ditar|falar|voz/i })).toBeNull();
     const formulario = campo().closest('form')!;
-    expect(within(formulario).getAllByRole('button').map((b) => b.textContent)).toEqual(['Enviar']);
+    expect(within(formulario).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Falar', 'Enviar']);
   });
 
   it('pessoa desconhecida: a resposta avisa que ainda não conhece', async () => {

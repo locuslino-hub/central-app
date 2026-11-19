@@ -7,21 +7,31 @@
 //
 // Cada cartão tem a sua fila: guardar, trocar a sala e desfazer o mesmo
 // cartão acontecem um depois do outro, na ordem em que o dono apertou.
+//
+// V02.1: o chat também entende o que o "Pode falar" entendia. Ideia dita, lista, leitura e gasto não viram cartão de
+// tarefa: viram um cartão de resultado (`EstadoResultado`, com Desfazer, Guardar como ideia, Trocar categoria, Pôr mesmo
+// assim). Tudo o mais é tarefa de hoje (ou compromisso), com o cartão de sempre e um botão "Guardar como ideia".
+// O áudio gravado junto (opcional) só fica numa ideia: se a frase virou tarefa, ele espera o "Guardar como ideia".
 
 import { horaEmLisboa } from '../../script/agenda';
 import { ErroAgenda } from '../dados/agenda';
 import { avisoDaAgenda, trocarSalaDoCompromisso } from '../dados/compromisso';
-import { lerRegistros, salvar } from '../dados/loja';
+import { lerRegistros, listar, salvar } from '../dados/loja';
 import type { Tarefa } from '../dados/tipos';
+import { apagarAudioDoDrive } from '../voz/apagar-audio';
+import { limparProblemaDeAudio, marcarProblemaDeAudio, removerAudio } from '../voz/audios-pendentes';
+import { enviarAudio } from '../voz/gravador';
+import { TEXTO_DA_TROCA_QUE_FALHOU } from '../ui/pastas-textos';
+import { executarFrase, guardarFraseComoIdeia, validarFrase, type ResultadoDaFrase } from './executar';
 import { criarItem, interpretar, type ItemDoChat } from './interpretar';
 import { aprender, lembrarPessoa } from './memoria';
 
 /**
  * `salvando`: gravação em curso. `salvo`: guardado, com Desfazer.
- * `desfazendo`: apagando. `desfeito` e `descartado`: nada ficou. `erro`: não
+ * `desfazendo`: apagando. `desfeito` e `descartado`: nada ficou. `trocado`: virou ideia. `erro`: não
  * guardou (falha da loja); Guardar tenta de novo, Descartar desiste.
  */
-export type Situacao = 'salvando' | 'salvo' | 'desfazendo' | 'desfeito' | 'descartado' | 'erro';
+export type Situacao = 'salvando' | 'salvo' | 'desfazendo' | 'desfeito' | 'descartado' | 'trocado' | 'erro';
 
 /** Por que a sala mudou no cartão, para dizer o que foi (ou será) aprendido. */
 export type Escolha =
@@ -51,14 +61,44 @@ export type EstadoCartao = {
   passos: number;
   /** Qual ação concluiu por último (mesmo sem mudar nada). */
   ultimaAcao?: Acao;
+  /** A frase inteira, para o "Guardar como ideia". */
+  frase?: string;
+  /** O que a Central diz sobre este cartão desde o começo (por que a planilha não recebeu, o áudio que espera). */
+  nota?: string;
 };
 
 /** Ações do dono no cartão; a tela pede foco para depois de uma delas. */
-export type Acao = 'guardar' | 'descartar' | 'desfazer' | 'trocar' | 'manter' | 'nao-e-pessoa' | 'escolher';
+export type Acao = 'guardar' | 'descartar' | 'desfazer' | 'trocar' | 'manter' | 'nao-e-pessoa' | 'escolher' | 'ideia';
+
+/** O cartão de resultado: o que foi gravado numa ideia, lista, leitura ou gasto, com os botões do `ResultadoDaFrase`. */
+export type EstadoResultado = {
+  id: string;
+  frase: string;
+  resultado: ResultadoDaFrase;
+  desfeito: boolean;
+  /** Uma ação do cartão em andamento: os botões ficam desligados. */
+  ocupado: boolean;
+  /** Falha ou aviso que o dono precisa ler (`role="alert"`). */
+  aviso?: string;
+  /** O avanço do envio do áudio ("Enviando o áudio…"), numa região viva do cartão. */
+  avisoDoAudio: string | null;
+  /** Cresce a cada ação concluída: a tela leva o foco ao cartão. */
+  foco: number;
+  /** O áudio que este cartão guarda (só ideia). */
+  audioId: string | null;
+};
 
 export type Mensagem =
   | { id: string; de: 'dono'; texto: string }
-  | { id: string; de: 'central'; texto: string; cartoes: EstadoCartao[]; esperando: boolean };
+  | { id: string; de: 'central'; texto: string; cartoes: EstadoCartao[]; resultados: EstadoResultado[]; esperando: boolean };
+
+/** O áudio gravado junto da frase. */
+export type AudioGravado = { blob: Blob; segundos: number };
+export type OpcoesDaFrase = {
+  /** A pasta onde o dono está (`#/sala/:id/pasta/:pastaId`): a fala vai direto para ela. */
+  pastaAtual?: string;
+  audio?: AudioGravado;
+};
 
 let mensagens: Mensagem[] = [];
 let contador = 0;
@@ -67,6 +107,10 @@ const desfazeres = new Map<string, () => Promise<void>>();
 /** A última ação de cada cartão: a próxima espera por ela. */
 const filas = new Map<string, Promise<void>>();
 const ouvintes = new Set<() => void>();
+/** O áudio gravado cuja frase não virou ideia, por mensagem da Central: espera o "Guardar como ideia" (ou se perde). */
+const audiosEsperando = new Map<string, AudioGravado>();
+/** Ids de áudio cujo Desfazer já foi feito: se o envio voltar tarde, nada fica nem aparece. */
+const cancelados = new Set<string>();
 
 const novoId = () => `m${++contador}`;
 
@@ -91,6 +135,8 @@ export function limparConversa() {
   contador = 0;
   desfazeres.clear();
   filas.clear();
+  audiosEsperando.clear();
+  cancelados.clear();
   mudar([]);
 }
 
@@ -132,8 +178,42 @@ function naFila(id: string, acao: () => Promise<void>): Promise<void> {
   return vez;
 }
 
-function mudarMensagem(id: string, mudanca: Partial<Extract<Mensagem, { de: 'central' }>>) {
+type MensagemDaCentral = Extract<Mensagem, { de: 'central' }>;
+
+function mudarMensagem(id: string, mudanca: Partial<MensagemDaCentral>) {
   mudar(mensagens.map((m) => (m.id === id && m.de === 'central' ? { ...m, ...mudanca } : m)));
+}
+
+function mensagemDoCartao(id: string): MensagemDaCentral | undefined {
+  return mensagens.find((m): m is MensagemDaCentral => m.de === 'central' && m.cartoes.some((c) => c.id === id));
+}
+
+function mensagemDoResultado(id: string): MensagemDaCentral | undefined {
+  return mensagens.find((m): m is MensagemDaCentral => m.de === 'central' && m.resultados.some((r) => r.id === id));
+}
+
+function acharResultado(id: string): EstadoResultado | undefined {
+  return mensagemDoResultado(id)?.resultados.find((r) => r.id === id);
+}
+
+function mudarResultado(id: string, mudanca: Partial<EstadoResultado>) {
+  mudar(
+    mensagens.map((m) =>
+      m.de === 'central' && m.resultados.some((r) => r.id === id)
+        ? { ...m, resultados: m.resultados.map((r) => (r.id === id ? { ...r, ...mudanca } : r)) }
+        : m,
+    ),
+  );
+}
+
+/** Termina uma ação do cartão de resultado e pede o foco para ele (o botão apertado sumiu ou mudou). */
+function concluirResultado(id: string, mudanca: Partial<EstadoResultado> = {}) {
+  const atual = acharResultado(id);
+  if (atual) mudarResultado(id, { ...mudanca, ocupado: false, foco: atual.foco + 1 });
+}
+
+function novoResultado(frase: string, resultado: ResultadoDaFrase): EstadoResultado {
+  return { id: novoId(), frase, resultado, desfeito: false, ocupado: false, avisoDoAudio: null, foco: 0, audioId: resultado.audioId ?? null };
 }
 
 /** A resposta da Central acima dos cartões. */
@@ -189,19 +269,109 @@ async function gravar(id: string) {
   }
 }
 
+const TEXTO_DO_AUDIO_SEM_IDEIA = 'Só ideias guardam áudio. Toque em Guardar como ideia para guardar este áudio.';
+const TEXTO_AUDIO_NO_DRIVE = 'O áudio continua no Drive.';
+
+/** Relê a ideia dona do áudio: apagada (lápide) ou inexistente. Se a leitura falhar, não presume nada. */
+async function ideiaApagadaOuSumida(audioId: string): Promise<boolean> {
+  try {
+    const dona = (await listar('ideias', { comApagados: true })).find((i) => i.audioId === audioId);
+    return !dona || dona.apagado === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Pede ao Drive que apague o áudio de uma ideia desfeita; se não der, o cartão avisa. */
+function apagarDoDrive(audioId: string, resultadoId: string) {
+  void apagarAudioDoDrive(audioId).then((apagou) => {
+    if (!apagou) mudarResultado(resultadoId, { aviso: TEXTO_AUDIO_NO_DRIVE });
+  });
+}
+
 /**
- * Manda a frase. A mensagem do dono e o lugar da resposta entram na hora, na
- * ordem em que foram ditas, e cada item já é guardado, com qualquer certeza.
+ * Envia o áudio da ideia ao Drive, DEPOIS de o texto estar gravado: um áudio que falha nunca leva o texto junto.
+ * O avanço aparece no cartão enquanto ele for o do áudio e a ideia não tiver sido desfeita.
  */
-export async function enviar(frase: string): Promise<void> {
+async function enviarOAudio(resultadoId: string, audioId: string, audio: AudioGravado) {
+  const vigente = () => acharResultado(resultadoId)?.audioId === audioId && !cancelados.has(audioId);
+  const dizer = (texto: string | null) => {
+    if (vigente()) mudarResultado(resultadoId, { avisoDoAudio: texto });
+  };
+  dizer('Enviando o áudio…');
+  try {
+    const envio = await enviarAudio(audioId, audio.blob);
+    if ('erro' in envio && !cancelados.has(audioId)) await marcarProblemaDeAudio(audioId, 'sem_espaco').catch(() => {});
+    if (cancelados.has(audioId)) {
+      // Desfez a ideia enquanto o áudio ia: o que ficou na fila sai; o que já está no Drive vai para a lixeira (privacidade).
+      if ('fila' in envio) await removerAudio(audioId).catch(() => {});
+      else if ('driveId' in envio) apagarDoDrive(audioId, resultadoId);
+      return;
+    }
+    // A ideia pode ter sido apagada (em outra tela ou aparelho) enquanto o áudio ia: o áudio não fica no Drive.
+    if ('driveId' in envio && (await ideiaApagadaOuSumida(audioId))) {
+      apagarDoDrive(audioId, resultadoId);
+      return;
+    }
+    if ('driveId' in envio) dizer('Áudio guardado no Drive.');
+    else if ('fila' in envio) dizer('O áudio vai para o Drive quando a internet voltar.');
+    else dizer('O áudio não coube neste aparelho; só o texto ficou guardado.');
+  } catch (erro) {
+    // Recusado de vez pelo Drive ou falha do envio: a ideia mostra o aviso mesmo depois de este cartão sair.
+    if (!cancelados.has(audioId)) {
+      const recusado = (erro as { name?: string } | null)?.name === 'ErroAudioRecusado';
+      await marcarProblemaDeAudio(audioId, recusado ? 'recusado' : 'falhou').catch(() => {});
+    }
+    dizer('O texto ficou guardado, mas o áudio não pôde ser enviado.');
+  }
+}
+
+/** Põe um cartão de resultado na mensagem, e manda o áudio ao Drive se ele ficou numa ideia. */
+function mostrarResultado(mensagemId: string, frase: string, resultado: ResultadoDaFrase, audio?: AudioGravado): EstadoResultado {
+  const estado = novoResultado(frase, resultado);
+  const atual = mensagens.find((m): m is MensagemDaCentral => m.id === mensagemId && m.de === 'central');
+  mudarMensagem(mensagemId, { resultados: [...(atual?.resultados ?? []), estado], esperando: false });
+  if (audio && resultado.audioId) void enviarOAudio(estado.id, resultado.audioId, audio);
+  return estado;
+}
+
+/**
+ * Manda a frase. A mensagem do dono e o lugar da resposta entram na hora, na ordem em que foram ditas. Ideia dita, lista,
+ * leitura e gasto viram um cartão de resultado; o resto é tarefa ou compromisso, e cada item já é guardado, com qualquer
+ * certeza. Frase vazia ou longa demais não é mandada (a tela mostra o aviso antes: `validarFrase`).
+ */
+export async function enviar(frase: string, opcoes: OpcoesDaFrase = {}): Promise<void> {
   const texto = frase.trim();
-  if (!texto) return;
+  if (validarFrase(texto)) return;
   const resposta = novoId();
   mudar([
     ...mensagens,
     { id: novoId(), de: 'dono', texto },
-    { id: resposta, de: 'central', texto: '', cartoes: [], esperando: true },
+    { id: resposta, de: 'central', texto: '', cartoes: [], resultados: [], esperando: true },
   ]);
+
+  const { audio, pastaAtual } = opcoes;
+  const audioId = audio ? crypto.randomUUID() : undefined;
+  let nota: string | undefined;
+  try {
+    const saida = await executarFrase(texto, {
+      ...(pastaAtual ? { pastaAtual } : {}),
+      ...(audio && audioId ? { audio: { id: audioId, segundos: audio.segundos } } : {}),
+    });
+    if (saida.tipo === 'resultado') {
+      // O texto já está gravado; só então o áudio vai ao Drive (se a frase virou ideia).
+      if (audio && !saida.resultado.audioId) audiosEsperando.set(resposta, audio);
+      mudarMensagem(resposta, { texto: 'Anotei.' });
+      const estado = mostrarResultado(resposta, texto, saida.resultado, audio);
+      if (audio && !saida.resultado.audioId) mudarResultado(estado.id, { avisoDoAudio: TEXTO_DO_AUDIO_SEM_IDEIA });
+      return;
+    }
+    nota = saida.nota;
+  } catch (erro) {
+    console.error('Não consegui guardar a frase', erro);
+    mudarMensagem(resposta, { texto: 'Não consegui guardar agora. Tente de novo.', esperando: false });
+    return;
+  }
 
   let itens: ItemDoChat[];
   try {
@@ -211,6 +381,10 @@ export async function enviar(frase: string): Promise<void> {
     mudarMensagem(resposta, { texto: 'Não consegui ler a frase agora. Tente de novo.', esperando: false });
     return;
   }
+  if (audio) {
+    audiosEsperando.set(resposta, audio);
+    nota = [nota, TEXTO_DO_AUDIO_SEM_IDEIA].filter(Boolean).join(' ');
+  }
   const cartoes: EstadoCartao[] = itens.map((item) => ({
     id: novoId(),
     item,
@@ -218,6 +392,8 @@ export async function enviar(frase: string): Promise<void> {
     // Sem sala e sem pessoa nova para perguntar: as salas já ficam à vista.
     trocando: item.salaId === null && !item.pessoaNova,
     passos: 0,
+    frase: texto,
+    ...(nota ? { nota } : {}),
   }));
   mudarMensagem(resposta, { texto: fala(itens), cartoes, esperando: false });
   await Promise.all(cartoes.map((cartao) => naFila(cartao.id, () => gravar(cartao.id))));
@@ -383,4 +559,136 @@ async function moverCompromisso(cartaoId: string, eventoId: string, item: ItemDo
     console.error('Não consegui trocar a sala do compromisso', erro);
     mudarCartao(cartaoId, { aviso: 'Não consegui trocar a sala na agenda.' });
   }
+}
+
+/**
+ * "Guardar como ideia" no cartão de tarefa ou compromisso: a ideia nasce primeiro (a frase nunca se perde), depois os
+ * itens desta frase saem. Item que não puder sair continua guardado e o cartão avisa: nada some em silêncio nem fica
+ * em dobro sem aviso. O áudio gravado junto, se houver, vai com a ideia.
+ */
+export function guardarComoIdeia(id: string): Promise<void> {
+  return naFila(id, async () => {
+    const mensagem = mensagemDoCartao(id);
+    const cartao = acharCartao(id);
+    if (!mensagem || cartao?.situacao !== 'salvo' || !cartao.frase) {
+      concluir(id, 'ideia');
+      return;
+    }
+    // Os outros itens da mesma frase terminam de guardar antes (eles também saem).
+    await Promise.all(mensagem.cartoes.filter((c) => c.id !== id).map((c) => filas.get(c.id)));
+    const alvos = (mensagemDoCartao(id)?.cartoes ?? []).filter((c) => c.id === id || c.situacao === 'salvo');
+    for (const alvo of alvos) mudarCartao(alvo.id, { situacao: 'desfazendo', aviso: undefined });
+    const audio = audiosEsperando.get(mensagem.id);
+    let ideia: ResultadoDaFrase;
+    try {
+      const audioId = audio ? crypto.randomUUID() : null;
+      ideia = await guardarFraseComoIdeia(cartao.frase, audio && audioId ? { audio: { id: audioId, segundos: audio.segundos } } : {});
+    } catch (erro) {
+      console.error('Não consegui guardar como ideia', erro);
+      for (const alvo of alvos) mudarCartao(alvo.id, { situacao: 'salvo' });
+      concluir(id, 'ideia', { aviso: 'Não consegui guardar como ideia. O item continua como estava; tente de novo.' });
+      return;
+    }
+    audiosEsperando.delete(mensagem.id);
+    const saidas = await Promise.allSettled(alvos.map((alvo) => desfazeres.get(alvo.id)?.() ?? Promise.resolve()));
+    const ficaram: ItemDoChat[] = [];
+    alvos.forEach((alvo, i) => {
+      if (saidas[i]!.status === 'fulfilled') {
+        desfazeres.delete(alvo.id);
+        concluir(alvo.id, 'ideia', { situacao: 'trocado' });
+      } else {
+        console.error('Não consegui tirar o item ao guardar como ideia', (saidas[i] as PromiseRejectedResult).reason);
+        ficaram.push(alvo.item);
+        concluir(alvo.id, 'ideia', { situacao: 'salvo', aviso: 'Não consegui tirar este item; ele continua guardado.' });
+      }
+    });
+    const nomes = ficaram.map((item) => `“${item.titulo}”`).join(', ');
+    const aviso = ficaram.length === 1 ? ` Atenção: não consegui tirar ${nomes}; ele continua guardado.` : ` Atenção: não consegui tirar ${nomes}; eles continuam guardados.`;
+    mostrarResultado(mensagem.id, cartao.frase, ficaram.length ? { ...ideia, detalhe: `${ideia.detalhe}${aviso}` } : ideia, audio);
+  });
+}
+
+// ---- O cartão de resultado (ideia, lista, leitura, gasto) ----
+
+/** Desfaz o que foi gravado (e o áudio que esperava rede). */
+export function desfazerResultado(id: string): Promise<void> {
+  return naFila(id, async () => {
+    const atual = acharResultado(id);
+    if (!atual || atual.desfeito) return;
+    const idDoAudio = atual.audioId;
+    // Marca antes: um envio ainda em andamento vai voltar sabendo que foi desfeito.
+    if (idDoAudio) cancelados.add(idDoAudio);
+    mudarResultado(id, { ocupado: true, aviso: undefined });
+    try {
+      await atual.resultado.desfazer();
+      if (idDoAudio) {
+        await removerAudio(idDoAudio).catch(() => {});
+        await limparProblemaDeAudio(idDoAudio).catch(() => {});
+        // Se o áudio já tinha ido ao Drive, ele sai de lá também (sem esperar: o Desfazer não trava).
+        apagarDoDrive(idDoAudio, id);
+      }
+      concluirResultado(id, { desfeito: true, avisoDoAudio: null });
+    } catch (erro) {
+      if (idDoAudio) cancelados.delete(idDoAudio);
+      console.error('Não consegui desfazer', erro);
+      concluirResultado(id, { aviso: 'Não consegui desfazer agora. Tente de novo.' });
+    }
+  });
+}
+
+/** Troca a lista, leitura ou gasto por uma ideia com a mesma frase, levando o áudio, se houver. */
+export function guardarResultadoComoIdeia(id: string): Promise<void> {
+  return naFila(id, async () => {
+    const atual = acharResultado(id);
+    const mensagem = mensagemDoResultado(id);
+    if (!atual || !mensagem || atual.desfeito || !atual.resultado.guardarComoIdeia) return;
+    mudarResultado(id, { ocupado: true, aviso: undefined });
+    try {
+      const audio = audiosEsperando.get(mensagem.id);
+      const audioId = audio ? crypto.randomUUID() : null;
+      const novo = await atual.resultado.guardarComoIdeia(audio && audioId ? { id: audioId, segundos: audio.segundos } : undefined);
+      audiosEsperando.delete(mensagem.id);
+      concluirResultado(id, { resultado: novo, desfeito: false, avisoDoAudio: null, audioId: novo.audioId ?? null });
+      if (audio && novo.audioId) void enviarOAudio(id, novo.audioId, audio);
+    } catch (erro) {
+      console.error('Não consegui guardar como ideia', erro);
+      concluirResultado(id, { aviso: 'Não consegui guardar como ideia. O item continua como estava; tente de novo.' });
+    }
+  });
+}
+
+/** Itens de lista que já estavam na lista: grava os repetidos (o cartão novo desfaz tudo junto). */
+export function repetirResultado(id: string): Promise<void> {
+  return naFila(id, async () => {
+    const atual = acharResultado(id);
+    if (!atual || atual.desfeito || !atual.resultado.repetir) return;
+    mudarResultado(id, { ocupado: true, aviso: undefined });
+    try {
+      concluirResultado(id, { resultado: await atual.resultado.repetir(), desfeito: false });
+    } catch (erro) {
+      console.error('Não consegui repetir o item', erro);
+      concluirResultado(id, { aviso: 'Não consegui pôr de novo. Nada foi repetido; tente de novo.' });
+    }
+  });
+}
+
+/** Troca a categoria do gasto gravado. Falha vira aviso no cartão e nada muda. */
+export function trocarCategoriaDoResultado(id: string, categoria: string): Promise<void> {
+  return naFila(id, async () => {
+    const atual = acharResultado(id);
+    const troca = atual?.resultado.trocarCategoria;
+    if (!atual || atual.desfeito || !troca) return;
+    mudarResultado(id, { ocupado: true, aviso: undefined });
+    try {
+      const feito = await troca.trocar(categoria);
+      if (feito.mudou) {
+        concluirResultado(id, { resultado: feito.resultado });
+      } else {
+        concluirResultado(id, { aviso: feito.mensagem });
+      }
+    } catch (erro) {
+      console.error('Não consegui trocar a categoria', erro);
+      concluirResultado(id, { aviso: TEXTO_DA_TROCA_QUE_FALHOU.erro });
+    }
+  });
 }

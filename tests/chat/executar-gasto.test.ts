@@ -2,7 +2,8 @@
 // Trocar categoria, Guardar como ideia). Quinta-feira, 2026-11-05, 12:20 em Lisboa. A planilha é de mentira
 // (tests/apoio/planilhas-falsas.ts); o resto é o código de verdade. Nomes, descrições e valores fictícios.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { executarFrase, type ResultadoDaFrase } from '../../src/chat/executar';
+import type { ResultadoDaFrase } from '../../src/chat/executar';
+import { executarFrase, SEGUE_COMO_TAREFA } from '../apoio/executar-frase';
 import { usarIA } from '../../src/chat/interpretar';
 import type { IA } from '../../src/ia/ia';
 import { listar, listarPendentes, salvar, semear, semearPalavras } from '../../src/dados/loja';
@@ -61,6 +62,17 @@ describe('gasto por voz', () => {
     expect(resultado.guardarComoIdeia).toBeTypeOf('function');
     expect(resultado.trocarCategoria).toBeDefined();
     expect(await listar('ideias')).toEqual([]);
+  });
+
+  it('a frase do dono, "gastei 5,50 no mercado" (sem moeda dita), é gasto em euros na pasta Financeiro', async () => {
+    await pastaFinanceiro();
+    planilhaComHistorico();
+
+    const resultado = await executarFrase('gastei 5,50 no mercado');
+
+    expect(linhas()[2]!.valores).toMatchObject({ Descrição: 'mercado', Categoria: 'Alimentação', Valor: '5.5', Data: '2026-11-05' });
+    expect(resultado.titulo).toBe('Gasto guardado');
+    expect(resultado.detalhe).toContain('€ 5,50');
   });
 
   it('Desfazer não apaga a linha: marca "desfeito" na Observação, e pode ser repetido', async () => {
@@ -281,15 +293,14 @@ describe('Trocar categoria', () => {
   });
 });
 
-describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
+describe('o que não vai para a planilha segue como tarefa de hoje, com a nota do porquê (nada vira ideia sem o dono pedir)', () => {
   it('sem pasta Financeiro', async () => {
     const resultado = await executarFrase('gastei 5,50 hoje comprando salgado');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('Não achei a pasta Financeiro');
-    expect(resultado.detalhe).toContain('Ficou guardado como ideia.');
-    expect(resultado.ver).toBe('#/ideias');
-    expect((await listar('ideias')).map((i) => i.texto)).toEqual(['gastei 5,50 hoje comprando salgado']);
+    expect(resultado.ver).toBeNull();
+    expect(await listar('ideias')).toEqual([]);
     expect(planilhas.pedidos).toEqual([]);
   });
 
@@ -298,7 +309,7 @@ describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
 
     const resultado = await executarFrase('gastei 5,50 hoje comprando salgado');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('Não achei a pasta Financeiro');
   });
 
@@ -308,10 +319,10 @@ describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
 
     const resultado = await executarFrase('gastei R$ 12 no mercado');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('Gasto em reais não vai para a planilha (só €).');
     expect(linhas()).toHaveLength(2);
-    expect(await listar('ideias')).toHaveLength(1);
+    expect(await listar('ideias')).toEqual([]);
   });
 
   it('descrição vazia', async () => {
@@ -320,7 +331,7 @@ describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
 
     const resultado = await executarFrase('gastei 5 euros');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toMatch(/descrição/);
     expect(resultado.detalhe).toContain('o gasto não foi para a planilha');
     expect(linhas()).toHaveLength(2);
@@ -332,7 +343,7 @@ describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
 
     const resultado = await executarFrase('paguei 20 em 30/11 de gasolina');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('A data é no futuro; o gasto não foi para a planilha.');
     expect(linhas()).toHaveLength(2);
   });
@@ -343,25 +354,24 @@ describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
 
     const resultado = await executarFrase('gastei 5 em 01/03/1999 no café');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toMatch(/data/i);
     expect(resultado.detalhe).toContain('o gasto não foi para a planilha');
     expect(linhas()).toHaveLength(2);
   });
 
-  it('planilha bloqueada (falta coluna): "O gasto não foi para a planilha." e "Ficou guardado como ideia."', async () => {
+  it('planilha bloqueada (falta coluna): "O gasto não foi para a planilha."', async () => {
     await pastaFinanceiro();
     planilhas.planilha(PLANILHA, [], ['Data', 'Descrição', 'Categoria', 'Valor', 'Observação', 'id']); // sem Tipo e Quem
 
     const resultado = await executarFrase('gastei 5,50 hoje comprando salgado');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toMatch(/planilha mudou/i);
     expect(resultado.detalhe).toContain('O gasto não foi para a planilha.');
-    expect(resultado.detalhe).toContain('Ficou guardado como ideia.');
     expect(resultado.detalhe).not.toContain('Nada foi gravado');
     expect(linhas()).toEqual([]);
-    expect(await listar('ideias')).toHaveLength(1);
+    expect(await listar('ideias')).toEqual([]);
   });
 
   it('planilha sem acesso (não deixou gravar)', async () => {
@@ -371,7 +381,7 @@ describe('o que não vai para a planilha vira ideia, com aviso claro', () => {
 
     const resultado = await executarFrase('gastei 5,50 hoje comprando salgado');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('O gasto não foi para a planilha.');
     expect(linhas()).toHaveLength(2);
   });

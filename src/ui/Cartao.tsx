@@ -10,6 +10,7 @@ import {
   desfazerCartao,
   escolherSala,
   fecharTroca,
+  guardarComoIdeia,
   naoEPessoa,
   type Acao,
   type EstadoCartao,
@@ -92,7 +93,11 @@ export function avisoDoTema(item: ItemDoChat): { tipo: 'achado' | 'nao-achado'; 
 type Alvo = 'salas' | 'trocar' | 'cartao';
 type Foco = { alvo: Alvo; depoisDe: Acao } | null;
 
-export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: Sala[]; hoje: string }) {
+/**
+ * `podeIdeia`: este cartão leva o "Guardar como ideia" da frase (só o primeiro de uma frase com vários itens: a ideia é a
+ * frase inteira, e os itens dela saem juntos).
+ */
+export function Cartao({ cartao, salas, hoje, podeIdeia = true }: { cartao: EstadoCartao; salas: Sala[]; hoje: string; podeIdeia?: boolean }) {
   const { id, item, situacao } = cartao;
   const raiz = useRef<HTMLElement>(null);
   const grupoDeSalas = useRef<HTMLDivElement>(null);
@@ -120,11 +125,15 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
     elemento?.focus();
   }, [cartao.passos]);
 
-  if (situacao === 'desfeito' || situacao === 'descartado') {
+  if (situacao === 'desfeito' || situacao === 'descartado' || situacao === 'trocado') {
     return (
       <article class="chat-cartao" aria-label={item.titulo} ref={raiz} tabIndex={-1}>
         <p class="chat-quando">
-          {situacao === 'desfeito' ? 'Desfeito. Nada ficou guardado.' : 'Descartado. Nada ficou guardado.'}
+          {situacao === 'desfeito'
+            ? 'Desfeito. Nada ficou guardado.'
+            : situacao === 'trocado'
+              ? 'Trocado por uma ideia. Veja em Ideias.'
+              : 'Descartado. Nada ficou guardado.'}
         </p>
       </article>
     );
@@ -156,6 +165,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       <p class="chat-quando">{descreverQuando(item, hoje)}</p>
       {porque && <p class="chat-motivo">{porque}</p>}
       {tema && <p class={tema.tipo === 'achado' ? 'chat-motivo' : 'chat-pergunta'}>{tema.texto}</p>}
+      {cartao.nota && <p class="chat-motivo">{cartao.nota}</p>}
       {situacao === 'erro' && !cartao.aviso && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
       {cartao.aviso && (
@@ -238,6 +248,18 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
             }}
           >
             Desfazer
+          </button>
+        )}
+        {situacao === 'salvo' && podeIdeia && cartao.frase && (
+          <button
+            type="button"
+            class="botao"
+            onClick={() => {
+              pedirFoco('cartao', 'ideia');
+              void guardarComoIdeia(id);
+            }}
+          >
+            Guardar como ideia
           </button>
         )}
         {aConfirmar && (

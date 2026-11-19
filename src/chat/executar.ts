@@ -1,15 +1,15 @@
-// Executa uma frase dita ou escrita em "Pode falar" (V02, Tarefa 6): decide para
-// onde ela vai, grava na hora e devolve o que o cartão de resultado mostra, com
-// o Desfazer. Nunca grava em silêncio: quem chama sempre mostra o cartão.
+// Executa uma frase dita ou escrita no chat (V02.1): decide se ela é uma ideia dita de propósito, uma lista, uma
+// leitura de consumo ou um gasto, grava na hora e devolve o que o cartão de resultado mostra, com o Desfazer. Nunca
+// grava em silêncio: quem chama sempre mostra o cartão.
 //
-// Ordem (spec 5.2): 1) o roteador da V02 (gasto, leitura, item de lista); 2) as
-// regras do chat da V01, que fazem tarefa e compromisso; 3) sem pista clara,
-// Ideias. Leitura de água, luz ou gás grava na pasta de Registro do serviço (Tarefa 13);
-// dentro de uma pasta de Registro, a fala vai direto para ela. Item de lista de compras grava na pasta de Lista
-// (Tarefa 14); dentro de uma pasta de Lista, a frase curta de itens ("leite e pão") vai para ela, só se for claramente
-// lista. Gasto grava na pasta Financeiro (Tarefa 16), com "Trocar categoria" no cartão; em reais, sem pasta, sem
-// descrição, com data no futuro ou com a planilha impedindo, o gasto NÃO vai para a planilha: vira ideia, com o motivo.
-import { avisoDaAgenda } from '../dados/compromisso';
+// Ordem: 1) "ideia ..." no começo (ideia só assim, ou pelo botão "Guardar como ideia"); 2) o roteador da V02
+// (gasto, leitura, item de lista); 3) o resto NÃO é daqui: devolve `tarefa`, e o chat segue com as regras da V01
+// (tarefa de hoje, compromisso, sala, tema), que têm o cartão com Trocar sala. Leitura de água, luz ou gás grava na
+// pasta de Registro do serviço (Tarefa 13); dentro de uma pasta de Registro, a fala vai direto para ela. Item de lista
+// de compras grava na pasta de Lista (Tarefa 14); dentro de uma pasta de Lista, a frase curta de itens ("leite e pão")
+// vai para ela, só se for claramente lista. Gasto grava na pasta Financeiro (Tarefa 16), com "Trocar categoria" no
+// cartão. Se a planilha não existe ou impede (sem pasta, em reais, data no futuro...), NADA vai para a planilha e a frase
+// segue como tarefa de hoje, com uma nota dizendo por quê: nada se perde e nada vira ideia sem o dono pedir.
 import { hojeEmLisboa } from '../dados/dia';
 import { canonicalizarCategoria, categoriasEmUso, CATEGORIA_NO_MAXIMO, lerLancamentos, registrarGasto, trocarCategoria, type Lancamento, type ResultadoDoGasto } from '../dados/financeiro';
 import { criarIdeia, IDEIA_NO_MAXIMO, TEXTO_INVALIDO } from '../dados/ideias';
@@ -17,7 +17,6 @@ import { registrarLeitura } from '../dados/leituras';
 import { adicionarItens, type ResultadoDosItens } from '../dados/lista';
 import { listar } from '../dados/loja';
 import type { Pasta } from '../dados/tipos';
-import { avisoDoTema, descreverQuando } from '../ui/Cartao';
 import {
   NOME_DO_SERVICO,
   TEXTO_DA_RECUSA_DO_GASTO,
@@ -32,9 +31,8 @@ import {
   textosDosItens,
   unidadeDoServico,
 } from '../ui/pastas-textos';
-import { hrefDe, hrefDoCalendario } from '../rotas';
+import { hrefDe } from '../rotas';
 import { normalizar } from './datas';
-import { criarItem, interpretar, type ItemDoChat } from './interpretar';
 import { extrairItensDeListaCurta, extrairLeitura, RE_PEDIDO_DE_TAREFA, rotear, type Destino, type Gasto, type Leitura, type NomeDeLista } from './roteador';
 
 /**
@@ -54,7 +52,6 @@ export type ResultadoDaFrase = {
   /** Para onde o botão "Ver" leva; `null` se nenhuma tela mostra o resultado. */
   ver: string | null;
   desfazer: () => Promise<void>;
-  corrigir?: () => void;
   /** O áudio ficou ligado a uma ideia: quem chama deve enviá-lo ao Drive, depois do texto. */
   audioId?: string;
   /**
@@ -83,97 +80,45 @@ export type ContextoDaFrase = {
   audio?: { id: string; segundos: number };
 };
 
-
 /**
- * Tarefa que as regras montaram sem nenhuma pista do dono: sem sala, sem pessoa,
- * sem dia nem hora ditos e sem pedido de tarefa. Isso é uma ideia solta.
+ * O que a frase virou. `resultado`: gravada aqui, o cartão é o de `ResultadoDaFrase`. `tarefa`: nada específico
+ * (ou a planilha não pôde receber): o chat segue com as regras de tarefa e compromisso, e mostra `nota`, se houver,
+ * no cartão da tarefa.
  */
-function semPista(item: ItemDoChat, frase: string): boolean {
-  return (
-    item.tipo === 'tarefa' &&
-    item.salaId === null &&
-    item.diaAssumido === true &&
-    !item.inicio &&
-    !item.prazoHora &&
-    !item.marcar &&
-    !item.pessoaId &&
-    !item.temaNaoAchado &&
-    !RE_PEDIDO_DE_TAREFA.test(normalizar(frase))
-  );
+export type SaidaDaFrase = { tipo: 'resultado'; resultado: ResultadoDaFrase } | { tipo: 'tarefa'; nota?: string };
+
+const comoResultado = (resultado: ResultadoDaFrase): SaidaDaFrase => ({ tipo: 'resultado', resultado });
+const comoTarefa = (nota?: string): SaidaDaFrase => (nota ? { tipo: 'tarefa', nota } : { tipo: 'tarefa' });
+
+/** "ideia: app de receitas", "ideia app de receitas", "anota uma ideia: ...", "nova ideia ...": ideia dita de propósito. */
+const RE_IDEIA_DITA = /^\s*(?:(?:anota|anote|anotar|guarda|guarde|guardar|registra|registre|registrar)\s+(?:uma\s+|a\s+)?|(?:nova|uma)\s+)?ideia(?![\p{L}\p{N}])\s*[:;,.\-–—]*\s*/iu;
+
+/** O texto da ideia dita ("ideia: app de receitas" -> "app de receitas"); `null` se a frase não começa assim. */
+export function textoDaIdeiaDita(frase: string): string | null {
+  const achado = RE_IDEIA_DITA.exec(frase);
+  if (!achado) return null;
+  const resto = frase.slice(achado[0].length).trim();
+  return resto || frase.trim();
 }
 
+/** Por que a frase não vale (vazia, sem letra nem número, ou longa demais). `null`: vale. */
+export function validarFrase(frase: string): 'vazia' | 'longa' | null {
+  const texto = typeof frase === 'string' ? frase.trim() : '';
+  if (!/[\p{L}\p{N}]/u.test(texto)) return 'vazia';
+  return texto.length > IDEIA_NO_MAXIMO ? 'longa' : null;
+}
+
+
 /** Guarda a frase como ideia e devolve o cartão (Ver leva a `#/ideias`). Texto inválido lança `texto_invalido`. */
-export async function guardarFraseComoIdeia(frase: string, ctx: ContextoDaFrase = {}, aviso?: string): Promise<ResultadoDaFrase> {
+export async function guardarFraseComoIdeia(frase: string, ctx: ContextoDaFrase = {}): Promise<ResultadoDaFrase> {
   const { ideia, desfazer } = await criarIdeia(frase, ctx.audio ? { audioId: ctx.audio.id, audioSegundos: ctx.audio.segundos } : {});
   const comAudio = !!ideia.audioId;
-  const partes = [`“${ideia.texto}”`];
-  if (aviso) partes.push(`${aviso} Ficou guardado como ideia.`);
   return {
     titulo: 'Guardado em Ideias',
-    detalhe: partes.join(' '),
+    detalhe: `“${ideia.texto}”`,
     ver: hrefDe('ideias'),
     desfazer,
     ...(comAudio ? { audioId: ideia.audioId } : {}),
-  };
-}
-
-async function guardarItens(itens: ItemDoChat[], frase: string): Promise<ResultadoDaFrase> {
-  const hoje = hojeEmLisboa();
-  const salas = await listar('salas');
-  const criados: { item: ItemDoChat; aviso: string | null; desfazer: () => Promise<void> }[] = [];
-  try {
-    for (const item of itens) {
-      const criado = await criarItem(item);
-      const aviso = criado.agenda ? avisoDaAgenda(criado.agenda) : null;
-      criados.push({ item, aviso, desfazer: criado.desfazer });
-    }
-  } catch (erro) {
-    // Um item falhou no meio: o que já entrou sai, para não ficar guardado pela metade.
-    await Promise.allSettled(criados.map((c) => c.desfazer()));
-    throw erro;
-  }
-  const descrever = ({ item, aviso }: (typeof criados)[number]) => {
-    const sala = item.salaId === null ? 'Sem sala' : (salas.find((s) => s.id === item.salaId)?.nome ?? 'Sem sala');
-    const tema = avisoDoTema(item);
-    const nomeDoTema = tema?.tipo === 'achado' ? `Tema ${item.temaNome}` : null;
-    return [item.titulo, sala, nomeDoTema, descreverQuando(item, hoje), tema?.tipo === 'nao-achado' ? tema.texto : null, aviso]
-      .filter(Boolean)
-      .join(' · ');
-  };
-  const [primeiro] = itens;
-  // Tarefa do tema (uma só): o cartão leva à pasta dela.
-  const ver =
-    primeiro!.tipo === 'compromisso' && primeiro!.data
-      ? hrefDoCalendario('semana', primeiro!.data)
-      : itens.length === 1 && primeiro!.pastaId && primeiro!.salaId
-        ? hrefDe('pasta', primeiro!.salaId, primeiro!.pastaId)
-        : hrefDe('atividades');
-  const titulo =
-    criados.length > 1
-      ? `${criados.length} itens guardados`
-      : primeiro!.tipo === 'compromisso'
-        ? 'Compromisso guardado'
-        : 'Tarefa guardada';
-  const desfazerTudo = async () => {
-    await Promise.all(criados.map((c) => c.desfazer()));
-  };
-  return {
-    titulo,
-    detalhe: criados.map(descrever).join(' | '),
-    ver,
-    desfazer: desfazerTudo,
-    guardarComoIdeia: async (audio) => {
-      // A ideia nasce primeiro: a frase nunca se perde. Os itens saem um a um; o que não sair continua
-      // guardado e o cartão diz qual é (nada some em silêncio nem fica em dobro sem aviso).
-      const ideia = await guardarFraseComoIdeia(frase, audio ? { audio } : {});
-      const saidas = await Promise.allSettled(criados.map((c) => c.desfazer()));
-      const ficaram = criados.filter((_, i) => saidas[i]!.status === 'rejected');
-      if (ficaram.length === 0) return ideia;
-      console.error('Não consegui tirar o item ao guardar como ideia', saidas.filter((s) => s.status === 'rejected'));
-      const nomes = ficaram.map((c) => `“${c.item.titulo}”`).join(', ');
-      const aviso = ficaram.length === 1 ? `Atenção: não consegui tirar ${nomes}; ele continua guardado.` : `Atenção: não consegui tirar ${nomes}; eles continuam guardados.`;
-      return { ...ideia, detalhe: `${ideia.detalhe} ${aviso}` };
-    },
   };
 }
 
@@ -218,28 +163,24 @@ function destinoDeLeitura(texto: string, hoje: string, destino: Destino, pastaAt
 
 /**
  * Grava a leitura na pasta de Registro do serviço e devolve o cartão (Desfazer, Guardar como ideia). Sem pasta do
- * serviço, ou com a planilha impedindo a gravação, a frase vira ideia e o cartão diz por quê: nada se perde.
+ * serviço, ou com a planilha impedindo a gravação, a frase segue como tarefa de hoje, com a nota do porquê: nada se perde.
  */
-async function guardarLeitura(texto: string, leitura: Leitura, pastas: Pasta[], ctx: ContextoDaFrase): Promise<ResultadoDaFrase> {
+async function guardarLeitura(texto: string, leitura: Leitura, pastas: Pasta[], ctx: ContextoDaFrase): Promise<SaidaDaFrase> {
   const pasta = pastaDeConsumo(pastas, leitura.servico, ctx.pastaAtual);
   if (!pasta) {
-    return guardarFraseComoIdeia(
-      texto,
-      ctx,
-      `Não achei uma pasta de Consumo de ${NOME_DO_SERVICO[leitura.servico]} na Casa, com planilha. Crie a pasta em Casa > Nova pasta para guardar leituras.`,
-    );
+    return comoTarefa(`Não achei uma pasta de Consumo de ${NOME_DO_SERVICO[leitura.servico]} na Casa, com planilha. Crie a pasta em Casa > Nova pasta para guardar leituras.`);
   }
   // Pela tela uma data futura é bloqueada; pela voz também: a leitura não vai para a planilha.
   if (leitura.avisos.includes('data futura')) {
-    return guardarFraseComoIdeia(texto, ctx, 'A data é no futuro; a leitura não foi para a planilha.');
+    return comoTarefa('A data é no futuro; a leitura não foi para a planilha.');
   }
   const unidade = pasta.unidade ?? unidadeDoServico(leitura.servico);
   const nova = { data: leitura.data, valor: leitura.valor, unidade };
   const resultado = await registrarLeitura(pasta, nova);
   const { titulo, detalhe } = textosDaLeitura(pasta.nome, nova, resultado, leitura.avisos);
-  if (resultado.anexo.situacao === 'bloqueada') return guardarFraseComoIdeia(texto, ctx, textoDoAvisoDeLeituraNaVoz(resultado.anexo.aviso));
+  if (resultado.anexo.situacao === 'bloqueada') return comoTarefa(textoDoAvisoDeLeituraNaVoz(resultado.anexo.aviso));
   const ver = hrefDe('pasta', pasta.salaId, pasta.id);
-  return {
+  return comoResultado({
     titulo,
     detalhe,
     ver,
@@ -257,7 +198,7 @@ async function guardarLeitura(texto: string, leitura: Leitura, pastas: Pasta[], 
       }
       return ideia;
     },
-  };
+  });
 }
 
 // ---- Itens de lista de compras ----
@@ -321,23 +262,26 @@ function resultadoDosItens(texto: string, pasta: Pasta, r: ResultadoDosItens, an
   };
 }
 
+/** A frase fala de lista ou de compras ("lista de compras", "nas compras da semana")? "Comprar pão" sozinho, não. */
+const RE_MENCIONA_LISTA = /(?<![a-z])(?:lista|listas|compras)(?![a-z])/;
+
 /**
  * Grava os itens na pasta de Lista e devolve o cartão (Desfazer, Guardar como ideia). Sem pasta de lista com planilha, ou
- * com a planilha impedindo a gravação, a frase vira ideia e o cartão diz por quê: nada se perde. Item que já estava na
- * lista não é repetido sem perguntar.
+ * com a planilha impedindo a gravação, a frase segue como tarefa de hoje ("Comprar leite" vira a tarefa "Comprar leite"),
+ * e a nota diz por quê quando o dono falou de lista: nada se perde. Item que já estava na lista não é repetido sem perguntar.
  */
-async function guardarItensDeLista(texto: string, itens: string[], pastas: Pasta[], ctx: ContextoDaFrase, qual: NomeDeLista | null): Promise<ResultadoDaFrase> {
+async function guardarItensDeLista(texto: string, itens: string[], pastas: Pasta[], ctx: ContextoDaFrase, qual: NomeDeLista | null): Promise<SaidaDaFrase> {
   const pasta = pastaDeLista(pastas, qual, ctx.pastaAtual);
   if (!pasta) {
-    return guardarFraseComoIdeia(
-      texto,
-      ctx,
-      `Não achei a lista ${qual ? TEXTO_DA_LISTA[qual] : 'de compras'} na Casa, com planilha. Crie a pasta em Casa > Nova pasta para guardar itens.`,
+    return comoTarefa(
+      RE_MENCIONA_LISTA.test(normalizar(texto))
+        ? `Não achei a lista ${qual ? TEXTO_DA_LISTA[qual] : 'de compras'} na Casa, com planilha. Crie a pasta em Casa > Nova pasta para guardar itens.`
+        : undefined,
     );
   }
   const r = await adicionarItens(pasta, itens);
-  if (r.criados.length === 0 && r.bloqueio) return guardarFraseComoIdeia(texto, ctx, textoDoAvisoDeListaNaVoz(r.bloqueio));
-  return resultadoDosItens(texto, pasta, r);
+  if (r.criados.length === 0 && r.bloqueio) return comoTarefa(textoDoAvisoDeListaNaVoz(r.bloqueio));
+  return comoResultado(resultadoDosItens(texto, pasta, r));
 }
 
 // ---- Gasto ----
@@ -397,14 +341,14 @@ function cartaoDoGasto(texto: string, pasta: Pasta, gravado: GastoGravado, lanca
 
 /**
  * Grava o gasto na pasta Financeiro e devolve o cartão. Gasto em reais, sem pasta Financeiro, com data no futuro, sem
- * descrição ou com a planilha impedindo NÃO vai para a planilha: vira ideia e o cartão diz por quê.
+ * descrição ou com a planilha impedindo NÃO vai para a planilha: a frase segue como tarefa de hoje, com a nota do porquê.
  */
-async function guardarGasto(texto: string, gasto: Gasto, pastas: Pasta[], ctx: ContextoDaFrase): Promise<ResultadoDaFrase> {
-  if (gasto.moeda !== '€') return guardarFraseComoIdeia(texto, ctx, TEXTO_DO_GASTO_NA_VOZ.reais);
+async function guardarGasto(texto: string, gasto: Gasto, pastas: Pasta[], ctx: ContextoDaFrase): Promise<SaidaDaFrase> {
+  if (gasto.moeda !== '€') return comoTarefa(TEXTO_DO_GASTO_NA_VOZ.reais);
   const pasta = pastaDeFinanceiro(pastas, ctx.pastaAtual);
-  if (!pasta) return guardarFraseComoIdeia(texto, ctx, TEXTO_DO_GASTO_NA_VOZ.sem_pasta);
+  if (!pasta) return comoTarefa(TEXTO_DO_GASTO_NA_VOZ.sem_pasta);
   // Pela tela uma data futura é bloqueada; pela voz também: o gasto não vai para a planilha.
-  if (gasto.avisos.includes('data futura')) return guardarFraseComoIdeia(texto, ctx, TEXTO_DO_GASTO_NA_VOZ.futura);
+  if (gasto.avisos.includes('data futura')) return comoTarefa(TEXTO_DO_GASTO_NA_VOZ.futura);
 
   // As categorias que a planilha já usa: a do gasto usa a mesma grafia. Sem conseguir ler, grava assim mesmo.
   let existentes: Lancamento[] = [];
@@ -416,24 +360,22 @@ async function guardarGasto(texto: string, gasto: Gasto, pastas: Pasta[], ctx: C
   const categoria = canonicalizarCategoria(gasto.categoria ?? '', categoriasEmUso(existentes));
   const feito = await registrarGasto(pasta, { valor: gasto.valor, moeda: gasto.moeda, data: gasto.data, descricao: gasto.descricao, categoria, avisos: gasto.avisos });
   if (!feito.gravado) {
-    return guardarFraseComoIdeia(texto, ctx, feito.situacao === 'bloqueada' ? textoDoAvisoDeGastoNaVoz(feito.aviso) : TEXTO_DA_RECUSA_DO_GASTO[feito.motivo ?? 'valor_invalido']);
+    return comoTarefa(feito.situacao === 'bloqueada' ? textoDoAvisoDeGastoNaVoz(feito.aviso) : TEXTO_DA_RECUSA_DO_GASTO[feito.motivo ?? 'valor_invalido']);
   }
-  return cartaoDoGasto(texto, pasta, feito, feito.lancamento, categoriasEmUso([...existentes, feito.lancamento]));
+  return comoResultado(cartaoDoGasto(texto, pasta, feito, feito.lancamento, categoriasEmUso([...existentes, feito.lancamento])));
 }
 
 /**
- * Grava a frase onde ela mora e devolve o cartão. Frase sem nenhuma letra ou
- * número, ou com mais de 2.000 caracteres, lança `texto_invalido` antes de
- * qualquer coisa e não grava nada. Se uma gravação falhar, o erro sobe: quem
- * chama mantém o texto na tela.
- *
- * "Ideia ou não" se decide só pelas regras, antes da IA: a IA, quando pronta,
- * pode dar sala ou dividir a frase, e uma ideia solta viraria tarefa. A IA só é
- * chamada depois, para a frase que já se mostrou um pedido.
+ * Grava a frase onde ela mora, se for ideia dita, lista, leitura ou gasto, e devolve o cartão; senão devolve `tarefa`
+ * e nada é gravado aqui (o chat cuida de tarefa e compromisso). Frase sem nenhuma letra ou número, ou com mais de
+ * 2.000 caracteres, lança `texto_invalido` antes de qualquer coisa. Se uma gravação falhar, o erro sobe.
  */
-export async function executarFrase(frase: string, ctx: ContextoDaFrase = {}): Promise<ResultadoDaFrase> {
+export async function executarFrase(frase: string, ctx: ContextoDaFrase = {}): Promise<SaidaDaFrase> {
   const texto = typeof frase === 'string' ? frase.trim() : '';
-  if (!/[\p{L}\p{N}]/u.test(texto) || texto.length > IDEIA_NO_MAXIMO) throw new Error(TEXTO_INVALIDO);
+  if (validarFrase(texto)) throw new Error(TEXTO_INVALIDO);
+
+  const ideiaDita = textoDaIdeiaDita(texto);
+  if (ideiaDita !== null) return comoResultado(await guardarFraseComoIdeia(ideiaDita, ctx));
 
   const hoje = hojeEmLisboa();
   const destino = rotear(texto, hoje);
@@ -446,11 +388,5 @@ export async function executarFrase(frase: string, ctx: ContextoDaFrase = {}): P
   // Dentro de uma pasta de Lista, a frase curta que é claramente uma lista de itens vai para ela.
   const daLista = destino.tipo === 'outro' && pastaDaTela?.tipo === 'lista' && !!pastaDaTela.planilhaId ? extrairItensDeListaCurta(texto) : null;
   if (daLista) return guardarItensDeLista(texto, daLista, pastas, ctx, null);
-
-  const pelasRegras = await interpretar(texto, { semIA: true });
-  if (pelasRegras.length === 0 || (pelasRegras.length === 1 && semPista(pelasRegras[0]!, texto))) {
-    return guardarFraseComoIdeia(texto, ctx);
-  }
-  const itens = await interpretar(texto);
-  return guardarItens(itens.length ? itens : pelasRegras, texto);
+  return comoTarefa();
 }

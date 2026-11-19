@@ -2,7 +2,7 @@
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa. A planilha é de mentira (tests/apoio/planilhas-falsas.ts); o resto é o código de verdade.
 // Nomes e valores fictícios.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { executarFrase } from '../../src/chat/executar';
+import { executarFrase, SEGUE_COMO_TAREFA } from '../apoio/executar-frase';
 import { usarIA } from '../../src/chat/interpretar';
 import type { IA } from '../../src/ia/ia';
 import { listar, listarPendentes, salvar, semear, semearPalavras } from '../../src/dados/loja';
@@ -41,7 +41,7 @@ async function pastaDeConsumo(extra: Partial<Pasta> = {}) {
 
 const leituraDaAgua = (data: string, leitura: string) => ({ Data: data, Leitura: leitura, Unidade: 'm³', 'Consumo desde a anterior': '', Observação: '' });
 
-describe('frase de leitura (Pode falar)', () => {
+describe('frase de leitura (chat)', () => {
   it('frase de leitura da água grava na pasta de Consumo de Água e mostra cartão com Desfazer', async () => {
     await pastaDeConsumo();
     planilhas.planilha('planilha-ficticia-agua', [leituraDaAgua('01/11/2026', '1200')]);
@@ -73,18 +73,16 @@ describe('frase de leitura (Pode falar)', () => {
     expect(planilhas.linhas('planilha-ficticia-agua')[0]!.valores).toMatchObject({ Data: '2026-11-04', Leitura: '1210' });
   });
 
-  it('serviço sem pasta correspondente cai em Ideias com aviso', async () => {
+  it('serviço sem pasta correspondente segue como tarefa, com aviso', async () => {
     await pastaDeConsumo(); // só há pasta de água
     planilhas.planilha('planilha-ficticia-agua');
 
     const resultado = await executarFrase('leitura da luz 5000');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toMatch(/pasta de Consumo de Luz/);
-    expect(resultado.ver).toBe('#/ideias');
-    const ideias = await listar('ideias');
-    expect(ideias).toHaveLength(1);
-    expect(ideias[0]!.texto).toContain('5000');
+    expect(resultado.ver).toBeNull();
+    expect(await listar('ideias')).toEqual([]);
     expect(planilhas.linhas('planilha-ficticia-agua')).toEqual([]);
     expect(planilhas.pedidos).toEqual([]);
   });
@@ -94,7 +92,7 @@ describe('frase de leitura (Pode falar)', () => {
 
     const resultado = await executarFrase('leitura da água 1234');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toMatch(/pasta de Consumo de Água/);
   });
 
@@ -132,28 +130,28 @@ describe('frase de leitura (Pode falar)', () => {
     expect(resultado.detalhe).not.toMatch(/Consumo desde a anterior: /);
   });
 
-  it('planilha que mudou (falta coluna) não grava e a frase vira ideia com aviso', async () => {
+  it('planilha que mudou (falta coluna) não grava e a frase segue como tarefa, com aviso', async () => {
     await pastaDeConsumo();
     planilhas.planilha('planilha-ficticia-agua', [], ['Data', 'Leitura', 'Observação', 'id']); // sem "Unidade"
 
     const resultado = await executarFrase('leitura da água 1234');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toMatch(/planilha mudou/i);
     expect(planilhas.linhas('planilha-ficticia-agua')).toEqual([]);
-    expect(await listar('ideias')).toHaveLength(1);
+    expect(await listar('ideias')).toEqual([]);
   });
 
-  it('data no futuro pela voz não grava na planilha: vira ideia com aviso (como a tela, que bloqueia)', async () => {
+  it('data no futuro pela voz não grava na planilha: segue como tarefa, com aviso (como a tela, que bloqueia)', async () => {
     await pastaDeConsumo();
     planilhas.planilha('planilha-ficticia-agua');
 
     const resultado = await executarFrase('leitura da água 1234 em 20/11');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('A data é no futuro; a leitura não foi para a planilha.');
     expect(planilhas.linhas('planilha-ficticia-agua')).toEqual([]);
-    expect(await listar('ideias')).toHaveLength(1);
+    expect(await listar('ideias')).toEqual([]);
   });
 
   it.each(['leitura da água 1234 dia 3', 'leitura da água 1234 em 3 de novembro', 'leitura da água 1234 amanhã'])(
@@ -170,14 +168,13 @@ describe('frase de leitura (Pode falar)', () => {
     },
   );
 
-  it('o cartão de bloqueio diz que a leitura não foi para a planilha, sem "Nada foi gravado" (a ideia foi)', async () => {
+  it('o cartão de bloqueio diz que a leitura não foi para a planilha, sem "Nada foi gravado" (a frase segue como tarefa)', async () => {
     await pastaDeConsumo();
     planilhas.planilha('planilha-ficticia-agua', [], ['Data', 'Leitura', 'Observação', 'id']);
 
     const resultado = await executarFrase('leitura da água 1234');
 
     expect(resultado.detalhe).toContain('A leitura não foi para a planilha.');
-    expect(resultado.detalhe).toContain('Ficou guardado como ideia.');
     expect(resultado.detalhe).not.toContain('Nada foi gravado');
   });
 
@@ -277,7 +274,7 @@ describe('dentro de uma pasta de Registro a fala vai direto para ela', () => {
     ]);
   });
 
-  it('dizendo outro serviço, vai para a pasta dele (ou para Ideias se não houver)', async () => {
+  it('dizendo outro serviço, vai para a pasta dele (ou segue como tarefa se não houver)', async () => {
     await pastaDeConsumo();
     await pastaDeConsumo({ id: 'pasta-luz', nome: 'Consumo de Luz', servico: 'luz', unidade: 'kWh', planilhaId: 'planilha-ficticia-luz', ordem: 2 });
     planilhas.planilha('planilha-ficticia-agua');

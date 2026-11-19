@@ -1,11 +1,11 @@
-// O cartão do gasto no Pode falar (V02, Tarefa 16): "Trocar categoria", Desfazer e Guardar como ideia.
+// O cartão do gasto no chat (V02, Tarefa 16; no chat desde a V02.1): "Trocar categoria", Desfazer e Guardar como ideia.
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa. A planilha é de mentira (tests/apoio/planilhas-falsas.ts). Valores fictícios.
 import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
 import { listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
-import { abrirPodeFalar } from '../../src/ui/PodeFalar';
+import { escreverNoChatDoPainel } from '../apoio/chat-do-painel';
 import { CABECALHO_FINANCEIRO, falsoDasPlanilhas, reiniciarPlanilhas } from '../apoio/planilhas-falsas';
 
 vi.mock('../../src/dados/planilhas', async (importar) => (await import('../apoio/planilhas-falsas')).comPlanilhasFalsas(await importar<typeof import('../../src/dados/planilhas')>()));
@@ -38,17 +38,15 @@ function abrirComFrase(frase: string, hash = '#/') {
   Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true, writable: true });
   history.replaceState(null, '', `/${hash}`);
   render(<App />);
-  act(() => abrirPodeFalar());
   return (async () => {
-    fireEvent.input(await screen.findByRole('textbox', { name: 'Texto falado' }), { target: { value: frase } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pronto' }));
-    return within(await screen.findByRole('article'));
+    const painel = escreverNoChatDoPainel(frase);
+    return within(await within(painel).findByRole('article'));
   })();
 }
 
 const linhas = () => planilhas.linhas(PLANILHA);
 
-describe('cartão do gasto no Pode falar', () => {
+describe('cartão do gasto no chat', () => {
   it('mostra € 5,50 · categoria · Tipo e os botões Desfazer, Trocar categoria e Guardar como ideia', async () => {
     const cartao = await abrirComFrase('gastei 5,50 hoje comprando salgado');
 
@@ -158,19 +156,22 @@ describe('cartão do gasto no Pode falar', () => {
     expect((await listar('ideias')).map((i) => i.texto)).toEqual(['gastei 5,50 hoje comprando salgado']);
   });
 
-  it('sem pasta Financeiro o cartão é de ideia, com o aviso, e sem Trocar categoria', async () => {
+  it('sem pasta Financeiro a frase vira tarefa de hoje (não ideia), com a nota do porquê, e sem Trocar categoria', async () => {
     const { apagar } = await import('../../src/dados/loja');
     await apagar('pastas', 'pasta-financeiro');
 
     const cartao = await abrirComFrase('gastei 5,50 hoje comprando salgado');
 
-    expect(cartao.getByText('Guardado em Ideias')).toBeTruthy();
+    expect(cartao.getByText('Tarefa')).toBeTruthy();
     expect(cartao.getByText(/Não achei a pasta Financeiro/)).toBeTruthy();
     expect(cartao.queryByRole('button', { name: 'Trocar categoria' })).toBeNull();
+    expect(await cartao.findByRole('button', { name: 'Guardar como ideia' })).toBeTruthy();
     expect(linhas()).toHaveLength(2);
+    expect(await listar('ideias')).toEqual([]);
+    await waitFor(async () => expect(await listar('tarefas')).toHaveLength(1));
   });
 
-  it('o Pode falar aberto dentro da pasta Financeiro grava nela', async () => {
+  it('o chat aberto dentro da pasta Financeiro grava nela', async () => {
     const cartao = await abrirComFrase('gastei 3 hoje no café', '#/sala/sala-casa/pasta/pasta-financeiro');
 
     expect(cartao.getByText('Gasto guardado')).toBeTruthy();
@@ -186,7 +187,7 @@ describe('uma ação do cartão por vez', () => {
     fireEvent.click(cartao.getByRole('button', { name: 'Desfazer' }));
     await waitFor(() => expect(planilhas.pedidos.filter((p) => p.acao === 'atualizarLinha')).toHaveLength(1));
 
-    for (const nome of ['Desfazer', 'Trocar categoria', 'Guardar como ideia', 'Corrigir', 'Falar outra']) {
+    for (const nome of ['Desfazer', 'Trocar categoria', 'Guardar como ideia']) {
       expect((cartao.getByRole('button', { name: nome }) as HTMLButtonElement).disabled).toBe(true);
     }
     fireEvent.click(cartao.getByRole('button', { name: 'Guardar como ideia' }));
@@ -202,7 +203,7 @@ describe('painel de trocar a categoria (revisão da Tarefa 16)', () => {
     const cartao = await abrirComFrase('gastei 5,50 hoje comprando salgado');
     fireEvent.click(cartao.getByRole('button', { name: 'Trocar categoria' }));
     const painel = await screen.findByRole('group', { name: 'Trocar categoria' });
-    const acoes = screen.getByRole('button', { name: 'Falar outra' }).parentElement as HTMLElement;
+    const acoes = screen.getByRole('button', { name: 'Guardar como ideia' }).parentElement as HTMLElement;
     expect(acoes.compareDocumentPosition(painel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const atual = within(painel).getByRole('button', { name: 'Alimentação' });

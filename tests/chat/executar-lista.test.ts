@@ -2,7 +2,7 @@
 // Lista, com cartão (Desfazer, Guardar como ideia). Quinta-feira, 2026-11-05, 12:20 em Lisboa. A planilha é de mentira
 // (tests/apoio/planilhas-falsas.ts); o resto é o código de verdade. Só itens e nomes fictícios.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { executarFrase } from '../../src/chat/executar';
+import { executarFrase, SEGUE_COMO_TAREFA } from '../apoio/executar-frase';
 import { usarIA } from '../../src/chat/interpretar';
 import type { IA } from '../../src/ia/ia';
 import { listar, listarPendentes, salvar, semear, semearPalavras } from '../../src/dados/loja';
@@ -57,7 +57,7 @@ const novaPlanilha = (id: string, linhas: Record<string, string>[] = []) => plan
 const anexos = () => planilhas.pedidos.filter((p) => p.acao === 'anexarLinha');
 const itens = (id: string) => planilhas.linhas(id).map((l) => l.valores['Item']);
 
-describe('frase de lista (Pode falar)', () => {
+describe('frase de lista (chat)', () => {
   it('"põe leite e pão nas compras da semana" anexa 2 linhas e mostra cartão com Desfazer', async () => {
     await pastaDeLista();
     novaPlanilha(SEMANAIS);
@@ -195,24 +195,41 @@ describe('frase de lista (Pode falar)', () => {
     expect(itens(SEMANAIS)).toEqual(['Leite', 'leite']);
   });
 
-  it('sem pasta de lista, a frase vira ideia com aviso e nada vai para planilha', async () => {
-    const resultado = await executarFrase('põe leite e pão nas compras da semana');
+  it('"comprar leite amanhã" é tarefa (tem dia): não vai para a lista, mesmo com a pasta à mão', async () => {
+    await pastaDeLista();
+    novaPlanilha(SEMANAIS);
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
-    expect(resultado.detalhe).toMatch(/Não achei a lista/);
-    expect(resultado.detalhe).toMatch(/Ficou guardado como ideia/);
-    expect(resultado.ver).toBe('#/ideias');
-    expect(await listar('ideias')).toHaveLength(1);
+    const resultado = await executarFrase('comprar leite amanhã');
+
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(planilhas.pedidos).toEqual([]);
   });
 
-  it('só há a lista da casa e a frase pede a semanal: não adivinha, vira ideia', async () => {
+  it('"Comprar pão" sem pasta de lista segue como tarefa, sem nota de lista (não falou de lista)', async () => {
+    const resultado = await executarFrase('Comprar pão');
+
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
+    expect(resultado.detalhe).toBe('');
+    expect(planilhas.pedidos).toEqual([]);
+  });
+
+  it('sem pasta de lista, a frase segue como tarefa, com aviso, e nada vai para planilha', async () => {
+    const resultado = await executarFrase('põe leite e pão nas compras da semana');
+
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
+    expect(resultado.detalhe).toMatch(/Não achei a lista/);
+    expect(resultado.ver).toBeNull();
+    expect(await listar('ideias')).toEqual([]);
+    expect(planilhas.pedidos).toEqual([]);
+  });
+
+  it('só há a lista da casa e a frase pede a semanal: não adivinha, segue como tarefa', async () => {
     await pastaDaCasa();
     novaPlanilha(DA_CASA);
 
     const resultado = await executarFrase('põe leite nas compras da semana');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(planilhas.pedidos).toEqual([]);
   });
 
@@ -221,21 +238,20 @@ describe('frase de lista (Pode falar)', () => {
 
     const resultado = await executarFrase('põe leite nas compras da semana');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
   });
 
-  it('planilha que mudou (falta coluna) não grava: "Os itens não foram para a planilha." e a frase vira ideia', async () => {
+  it('planilha que mudou (falta coluna) não grava: "Os itens não foram para a planilha." e a frase segue como tarefa', async () => {
     await pastaDeLista();
     planilhas.planilha(SEMANAIS, [], ['Item', 'Quantidade', 'Observação', 'id']); // sem "Quem pôs" nem "Data"
 
     const resultado = await executarFrase('põe leite e pão nas compras da semana');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(resultado.detalhe).toContain('Os itens não foram para a planilha.');
-    expect(resultado.detalhe).toContain('Ficou guardado como ideia.');
     expect(resultado.detalhe).not.toContain('Nada foi gravado');
     expect(planilhas.linhas(SEMANAIS)).toEqual([]);
-    expect(await listar('ideias')).toHaveLength(1);
+    expect(await listar('ideias')).toEqual([]);
   });
 
   it('sem rede os itens ficam na fila e o cartão avisa "salva ao voltar a rede"', async () => {
@@ -344,7 +360,7 @@ describe('dentro de uma pasta de lista', () => {
     await executarFrase('leite e pão', { pastaAtual: 'pasta-que-nao-existe' });
 
     expect(planilhas.pedidos).toEqual([]);
-    expect(await listar('ideias')).toHaveLength(2);
+    expect(await listar('ideias')).toEqual([]);
   });
 
   it('numa pasta de Registro, "leite e pão" também não é lista', async () => {
@@ -421,15 +437,15 @@ describe('correções da revisão da Tarefa 14', () => {
     expect(repetido.semDesfazer).toBeUndefined();
   });
 
-  it('item comprido demais vira ideia com aviso, e nada vai para a planilha', async () => {
+  it('item comprido demais não é lista: segue como tarefa, e nada vai para a planilha', async () => {
     await pastaDeLista();
     novaPlanilha(SEMANAIS);
 
     const resultado = await executarFrase(`põe leite e ${'x'.repeat(81)} nas compras da semana`);
 
     expect(planilhas.pedidos).toEqual([]);
-    expect(await listar('ideias')).toHaveLength(1);
-    expect(resultado.titulo).not.toMatch(/guardado$/);
+    expect(await listar('ideias')).toEqual([]);
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
   });
 
   it('"põe no calendário a lista de compras da semana" não vai para a planilha', async () => {
@@ -444,7 +460,7 @@ describe('correções da revisão da Tarefa 14', () => {
 });
 
 // V02.1: lista com nome próprio (o dono criou a dele). Ordem: pasta atual (se for Lista) → semanal padrão → única lista com
-// planilha → a de nome "compra" de menor ordem → nada (ideia).
+// planilha → a de nome "compra" de menor ordem → nada (tarefa).
 describe('lista genérica com pasta de nome próprio', () => {
   const MINHA = 'planilha-ficticia-minha';
   const OUTRA = 'planilha-ficticia-outra';
@@ -509,7 +525,7 @@ describe('lista genérica com pasta de nome próprio', () => {
     expect(itens(DA_CASA)).toEqual([]);
   });
 
-  it('com duas listas, sem semanal e nenhuma de nome "compra": não adivinha, vira ideia', async () => {
+  it('com duas listas, sem semanal e nenhuma de nome "compra": não adivinha, segue como tarefa', async () => {
     await propria({ nome: 'Despensa', id: 'pasta-despensa' });
     await propria({ nome: 'Cozinha', id: 'pasta-cozinha', ordem: 6, planilhaId: OUTRA });
     novaPlanilha(MINHA);
@@ -517,7 +533,7 @@ describe('lista genérica com pasta de nome próprio', () => {
 
     const resultado = await executarFrase('põe leite na lista de compra');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(planilhas.pedidos).toEqual([]);
   });
 
@@ -526,13 +542,13 @@ describe('lista genérica com pasta de nome próprio', () => {
 
     const resultado = await executarFrase('põe leite na lista de compra');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
   });
 
-  it('sem nenhuma pasta de lista, a frase vira ideia', async () => {
+  it('sem nenhuma pasta de lista, a frase segue como tarefa', async () => {
     const resultado = await executarFrase('põe leite na lista de compra');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(planilhas.pedidos).toEqual([]);
   });
 
@@ -542,7 +558,7 @@ describe('lista genérica com pasta de nome próprio', () => {
 
     const resultado = await executarFrase('põe leite nas compras da semana');
 
-    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(resultado.titulo).toBe(SEGUE_COMO_TAREFA);
     expect(planilhas.pedidos).toEqual([]);
   });
 });
