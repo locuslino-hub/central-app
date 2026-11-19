@@ -13,10 +13,10 @@
   "theme_color": "#e8eae3",
   "shortcuts": [
     {
-      "name": "Pode falar",
-      "short_name": "Pode falar",
-      "description": "Falar ou escrever uma ideia, tarefa ou compromisso",
-      "url": "/central-app/#/falar"
+      "name": "Falar no chat",
+      "short_name": "Falar",
+      "description": "Abrir o chat já ouvindo: falar uma tarefa, compromisso, lista, gasto ou ideia",
+      "url": "/central-app/#/?falar=1"
     }
   ],
   "icons": [

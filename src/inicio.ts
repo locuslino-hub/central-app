@@ -19,7 +19,7 @@ function pedirArmazenamentoPersistente() {
 let ouvindoARede = false;
 
 /**
- * Áudios do Pode falar que esperavam rede seguem para o Drive ao abrir o app e
+ * Áudios gravados no chat que esperavam rede seguem para o Drive ao abrir o app e
  * quando a internet volta. Sem rede ou sem conexão guardada, a rodada para e o
  * áudio continua guardado neste aparelho. O único áudio tirado da fila sem ir ao
  * Drive é o de ideia apagada ou que não existe mais (privacidade).

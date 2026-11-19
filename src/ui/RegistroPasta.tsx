@@ -280,7 +280,7 @@ export function RegistroPasta({ pasta }: { pasta: Pasta }) {
       )}
 
       {resumo && resumo.leituras.length === 0 && carga.situacao === 'pronta' && (
-        <p class="lista-vazia-texto">Ainda não há leituras. Digite a primeira acima, ou diga "leitura da água 1234" no Pode falar.</p>
+        <p class="lista-vazia-texto">Ainda não há leituras. Digite a primeira acima, ou diga "leitura da água 1234" no chat.</p>
       )}
 
       {meses.length > 0 && (

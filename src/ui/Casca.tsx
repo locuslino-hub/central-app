@@ -8,14 +8,21 @@ import { Icone } from './icones';
 import { Atalhos, MenuLateral } from './Menu';
 import { NovaVersao } from './NovaVersao';
 import { PainelDireito } from './PainelDireito';
-import { abrirPodeFalar } from './PodeFalar';
+import { abrirOChat, pedidoRecente } from './pedido-de-voz';
 import { Vista } from './Vista';
 
-/** O clique no botão guarda de onde veio (para o Cancelar voltar) e abre a tela. */
-function abrirDoBotao(e: MouseEvent) {
-  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return; // abrir em outra aba segue o link
-  e.preventDefault();
-  abrirPodeFalar();
+/**
+ * O endereço pede para ouvir? `#/?falar=1` (atalho do ícone instalado) e o antigo `#/falar` (atalho que ficou no
+ * aparelho antes da V02.1). Devolve o endereço sem o pedido, ou `null` se não pede.
+ */
+export function enderecoSemPedidoDeVoz(hash: string): string | null {
+  const [caminho = '', ...resto] = hash.split('?');
+  const consulta = resto.join('?').split('&').filter(Boolean);
+  const antigo = caminho.replace(/\/$/, '') === '#/falar';
+  if (!antigo && !consulta.includes('falar=1')) return null;
+  const outros = consulta.filter((parte) => parte !== 'falar=1');
+  const base = antigo ? '#/' : caminho;
+  return outros.length ? `${base}?${outros.join('&')}` : base;
 }
 
 /** O foco está onde se digita (campo, área de texto, lista ou texto editável)? */
@@ -41,6 +48,7 @@ export function Casca() {
     const base = principal.current;
     if (!base) return;
     base.scrollTop = 0;
+    if (pedidoRecente()) return; // pediram para ouvir: o foco é do campo do chat
     const titulo = base.querySelector<HTMLElement>('h1');
     if (titulo) {
       titulo.tabIndex = -1;
@@ -48,22 +56,34 @@ export function Casca() {
     }
   }, [rota.id, rota.param]);
 
-  // Ctrl+Alt+N abre o Pode falar de qualquer tela.
+  // Ctrl+Alt+N: o chat ganha o foco e o microfone liga, de qualquer tela. No computador o chat é o painel da
+  // direita (abre se estiver recolhido); no tablet e no celular, a página do chat.
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n')) {
-        if (e.repeat) return; // tecla segurada: abre uma vez só
-        // Num campo de texto de outra tela o atalho não atropela quem está digitando.
-        if (location.hash !== '#/falar' && ehCampoDeTexto(e.target)) return;
+        if (e.repeat) return; // tecla segurada: pede uma vez só
+        // Num campo de texto de outra tela o atalho não atropela quem está digitando; no campo do chat, vale.
+        if (ehCampoDeTexto(e.target) && !(e.target as HTMLElement).classList.contains('chat-entrada')) return;
         e.preventDefault();
-        abrirPodeFalar();
+        abrirOChat(tela, rota.id);
       }
     };
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);
-  }, []);
+  }, [tela, rota.id]);
 
-  const naTelaDeFalar = rota.id === 'falar';
+  // Abrir o app pelo atalho do ícone (`#/?falar=1`) já pede para ouvir; o endereço volta ao normal.
+  useEffect(() => {
+    const aoMudarOEndereco = () => {
+      const limpo = enderecoSemPedidoDeVoz(location.hash);
+      if (limpo === null) return;
+      history.replaceState(null, '', `${location.pathname}${location.search}${limpo}`);
+      abrirOChat(tela, rota.id);
+    };
+    aoMudarOEndereco();
+    window.addEventListener('hashchange', aoMudarOEndereco);
+    return () => window.removeEventListener('hashchange', aoMudarOEndereco);
+  }, [tela, rota.id]);
 
   return (
     <div class="casca" data-tela={tela}>
@@ -81,22 +101,11 @@ export function Casca() {
             </a>
           )}
           <NovaVersao />
-          {!naTelaDeFalar && tela !== 'celular' && (
-            <a class="falar-no-topo" href="#/falar" title="Atalho: Ctrl + Alt + N" onClick={abrirDoBotao}>
-              <Icone nome="microfone" />
-              <span>Pode falar</span>
-            </a>
-          )}
           <EstadoDaSincronia />
         </div>
         <Vista rota={rota} />
       </main>
       {tela === 'computador' && <PainelDireito semChat={rota.id === 'chat'} semAgora={rota.id === 'agora'} />}
-      {tela === 'celular' && !naTelaDeFalar && (
-        <a class="falar-flutuante" href="#/falar" aria-label="Pode falar" onClick={abrirDoBotao}>
-          <Icone nome="microfone" />
-        </a>
-      )}
       {tela === 'celular' && <Atalhos rota={rota} hoje={hoje} variante="barra" />}
     </div>
   );

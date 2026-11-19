@@ -17,10 +17,10 @@ import { assinarProblemas, lerAudioPendente, marcarProblemaDeAudio, problemasDos
 import { apagarAudioDoDrive } from '../voz/apagar-audio';
 import { AudioIndisponivel, buscarAudio } from '../voz/ler-audio';
 import { hrefDe } from '../rotas';
-import { useIdeias, usePalavras, usePessoas, useSalas, useTarefas } from './hooks';
+import { useIdeias, usePalavras, usePessoas, useSalas, useTarefas, useTela } from './hooks';
 import { Icone } from './icones';
 import { corDaSala } from './Menu';
-import { abrirPodeFalar } from './PodeFalar';
+import { abrirOChat } from './pedido-de-voz';
 import './ideias.css';
 
 // ---- Textos ----
@@ -196,6 +196,7 @@ type Resultado = {
 
 export function Ideias() {
   const ideias = useIdeias();
+  const tela = useTela();
   const salas = useSalas();
   const tarefas = useTarefas();
   const pessoas = usePessoas();
@@ -351,7 +352,7 @@ export function Ideias() {
           </h2>
           <p class="ideias-sub">Tudo o que você falou e ainda não tem lugar. A Central sugere a sala; um toque confirma.</p>
         </div>
-        <button type="button" class="botao-pilula ideias-nova" onClick={abrirPodeFalar}>
+        <button type="button" class="botao-pilula ideias-nova" onClick={() => abrirOChat(tela, 'ideias', { texto: 'Ideia: ', ouvir: false })}>
           <Icone nome="microfone" />
           <span>Nova ideia</span>
         </button>

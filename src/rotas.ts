@@ -20,7 +20,6 @@ export type IdDaRota =
   | 'quadro'
   | 'atividades'
   | 'chat'
-  | 'falar'
   | 'ideias'
   | 'conectar'
   | 'ia'
@@ -90,7 +89,6 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
   quadro: { caminho: 'quadro', titulo: fixo('Quadro') },
   atividades: { caminho: 'atividades', titulo: fixo('Atividades') },
   chat: { caminho: 'chat', titulo: fixo('Chat') },
-  falar: { caminho: 'falar', titulo: fixo('Pode falar') },
   ideias: { caminho: 'ideias', titulo: fixo('Ideias') },
   conectar: { caminho: 'conectar', titulo: fixo('Conectar aparelho'), voltarPara: '#/' },
   ia: { caminho: 'ia', titulo: fixo('IA local'), voltarPara: '#/' },
@@ -99,8 +97,14 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
 /** `sala/:id/pasta/:pastaId`, sem barra dentro de cada id. */
 const PASTA_DA_SALA = /^sala\/([^/]+)\/pasta\/([^/]+)$/;
 
-/** Páginas que deixaram de existir e para onde levam agora. */
-const ENDERECOS_ANTIGOS = new Map<string, string>([['sem-prazo', 'atividades']]);
+/**
+ * Páginas que deixaram de existir e para onde levam agora. `falar` (a tela "Pode falar", V02) agora é o microfone do chat:
+ * a casca pede para ouvir (`enderecoSemPedidoDeVoz`) e o endereço cai no início, sem erro.
+ */
+const ENDERECOS_ANTIGOS = new Map<string, string>([
+  ['sem-prazo', 'atividades'],
+  ['falar', ''],
+]);
 
 const NAO_ENCONTRADA: RotaAtual = { id: 'nao-encontrada', titulo: 'Página não encontrada' };
 

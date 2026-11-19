@@ -166,7 +166,7 @@ const AVISO_DA_FRASE: Record<string, string> = {
 export const textoDoAvisoDaFrase = (aviso: string): string => AVISO_DA_FRASE[aviso] ?? aviso;
 
 /**
- * O cartão de uma leitura gravada (tela da pasta e Pode falar): o que foi guardado, o consumo desde a anterior e os
+ * O cartão de uma leitura gravada (tela da pasta e chat): o que foi guardado, o consumo desde a anterior e os
  * avisos (leitura menor que a anterior, sem internet). Para `bloqueada` (nada foi gravado) devolve o aviso da planilha.
  */
 export function textosDaLeitura(
@@ -207,7 +207,7 @@ export const TEXTO_DE_ITEM_LONGO = (maximo: number): string => `O item pode ter 
 export const TEXTO_SEM_REDE_NA_LISTA = 'Sem internet: salva ao voltar a rede.';
 
 /**
- * O cartão dos itens que acabaram de ser pedidos (tela da pasta e Pode falar): o que foi guardado, o que já estava na
+ * O cartão dos itens que acabaram de ser pedidos (tela da pasta e chat): o que foi guardado, o que já estava na
  * lista (e por isso não foi repetido), e o aviso de rede. `bloqueio` sem nenhum item guardado: o aviso da planilha.
  */
 export function textosDosItens(
@@ -270,7 +270,7 @@ const textoDoAvisoDoGasto = (aviso: string): string => textoDoAvisoDaFrase(aviso
 export const TEXTO_SEM_REDE_NO_GASTO = 'Sem internet: o gasto fica neste aparelho e vai para a planilha quando a rede voltar.';
 export const TEXTO_SEM_REDE_NA_TROCA = 'Sem internet: a troca de categoria fica neste aparelho e vai para a planilha quando a rede voltar.';
 
-/** O cartão de um gasto gravado (tela do Financeiro e Pode falar): € valor · categoria · Tipo, a descrição, a data e os avisos. */
+/** O cartão de um gasto gravado (tela do Financeiro e chat): € valor · categoria · Tipo, a descrição, a data e os avisos. */
 export function textosDoGasto(
   nomeDaPasta: string,
   gasto: Pick<Lancamento, 'valor' | 'categoria' | 'tipo' | 'descricao' | 'data'>,

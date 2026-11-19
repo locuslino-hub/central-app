@@ -16,7 +16,6 @@ import { Painel } from './Painel';
 import { Pagina } from './Pagina';
 import { PaginaDaPasta } from './PaginaDaPasta';
 import { Pessoa } from './Pessoa';
-import { PodeFalar } from './PodeFalar';
 import { Quadro } from './Quadro';
 import { Sala } from './Sala';
 import { Salas } from './Salas';
@@ -123,12 +122,6 @@ export function Vista({ rota }: { rota: RotaAtual }) {
           <div class="painel chat-pagina">
             <Chat />
           </div>
-        </Pagina>
-      );
-    case 'falar':
-      return (
-        <Pagina titulo={rota.titulo}>
-          <PodeFalar />
         </Pagina>
       );
     case 'ideias':

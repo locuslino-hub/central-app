@@ -20,7 +20,10 @@ describe('resolverRota', () => {
     // A página Sem prazo deixou de existir: o endereço antigo leva a Atividades.
     ['#/sem-prazo', 'atividades', 'Atividades'],
     ['#/chat', 'chat', 'Chat'],
-    ['#/falar', 'falar', 'Pode falar'],
+    // A tela Pode falar deixou de existir (V02.1: é o microfone do chat): o endereço antigo cai no início, sem erro.
+    ['#/falar', 'hoje', 'Painel do dia'],
+    ['#/falar/', 'hoje', 'Painel do dia'],
+    ['#/?falar=1', 'hoje', 'Painel do dia'],
     ['#/conectar', 'conectar', 'Conectar aparelho'],
   ])('%j abre %s com o título %j', (hash, id, titulo) => {
     const rota = resolverRota(hash, AGORA);

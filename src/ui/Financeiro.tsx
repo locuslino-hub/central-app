@@ -568,7 +568,7 @@ export function Financeiro({ pasta }: { pasta: Pasta }) {
         </div>
       ) : (
         carga.situacao === 'pronta' && (
-          <p class="lista-vazia-texto">{`Ainda não há gastos em ${nomeDoMes(mes)}. Digite um acima, ou diga "gastei 5,50 em salgado" no Pode falar.`}</p>
+          <p class="lista-vazia-texto">{`Ainda não há gastos em ${nomeDoMes(mes)}. Digite um acima, ou diga "gastei 5,50 em salgado" no chat.`}</p>
         )
       )}
     </section>

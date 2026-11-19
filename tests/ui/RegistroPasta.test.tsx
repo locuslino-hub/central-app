@@ -7,8 +7,8 @@ import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
 import { salvar, semear, semearPalavras } from '../../src/dados/loja';
 import type { Pasta } from '../../src/dados/tipos';
-import { abrirPodeFalar } from '../../src/ui/PodeFalar';
 import { enviarFilaDePlanilhas } from '../../src/dados/planilhas';
+import { escreverNoChatDoPainel } from '../apoio/chat-do-painel';
 import { chamarFalso, falsoDasPlanilhas, reiniciarPlanilhas } from '../apoio/planilhas-falsas';
 
 vi.mock('../../src/dados/planilhas', async (importar) => (await import('../apoio/planilhas-falsas')).comPlanilhasFalsas(await importar<typeof import('../../src/dados/planilhas')>()));
@@ -322,19 +322,17 @@ describe('a tela do Registro', () => {
   });
 });
 
-describe('Pode falar dentro da pasta', () => {
+describe('chat (falado ou escrito) dentro da pasta', () => {
   it('o número dito (ou escrito) vai direto para a pasta onde o dono estava', async () => {
     await pastaDaAgua();
     planilhas.planilha(PLANILHA, [leitura('01/11/2026', '1000')]);
     mostrar('#/sala/sala-casa/pasta/pasta-agua');
     await linhasDaTabela();
 
-    act(() => abrirPodeFalar());
-    fireEvent.input(await screen.findByRole('textbox', { name: 'Texto falado' }), { target: { value: '1012,5' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pronto' }));
+    const painel = escreverNoChatDoPainel('1012,5');
 
-    expect(await screen.findByText('Leitura guardada')).toBeTruthy();
-    expect(screen.getByText(/Consumo desde a anterior: 12,5 m³/)).toBeTruthy();
+    expect(await within(painel).findByText('Leitura guardada')).toBeTruthy();
+    expect(within(painel).getByText(/Consumo desde a anterior: 12,5 m³/)).toBeTruthy();
     expect(planilhas.linhas(PLANILHA)[1]!.valores).toMatchObject({ Data: '2026-11-05', Leitura: '1012.5', Unidade: 'm³' });
   });
 });

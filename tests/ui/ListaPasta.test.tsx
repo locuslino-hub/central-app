@@ -7,8 +7,8 @@ import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
 import { salvar, semear, semearPalavras } from '../../src/dados/loja';
 import type { Pasta } from '../../src/dados/tipos';
-import { abrirPodeFalar } from '../../src/ui/PodeFalar';
 import { comoCelular, comoComputador } from '../apoio/aparelho';
+import { escreverNoChatDoPainel } from '../apoio/chat-do-painel';
 import { CABECALHO_COMPRAS, falsoDasPlanilhas, reiniciarPlanilhas } from '../apoio/planilhas-falsas';
 
 vi.mock('../../src/dados/planilhas', async (importar) => (await import('../apoio/planilhas-falsas')).comPlanilhasFalsas(await importar<typeof import('../../src/dados/planilhas')>()));
@@ -517,36 +517,32 @@ describe('Abrir planilha e o celular', () => {
   });
 });
 
-describe('Pode falar dentro da pasta', () => {
+describe('chat (falado ou escrito) dentro da pasta', () => {
   it('"leite e pão" dito (ou escrito) dentro da pasta vai direto para ela', async () => {
     await pastaDeCompras();
     planilhas.planilha(PLANILHA, [compra('Café')], CABECALHO_COMPRAS);
     mostrar(HASH);
     await itensAComprar();
 
-    act(() => abrirPodeFalar());
-    fireEvent.input(await screen.findByRole('textbox', { name: 'Texto falado' }), { target: { value: 'leite e pão' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pronto' }));
+    const painel = escreverNoChatDoPainel('leite e pão');
 
-    expect(await screen.findByText('2 itens guardados')).toBeTruthy();
+    expect(await within(painel).findByText('2 itens guardados')).toBeTruthy();
     expect(planilhas.linhas(PLANILHA).map((l) => l.valores['Item'])).toEqual(['Café', 'leite', 'pão']);
   });
 
-  it('o cartão do Pode falar tem "Pôr mesmo assim" para o item repetido', async () => {
+  it('o cartão do chat tem "Pôr mesmo assim" para o item repetido', async () => {
     await pastaDeCompras();
     planilhas.planilha(PLANILHA, [compra('Café')], CABECALHO_COMPRAS);
     mostrar(HASH);
     await itensAComprar();
 
-    act(() => abrirPodeFalar());
-    fireEvent.input(await screen.findByRole('textbox', { name: 'Texto falado' }), { target: { value: 'café' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pronto' }));
+    const painel = escreverNoChatDoPainel('café');
 
-    expect(await screen.findByText('Já está na lista')).toBeTruthy();
+    expect(await within(painel).findByText('Já está na lista')).toBeTruthy();
     expect(planilhas.linhas(PLANILHA)).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Pôr mesmo assim' }));
+    fireEvent.click(within(painel).getByRole('button', { name: 'Pôr mesmo assim' }));
 
-    expect(await screen.findByText('Item guardado')).toBeTruthy();
+    expect(await within(painel).findByText('Item guardado')).toBeTruthy();
     expect(planilhas.linhas(PLANILHA)).toHaveLength(2);
   });
 });
@@ -582,7 +578,7 @@ describe('correções da revisão da Tarefa 14', () => {
     expect(await principal().findByText(/A planilha mudou: falta uma coluna/)).toBeTruthy();
   });
 
-  it('o cartão "Já está na lista" não tem Desfazer, nem na tela nem no Pode falar', async () => {
+  it('o cartão "Já está na lista" não tem Desfazer, nem na tela nem no chat', async () => {
     await pastaDeCompras();
     planilhas.planilha(PLANILHA, [compra('Café')], CABECALHO_COMPRAS);
     mostrar(HASH);
@@ -592,12 +588,10 @@ describe('correções da revisão da Tarefa 14', () => {
     expect(principal().queryByRole('button', { name: 'Desfazer' })).toBeNull();
     fireEvent.click(principal().getByRole('button', { name: 'Fechar' }));
 
-    act(() => abrirPodeFalar());
-    fireEvent.input(await screen.findByRole('textbox', { name: 'Texto falado' }), { target: { value: 'café' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pronto' }));
-    expect(await screen.findByText('Já está na lista')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Desfazer' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Pôr mesmo assim' })).toBeTruthy();
+    const painel = escreverNoChatDoPainel('café');
+    expect(await within(painel).findByText('Já está na lista')).toBeTruthy();
+    expect(within(painel).queryByRole('button', { name: 'Desfazer' })).toBeNull();
+    expect(within(painel).getByRole('button', { name: 'Pôr mesmo assim' })).toBeTruthy();
   });
 
   it('o artigo do começo não é gravado na planilha', async () => {

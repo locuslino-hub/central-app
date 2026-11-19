@@ -92,8 +92,8 @@
 }
 .casca[data-tela='computador'] .pagina h1 {
   margin-top: 0;
-  /* Não passa por baixo do canto com o botão Pode falar e o selo. */
-  padding-right: 25rem;
+  /* Não passa por baixo do selo do canto. */
+  padding-right: 14rem;
 }
 
 .pagina h1 {

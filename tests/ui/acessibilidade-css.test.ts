@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const ler = (arquivo: string) => readFileSync(resolve(process.cwd(), 'src/ui', arquivo), 'utf8').replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
 const pastas = ler('pastas.css');
-const falar = ler('pode-falar.css');
+const chat = ler('chat.css');
 const ideias = ler('ideias.css');
 const tema = ler('tema.css');
 
@@ -64,10 +64,8 @@ describe('reflow: a coluna única da pasta nunca passa da tela', () => {
 describe('foco legível nos cartões escuros', () => {
   const tinta = /--tinta:\s*(#[0-9a-f]{6})/i.exec(tema)![1]!;
 
-  it('o cartão do Pode falar e o das Ideias têm fundo escuro (--tinta) e contorno de foco branco', () => {
-    expect(regra(falar, '.falar-cartao')).toContain('background: var(--tinta)');
+  it('o cartão das Ideias tem fundo escuro (--tinta) e contorno de foco branco', () => {
     expect(regra(ideias, '.ideias-cartao')).toContain('background: var(--tinta)');
-    expect(regra(falar, '.falar-cartao :focus-visible')).toMatch(/outline-color:\s*#fff\b/);
     expect(regra(ideias, '.ideias-cartao :focus-visible')).toMatch(/outline-color:\s*#fff\b/);
   });
 
@@ -80,10 +78,10 @@ describe('foco legível nos cartões escuros', () => {
 
 describe('cores forçadas (alto contraste)', () => {
   it('a chave "Gravar áudio" e o botão do microfone ganham borda; a chave mantém a bolinha visível', () => {
-    const bloco = coresForcadas(falar);
-    expect(regra(bloco, '.falar-troca input')).toMatch(/border:\s*2px solid ButtonText/);
-    expect(regra(bloco, '.falar-botao-mic')).toMatch(/border:\s*2px solid ButtonText/);
-    expect(regra(bloco, '.falar-troca input::after')).toMatch(/background:\s*ButtonText/);
+    const bloco = coresForcadas(chat);
+    expect(regra(bloco, '.chat-gravar input')).toMatch(/border:\s*2px solid ButtonText/);
+    expect(regra(bloco, '.chat-mic')).toMatch(/border:\s*2px solid ButtonText/);
+    expect(regra(bloco, '.chat-gravar input::after')).toMatch(/background:\s*ButtonText/);
   });
 
   it('as barras do gráfico e das categorias não somem: forced-color-adjust none e cor do texto do sistema', () => {

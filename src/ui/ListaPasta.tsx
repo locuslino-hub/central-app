@@ -411,7 +411,7 @@ export function ListaPasta({ pasta }: { pasta: Pasta }) {
         </p>
       )}
 
-      {resumo && todos.length === 0 && <p class="lista-vazia-texto">A lista está vazia. Escreva o primeiro item acima, ou diga "põe leite e pão nas compras da semana" no Pode falar.</p>}
+      {resumo && todos.length === 0 && <p class="lista-vazia-texto">A lista está vazia. Escreva o primeiro item acima, ou diga "põe leite e pão nas compras da semana" no chat.</p>}
 
       {aComprar.length > 0 && (
         <div class="lista-grupo">
