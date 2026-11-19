@@ -588,7 +588,6 @@ describe('listas faladas (voz sem vírgulas)', () => {
     ['coloca na minha lista de compras pão de forma', ['pão de forma']],
     ['na lista de compras coloca pão de forma', ['pão de forma']],
     ['Na lista de compras põe leite e ovos.', ['leite', 'ovos']],
-    ['lista de compras pão de forma café e beterraba', ['pão de forma café', 'beterraba']],
     ['lista de compras: leite, pão', ['leite', 'pão']],
     ['Lista de compras leite', ['leite']],
     ['bota ovos na nossa lista de compra', ['ovos']],
@@ -616,6 +615,12 @@ describe('listas faladas (voz sem vírgulas)', () => {
     expect(rotear('põe pilhas na lista de compra para casa', HOJE)).toEqual({ tipo: 'lista', lista: 'casa', itens: ['pilhas'] });
   });
 
+  // Limite conhecido, NÃO é o ideal: sem vírgula nem "comprar" repetido, só o " e " separa; "pão de forma café" vira um item só.
+  it('limite: sem vírgula, a voz junta itens (o dono corrige na lista)', () => {
+    expect(rotear('lista de compras pão de forma café e beterraba', HOJE)).toEqual(lista(['pão de forma café', 'beterraba']));
+    expect(rotear('preciso comprar pão de forma café e beterraba', HOJE)).toEqual(lista(['pão de forma café', 'beterraba']));
+  });
+
   it('"comprar" repetido separa os itens e some do começo de cada um', () => {
     expect(extrairItensDeLista('põe comprar pilhas na lista da casa')).toEqual({ lista: 'casa', itens: ['pilhas'] });
     expect(extrairItensDeLista('coloca na lista de compras compra leite compra pão')!.itens).toEqual(['leite', 'pão']);
@@ -623,7 +628,6 @@ describe('listas faladas (voz sem vírgulas)', () => {
 
   it.each([
     ['eu preciso comprar pão de forma, comprar café e beterraba', ['pão de forma', 'café', 'beterraba']],
-    ['preciso comprar pão de forma café e beterraba', ['pão de forma café', 'beterraba']],
     ['Preciso comprar pão de forma, café e beterraba.', ['pão de forma', 'café', 'beterraba']],
     ['comprar pão de forma, café e beterraba', ['pão de forma', 'café', 'beterraba']],
     ['comprar pão de forma comprar café e comprar beterraba', ['pão de forma', 'café', 'beterraba']],
@@ -680,5 +684,99 @@ describe('listas faladas (voz sem vírgulas)', () => {
     expect(rotear('gastei 5,50 hoje comprando salgado', HOJE).tipo).toBe('gasto');
     expect(rotear('comprei pão por 2,50', HOJE).tipo).toBe('gasto');
     expect(rotear('Comprar pão por 2,50 euros', HOJE).tipo).not.toBe('lista');
+  });
+});
+
+// Revisão V02.1: o resto da frase depois do nome da lista, hora/preço sem símbolo, verbo no meio, pessoa e "e" solto.
+describe('lista: o que vem depois do nome da lista não se perde', () => {
+  const lista = (itens: string[]) => ({ tipo: 'lista', lista: 'generica', itens });
+
+  it.each([
+    ['põe leite na lista de compras e ovos', ['leite', 'ovos']],
+    ['coloca leite na lista de compras, ovos', ['leite', 'ovos']],
+    ['põe leite na lista de compras, por favor', ['leite']],
+    ['coloca leite na lista de compras.', ['leite']],
+    ['põe leite na lista de compras do mercado', ['leite']],
+  ])('"%s" → lista', (f, itens) => {
+    expect(rotear(f, HOJE)).toEqual(lista(itens));
+  });
+
+  it.each([
+    'coloca leite na lista de compras e liga para a Marina amanhã',
+    'coloca leite na lista de compras e liga para a Marina',
+    'adiciona café na lista de compras e marcar reunião',
+    'coloca leite na lista de compras com a Marina',
+    'coloca leite na lista de compras amanhã',
+  ])('"%s" não é lista (o resto da frase não some)', (f) => {
+    expect(rotear(f, HOJE).tipo).not.toBe('lista');
+  });
+});
+
+describe('lista: hora sem "h" e preço sem moeda não são item', () => {
+  it.each([
+    'comprar pão às 10',
+    'comprar pão às 10 horas',
+    'comprar pão ate 10',
+    'comprar pão 3,50',
+    'coloca na lista de compras café por 3,50',
+    'coloca na lista de compras pão às 10',
+    'coloca na lista de compras pão 10 horas',
+    'coloca café na lista de compras 3,50',
+  ])('"%s" não é lista', (f) => {
+    expect(rotear(f, HOJE).tipo).not.toBe('lista');
+  });
+
+  it('quantidade e peso continuam item', () => {
+    expect(rotear('comprar 2 caixas de leite', HOJE).tipo).toBe('lista');
+    expect(rotear('anote 1,5 kg de arroz na lista de compras', HOJE)).toMatchObject({ itens: ['1,5 kg de arroz'] });
+    expect(rotear('coloca na lista de compras 1,25 kg de arroz', HOJE)).toMatchObject({ itens: ['1,25 kg de arroz'] });
+  });
+});
+
+describe('lista: item que é tarefa em qualquer posição não é item', () => {
+  it.each([
+    'comprar pão e depois lavar o carro',
+    'comprar pão e também ver o médico',
+    'comprar leite e depois passar no banco',
+    'coloque na lista de compras da semana comprar pão e leite ligar para o contador',
+    'coloca na lista de compras pão e depois lavar o carro',
+  ])('"%s" não é lista', (f) => {
+    expect(rotear(f, HOJE).tipo).not.toBe('lista');
+  });
+
+  it('adjetivo no fim do item ("protetor solar") e "de lavar" não são verbo', () => {
+    expect(rotear('coloca na lista de compras protetor solar e máquina de lavar', HOJE)).toMatchObject({ tipo: 'lista', itens: ['protetor solar', 'máquina de lavar'] });
+  });
+
+  it('advérbio inicial some do item', () => {
+    expect(rotear('coloca na lista de compras leite e também café', HOJE)).toMatchObject({ itens: ['leite', 'café'] });
+  });
+});
+
+describe('lista: pessoa com "para/pra/pro/do/da" não é lista', () => {
+  it.each([
+    'comprar presente para a Marina',
+    'comprar flores pra Marina',
+    'preciso comprar um presente para a Renata',
+    'comprar o presente da Aurora',
+    'comprar presente pro Pedro',
+    'coloca presente para a Marina na lista de compras',
+  ])('"%s" não é lista', (f) => {
+    expect(rotear(f, HOJE).tipo).not.toBe('lista');
+  });
+
+  // Limite conhecido: a fala do Android pode vir sem maiúscula no nome; aí não dá para saber que é pessoa.
+  it('limite: sem maiúscula no nome, "comprar presente para a marina" ainda vira lista', () => {
+    expect(rotear('comprar presente para a marina', HOJE).tipo).toBe('lista');
+  });
+
+  it('palavra comum depois de "para" continua item', () => {
+    expect(rotear('comprar ração para cachorro', HOJE).tipo).toBe('lista');
+  });
+});
+
+describe('lista: "e" solto não vira item', () => {
+  it('"comprar pão, e comprar leite" → pão, leite', () => {
+    expect(rotear('comprar pão, e comprar leite', HOJE)).toEqual({ tipo: 'lista', lista: 'generica', itens: ['pão', 'leite'] });
   });
 });

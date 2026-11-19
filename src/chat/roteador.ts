@@ -413,6 +413,8 @@ const PREP_FINAL = /(?:^|\s|,)(?:nas?|nos?|em|para|pra|pro|ao|as|a|o|da|de|do|mi
 const SO_ARTIGOS = /^(?:(?:nas?|a|minha|nossa|da|essa|esta|nessa|nesta)\s*)*$/;
 /** Cada "comprar" repetido separa um item; "compra" também ("comprar pão compra café"). */
 const COMPRAR_SEPARA = /(?<![a-z])compra(?:r)?(?![a-z])\s*/g;
+/** Fecho que não muda o pedido, depois do nome da lista: "por favor", "obrigado", "do mercado". */
+const FECHO_DO_PEDIDO = /(?:[\s,.;!]*(?:por favor|obrigad[oa]|do\s+(?:super)?mercado|ai))+[\s.!?]*$/;
 const MAX_ITEM = 80;
 /** Mais itens que isso num pedido só: provavelmente não é uma lista de compras. */
 const MAX_ITENS_DO_PEDIDO = 20;
@@ -421,15 +423,15 @@ const MAX_ITENS_SEM_PEDIDO = 12;
 const MAX_PALAVRAS_SEM_PEDIDO = 6;
 /** Infinitivo de tarefa no começo do item ("comprar" fica de fora: é item de compra). */
 const TAREFA_NO_ITEM =
-  /^(?:ligar|telefonar|marcar|agendar|pagar|enviar|mandar|responder|fazer|avisar|falar|reservar|cancelar|renovar|resolver)(?![a-z])/;
+  /^(?:ligar|telefonar|marcar|agendar|pagar|enviar|mandar|responder|fazer|avisar|falar|reservar|cancelar|renovar|resolver|lig[ae]|telefon[ae]|agend[ae]|marque|pag[ae]|envi[ae]|mand[ae]|respond[ae]|avis[ae]|reserv[ae]|cancel[ae]|renov[ae]|resolv[ae])(?![a-z])/;
 
 /** Palavra que faz da frase uma tarefa ou lembrete, não um item de compra. */
 const PALAVRA_DE_TAREFA = /(?<![a-z])(?:tarefas?|atividades?|lembrete|lembrar|lembre)(?![a-z])/;
 
 /** Verbos curtos no infinitivo que a regra de terminação não pega ("pôr" já vem sem acento). */
 const INFINITIVOS_CURTOS = new Set(['ver', 'ir', 'ter', 'ler', 'dar', 'vir', 'ser', 'por']);
-/** Substantivos que terminam como infinitivo: "-dor" (liquidificador, amaciador, desentupidor) e alguns comuns. */
-const NAO_E_INFINITIVO = /^(?:[a-z]*dor|acucar|licor|colher|toner|cheddar|cooler|sabor|calor|valor|setor|melhor|pior|maior|menor|motor|favor|autor)$/;
+/** Substantivos que terminam como infinitivo: "-dor" e "-tor" (liquidificador, desentupidor, protetor, extintor) e alguns comuns. */
+const NAO_E_INFINITIVO = /^(?:[a-z]*dor|[a-z]*tor|acucar|licor|colher|toner|cheddar|cooler|sabor|calor|valor|setor|melhor|pior|maior|menor|motor|favor|autor)$/;
 
 /** A palavra (já sem acento) é um verbo no infinitivo ("lavar", "ver", "pintar"). */
 function ehInfinitivo(palavra: string): boolean {
@@ -437,15 +439,39 @@ function ehInfinitivo(palavra: string): boolean {
   return /^[a-z]{2,}(?:ar|er|ir|or)$/.test(palavra) && !NAO_E_INFINITIVO.test(palavra);
 }
 
+/** Advérbios que abrem o item depois do " e " ("e depois lavar o carro", "e também café"): não são parte do item. */
+const ADVERBIO_INICIAL = /^(?:(?:depois|tambem|ainda|entao|ai)(?![a-z])\s*)+/;
+/** Depois de um infinitivo que não está no começo, estas palavras mostram que ele puxa um complemento ("lavar o carro", "ligar para"). */
+const COMPLEMENTO_DE_VERBO = new Set(['o', 'a', 'os', 'as', 'um', 'uma', 'no', 'na', 'nos', 'nas', 'ao', 'aos', 'para', 'pra', 'pro', 'com', 'em']);
+
 /**
- * O item é uma ação, não uma compra: começa com infinitivo ("limpar filtro", "ver preço") ou tem "para/pra" + infinitivo
- * ("roupa para lavar"). `comprar` conta como item quando `comprarVale` ("põe comprar pilhas na lista da casa").
+ * O item é uma ação, não uma compra: começa com infinitivo ("limpar filtro", "ver preço"), tem "para/pra" + infinitivo
+ * ("roupa para lavar") ou um infinitivo no meio puxando complemento ("leite ligar para o contador"). Advérbios iniciais
+ * ("depois", "também") são ignorados. "Máquina de lavar" e "protetor solar" são compra: infinitivo logo após "de" ou no fim
+ * do item não conta. `comprar` conta como item quando `comprarVale` ("põe comprar pilhas na lista da casa").
  */
 function itemTemVerbo(nItem: string, comprarVale: boolean): boolean {
-  const palavras = nItem.split(/\s+/);
+  const palavras = nItem.replace(ADVERBIO_INICIAL, '').split(/\s+/);
   if (ehInfinitivo(palavras[0]!) && !(comprarVale && palavras[0] === 'comprar')) return true;
-  return palavras.some((p, i) => (p === 'para' || p === 'pra') && i + 1 < palavras.length && ehInfinitivo(palavras[i + 1]!));
+  return palavras.some((p, i) => {
+    if (i === 0 || !ehInfinitivo(p)) return false;
+    const anterior = palavras[i - 1]!;
+    if (anterior === 'para' || anterior === 'pra') return true;
+    return anterior !== 'de' && i + 1 < palavras.length && COMPLEMENTO_DE_VERBO.has(palavras[i + 1]!);
+  });
 }
+
+/** Hora sem "h" ("às 10", "10 horas", "até 10") e preço sem moeda ("3,50"); "2 caixas", "1,5 kg" e "1,25 kg" são quantidade. */
+const RE_HORA_OU_PRECO = new RegExp(
+  [
+    String.raw`(?<![a-z\d])(?:as|ate)\s+\d{1,2}(?![\d:h/.,])(?!\s+[a-z]{3,})`, // "às 10", "até 10" (não "as 2 caixas")
+    String.raw`(?<![\d,.])\d{1,2}\s+horas?(?![a-z])`, // "10 horas"
+    String.raw`(?<![\d,.])\d+[,.]\d{2}(?![\d,.])(?!\s*(?:kg|g|mg|l|ml|litros?|m|cm|mm|quilos?|gramas?)(?![a-z]))`, // "3,50"
+  ].join('|'),
+);
+
+/** "com/para/pra/pro/do/da" + nome com maiúscula: pessoa. A fala sem maiúscula ("para a marina") não dá para reconhecer. */
+const RE_PESSOA = /(?<![\p{L}])(?:com|para|pra|pro|do|da)\s+(?:(?:a|o)\s+)?\p{Lu}/u;
 
 /** O item parece compromisso, hora, dia, agenda ou tarefa: na dúvida não vai para a planilha compartilhada. */
 function itemParecePedido(nItem: string): boolean {
@@ -456,6 +482,7 @@ function itemParecePedido(nItem: string): boolean {
     /^(?:no|na|nos|nas|em|ao|aos)\s/.test(nItem) || // "no calendário", "na agenda": sobra de pedido para outro lugar
     (/^(?:o|a|os|as)\s/.test(nItem) && /(?<![a-z\d])\d+(?![a-z\d])/.test(nItem)) || // "o relatório 1"
     nItem.search(RE_HORA) >= 0 ||
+    RE_HORA_OU_PRECO.test(nItem) ||
     nItem.search(RE_PALAVRA_DATA) >= 0
   );
 }
@@ -471,6 +498,7 @@ function temSinalDePedido(n: string): boolean {
     VERBO_AMPLO.test(n) ||
     FALA_DE_CONVERSA.test(n) ||
     n.search(RE_HORA) >= 0 ||
+    RE_HORA_OU_PRECO.test(n) ||
     n.search(RE_PALAVRA_DATA) >= 0 ||
     /(?<![a-z])dia\s*\d|\d{1,2}\/\d{1,2}\/\d{2,4}|(?<![a-z])por\s+\d/.test(n) ||
     /(?<![a-z])(?:de|da|pela)\s+(?:manha|tarde|noite|madrugada)|(?<![a-z])(?:a|esta|nesta)\s+(?:tarde|noite)|(?<![a-z])(?:na|nesta|esta)\s+(?:proxima\s+)?semana|(?<![a-z])(?:este|esse|neste|nesse)\s+mes|(?<![a-z])(?:mes|ano)\s+que\s+vem/.test(n)
@@ -496,8 +524,12 @@ function separarItens(texto: string): string[] | null {
   const vistos = new Set<string>();
   for (const pedaco of pedacos) {
     for (const bruto of pedaco.split(SEPARADOR_DE_ITENS)) {
-      const item = bruto.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, '').replace(/^e\s+|\s+e$/i, '').trim();
+      let item = bruto.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, '').replace(/^e\s+|\s+e$/i, '').trim();
+      if (/^e$/i.test(item)) continue; // "comprar pão, e comprar leite": o "e" sozinho não é item
+      const adverbio = ADVERBIO_INICIAL.exec(normalizar(item));
+      if (adverbio) item = item.slice(adverbio[0].length).trim();
       if (!item) continue;
+      if (RE_PESSOA.test(item)) return null; // "presente para a Marina": tem pessoa, é tarefa
       const nItem = normalizar(item);
       if (/^(?:da|de|do)(?![a-z])/.test(nItem) || /(?<![a-z])lista(?![a-z])/.test(nItem)) return null; // sobra do nome da lista
       if (item.length > MAX_ITEM) return null; // item comprido demais: não some em silêncio, a frase vira ideia
@@ -534,8 +566,8 @@ function extrairCompraFalada(frase: string): string[] | null {
   const m = COMPRA_FALADA.exec(normalizar(frase));
   if (!m || !m[1]!.trim()) return null;
   const texto = frase.slice(frase.length - m[1]!.length);
-  // "com a Marina": pessoa, é compromisso ou tarefa.
-  if (/(?<![\p{L}])com\s+(?:(?:a|o)\s+)?\p{Lu}/u.test(texto)) return null;
+  // "com a Marina", "para a Renata", "da Aurora": pessoa, é compromisso ou tarefa.
+  if (RE_PESSOA.test(texto)) return null;
   return itensSemPedidoExplicito(texto);
 }
 
@@ -578,7 +610,20 @@ export function extrairItensDeLista(frase: string): { lista: NomeDeLista; itens:
     antes = antes.slice(0, p.index);
   }
 
-  const texto = (doisPontos ? doisPontos[1] : '') || antes.trim() || apos.trim();
+  // O que sobra depois do nome da lista: "e ovos" junta aos itens; "por favor" e "do mercado" são só fecho; o resto
+  // ("com a Marina", "amanhã", "e liga para...") mudaria o sentido do pedido, então a frase inteira vira tarefa.
+  const fecho = FECHO_DO_PEDIDO.exec(normalizar(apos));
+  const aposUtil = (fecho ? apos.slice(0, fecho.index) : apos).replace(/[\s.!?]+$/, '').trim();
+  const itensAntes = antes.trim();
+  let texto = (doisPontos ? doisPontos[1] : '') || '';
+  if (!texto) {
+    if (itensAntes && aposUtil) {
+      if (!/^(?:[,;]|e(?![a-z]))/.test(normalizar(aposUtil))) return null;
+      texto = `${itensAntes} ${aposUtil}`;
+    } else {
+      texto = itensAntes || aposUtil;
+    }
+  }
   const semPedido = !verbo && !verboDepois && !doisPontos;
   const itens = semPedido ? itensSemPedidoExplicito(texto) : separarItens(texto);
   return itens ? { lista, itens } : null;

@@ -39,10 +39,10 @@ describe('executarFrase: ideia só quando o dono diz "ideia"', () => {
   });
 
   it.each([
-    ['Ideia app de receitas', 'app de receitas'],
-    ['ideia, app de receitas', 'app de receitas'],
+    ['Ideia: app de receitas', 'app de receitas'],
+    ['ideia; app de receitas', 'app de receitas'],
     ['Anota uma ideia: app de receitas', 'app de receitas'],
-    ['anote uma ideia app de receitas', 'app de receitas'],
+    ['anote uma ideia: app de receitas', 'app de receitas'],
     ['Nova ideia: app de receitas', 'app de receitas'],
     ['Uma ideia: usar o artigo do Prof. Souza no capítulo 2', 'usar o artigo do Prof. Souza no capítulo 2'],
   ])('"%s" é ideia dita', async (frase, texto) => {
@@ -50,12 +50,22 @@ describe('executarFrase: ideia só quando o dono diz "ideia"', () => {
     expect((await listar('ideias')).map((i) => i.texto)).toEqual([texto]);
   });
 
-  it('"ideia" sozinha guarda a própria frase (nada falado se perde)', async () => {
-    await cartaoDe('ideia');
-    expect((await listar('ideias')).map((i) => i.texto)).toEqual(['ideia']);
+  it.each(['Ideia:', 'ideia: ', 'Nova ideia;'])('"%s" sem texto não grava nada e recusa como texto vazio', async (frase) => {
+    await expect(executarFrase(frase)).rejects.toThrow();
+    expect(await listar('ideias')).toEqual([]);
   });
 
-  it.each(['ideias para o capítulo 2', 'tenho uma ideia para o relatório', 'Preciso de uma ideia de presente', 'ideal para o relatório'])(
+  it.each([
+    'ideia do doutoramento é boa',
+    'ideia app de receitas',
+    'ideia, app de receitas',
+    'ideia',
+    'nova ideia app de receitas',
+    'ideias para o capítulo 2',
+    'tenho uma ideia para o relatório',
+    'Preciso de uma ideia de presente',
+    'ideal para o relatório',
+  ])(
     '"%s" não começa como ideia dita: segue como tarefa',
     (frase) => {
       expect(textoDaIdeiaDita(frase)).toBeNull();

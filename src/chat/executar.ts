@@ -90,15 +90,20 @@ export type SaidaDaFrase = { tipo: 'resultado'; resultado: ResultadoDaFrase } | 
 const comoResultado = (resultado: ResultadoDaFrase): SaidaDaFrase => ({ tipo: 'resultado', resultado });
 const comoTarefa = (nota?: string): SaidaDaFrase => (nota ? { tipo: 'tarefa', nota } : { tipo: 'tarefa' });
 
-/** "ideia: app de receitas", "ideia app de receitas", "anota uma ideia: ...", "nova ideia ...": ideia dita de propósito. */
-const RE_IDEIA_DITA = /^\s*(?:(?:anota|anote|anotar|guarda|guarde|guardar|registra|registre|registrar)\s+(?:uma\s+|a\s+)?|(?:nova|uma)\s+)?ideia(?![\p{L}\p{N}])\s*[:;,.\-–—]*\s*/iu;
+/**
+ * "ideia: app de receitas", "anota uma ideia: ...", "nova ideia; ...": ideia dita de propósito. Exige ":" ou ";" logo
+ * depois da palavra, para "ideia do doutoramento é boa" seguir como tarefa.
+ */
+const RE_IDEIA_DITA = /^\s*(?:(?:anota|anote|anotar|guarda|guarde|guardar|registra|registre|registrar)\s+(?:uma\s+|a\s+)?|(?:nova|uma)\s+)?ideia(?![\p{L}\p{N}])\s*[:;]\s*/iu;
 
-/** O texto da ideia dita ("ideia: app de receitas" -> "app de receitas"); `null` se a frase não começa assim. */
+/**
+ * O texto da ideia dita ("ideia: app de receitas" -> "app de receitas"); `null` se a frase não começa assim. Texto vazio
+ * ("Ideia:") devolve `''`: quem chama recusa, em vez de gravar a palavra "Ideia:".
+ */
 export function textoDaIdeiaDita(frase: string): string | null {
   const achado = RE_IDEIA_DITA.exec(frase);
   if (!achado) return null;
-  const resto = frase.slice(achado[0].length).trim();
-  return resto || frase.trim();
+  return frase.slice(achado[0].length).trim();
 }
 
 /** Por que a frase não vale (vazia, sem letra nem número, ou longa demais). `null`: vale. */
@@ -234,9 +239,17 @@ function resultadoDosItens(texto: string, pasta: Pasta, r: ResultadoDosItens, an
   const { titulo, detalhe: detalheBase } = textosDosItens(pasta.nome, r);
   // Depois de "Pôr mesmo assim", o Desfazer cobre também o que já tinha sido guardado: o cartão diz isso.
   const detalhe = antes ? `${detalheBase} Desfazer tira todos os itens deste pedido.` : detalheBase;
+  // Cada parte lembra que já foi desfeita: se uma falhar, tentar de novo só refaz a que falhou.
+  let antesDesfeito = !antes;
+  let proprioDesfeito = false;
   const desfazerTudo = async () => {
-    const feitos = await Promise.allSettled([antes?.(), r.desfazer()]);
-    const falha = feitos.find((f): f is PromiseRejectedResult => f.status === 'rejected');
+    const [feitoAntes, feitoProprio] = await Promise.allSettled([
+      antesDesfeito ? undefined : antes?.(),
+      proprioDesfeito ? undefined : r.desfazer(),
+    ]);
+    if (feitoAntes.status === 'fulfilled') antesDesfeito = true;
+    if (feitoProprio.status === 'fulfilled') proprioDesfeito = true;
+    const falha = [feitoAntes, feitoProprio].find((f): f is PromiseRejectedResult => f.status === 'rejected');
     if (falha) throw falha.reason;
   };
   return {
@@ -375,6 +388,7 @@ export async function executarFrase(frase: string, ctx: ContextoDaFrase = {}): P
   if (validarFrase(texto)) throw new Error(TEXTO_INVALIDO);
 
   const ideiaDita = textoDaIdeiaDita(texto);
+  if (ideiaDita === '') throw new Error(TEXTO_INVALIDO); // "Ideia:" sem nada: não grava a palavra solta
   if (ideiaDita !== null) return comoResultado(await guardarFraseComoIdeia(ideiaDita, ctx));
 
   const hoje = hojeEmLisboa();

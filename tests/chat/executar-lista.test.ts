@@ -297,6 +297,23 @@ describe('frase de lista (chat)', () => {
     await resultado.desfazer();
     expect(planilhas.linhas(SEMANAIS)[0]!.valores['Observação']).toBe('desfeito');
   });
+
+  it('Desfazer do "Pôr mesmo assim" que falha pela metade: tentar de novo não repete o que já foi desfeito', async () => {
+    await pastaDeLista();
+    novaPlanilha(SEMANAIS, [compra('pão')]);
+    const resultado = await executarFrase('põe leite e pão nas compras da semana');
+    const repetido = await resultado.repetir!();
+    const marcacoes = () => planilhas.pedidos.filter((p) => p.acao === 'atualizarLinha').length;
+
+    planilhas.falharAProxima();
+    await expect(repetido.desfazer()).rejects.toThrow();
+    await repetido.desfazer();
+
+    expect(planilhas.linhas(SEMANAIS).map((l) => l.valores['Observação'])).toEqual(['', 'desfeito', 'desfeito']);
+    // Duas linhas a desfazer (leite e o pão repetido): uma marcação cada, nenhuma repetida no segundo tiro.
+    // (A camada da planilha já ignora repetição; este teste guarda o comportamento visível, a memória fica em executar.ts.)
+    expect(marcacoes()).toBe(2);
+  });
 });
 
 describe('dentro de uma pasta de lista', () => {
