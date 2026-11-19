@@ -6,7 +6,7 @@
 // dela (cerca de 2 s); fica de fora sozinha em clone raso (`git clone --depth`, como o do CI), que não
 // tem o histórico inteiro. Para refazer só ela: `npx vitest run tests/repositorio.test.ts -t histórico`.
 import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -88,6 +88,7 @@ describe('.gitignore', () => {
     'creds-google.json',
     'client_secret.json',
     'client_secret_123.json',
+    '.termos-proibidos.txt',
   ])('ignora %s', (caminho) => {
     expect(ignorado(caminho)).toBe(true);
   });
@@ -231,5 +232,68 @@ describe('histórico do Git', () => {
     expect(paraSegredos.length).toBeGreaterThan(0);
     expect(segredosEm(paraSegredos)).toEqual([]);
     expect(emailsDeFora(adicionadasSem(FORA_DOS_EMAILS))).toEqual([]);
+    // O histórico inteiro com -p leva vários segundos e cresce a cada commit.
+  }, 30_000);
+});
+
+// ---- Termos proibidos (lista local, fora do git) ----
+
+const ARQUIVO_DE_TERMOS = '.termos-proibidos.txt';
+const EXEMPLO_DE_TERMOS = '.termos-proibidos.exemplo.txt';
+
+/** Uma expressão por linha; linhas vazias e comentários (#) não contam. */
+function termosDe(texto: string): RegExp[] {
+  return texto
+    .split(/\r?\n/)
+    .map((linha) => linha.trim())
+    .filter((linha) => linha !== '' && !linha.startsWith('#'))
+    // 'u' (Unicode): \b, \w e as classes passam a tratar letras acentuadas como letras.
+    .map((linha) => new RegExp(linha, 'iu'));
+}
+
+/** `arquivo:linha: termo` para cada linha que casa com algum termo. */
+function termosAchados(arquivo: string, texto: string, termos: readonly RegExp[]): string[] {
+  const achados: string[] = [];
+  texto.split('\n').forEach((linha, i) => {
+    for (const termo of termos) if (termo.test(linha)) achados.push(`${arquivo}:${i + 1}: ${termo.source}`);
+  });
+  return achados;
+}
+
+describe('termos proibidos: as próprias verificações', () => {
+  it('lê uma expressão por linha e ignora vazias e comentários', () => {
+    expect(termosDe('# nota\n\n  Fulano\\s+Tal  \r\nmodelo-x\n').map((t) => t.source)).toEqual(['Fulano\\s+Tal', 'modelo-x']);
+  });
+
+  it('acha o termo sem diferenciar maiúsculas e diz arquivo e linha', () => {
+    const termos = termosDe('Fulano\\s+Tal');
+    expect(termosAchados('a.ts', 'ok\nfala do FULANO   tal aqui', termos)).toEqual(['a.ts:2: Fulano\\s+Tal']);
+    expect(termosAchados('a.ts', 'nada de mais', termos)).toEqual([]);
+  });
+
+  it('em Unicode: \\b e as classes funcionam com letras acentuadas', () => {
+    const [termo] = termosDe('\\bação\\b');
+    expect(termosAchados('a.ts', 'a AÇÃO de hoje', [termo!])).toHaveLength(1);
+    expect(termosAchados('a.ts', 'ações', [termo!])).toEqual([]);
+    expect(termosAchados('a.ts', 'ação', termosDe('^[a-zçã]+$'))).toHaveLength(1);
+  });
+
+  it('o exemplo versionado tem termos válidos (inventados) e a instrução de uso', () => {
+    const texto = readFileSync(EXEMPLO_DE_TERMOS, 'utf8');
+    expect(termosDe(texto).length).toBeGreaterThan(0);
+    expect(texto).toContain(ARQUIVO_DE_TERMOS);
+  });
+});
+
+describe('termos proibidos nos arquivos versionados', () => {
+  const lista = existsSync(ARQUIVO_DE_TERMOS);
+
+  // Sem a lista local (CI, outra máquina) não há o que conferir: copie o exemplo para ativar.
+  it.skipIf(!lista)('nenhum termo de .termos-proibidos.txt aparece em arquivo do git', () => {
+    const termos = termosDe(readFileSync(ARQUIVO_DE_TERMOS, 'utf8'));
+    const problemas = arquivosDoGit()
+      .filter((arquivo) => arquivo !== 'tests/repositorio.test.ts' && arquivo !== EXEMPLO_DE_TERMOS)
+      .flatMap((arquivo) => termosAchados(arquivo, readFileSync(arquivo, 'utf8'), termos));
+    expect(problemas).toEqual([]);
   });
 });

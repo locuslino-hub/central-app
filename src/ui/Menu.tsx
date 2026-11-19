@@ -3,7 +3,8 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { hrefDe, nomeDoMes, type IdDaRota, type RotaAtual } from '../rotas';
 import { Icone, type NomeDoIcone } from './icones';
-import { useSalas } from './hooks';
+import { useNovasIdeias, usePastasDaSala, useSalas } from './hooks';
+import { Contagem } from './Contagem';
 import { BotaoMais, FolhaMais, ROTAS_DO_MAIS } from './Mais';
 
 type IdComHref = Exclude<IdDaRota, 'nao-encontrada'>;
@@ -42,6 +43,8 @@ function rotuloDe(id: IdComHref, hoje: Date): string {
       return 'Quadro';
     case 'atividades':
       return 'Atividades';
+    case 'ideias':
+      return 'Ideias';
     case 'cores':
       return 'Cores do Google';
     case 'conectar':
@@ -53,14 +56,15 @@ function rotuloDe(id: IdComHref, hoje: Date): string {
   }
 }
 
-type ItemProps = { rota: RotaAtual; id: IdComHref; param?: string; icone?: NomeDoIcone; rotulo: string; cor?: string };
+type ItemProps = { rota: RotaAtual; id: IdComHref; param?: string; pastaId?: string; icone?: NomeDoIcone; rotulo: string; cor?: string; contagem?: number };
 
-function Item({ rota, id, param, icone, rotulo, cor }: ItemProps) {
-  const ativo = rota.id === id && rota.param === param;
+function Item({ rota, id, param, pastaId, icone, rotulo, cor, contagem }: ItemProps) {
+  const ativo = rota.id === id && rota.param === param && rota.pastaId === pastaId;
   return (
-    <a class={cor ? `item ${cor}` : 'item'} href={hrefDe(id, param)} aria-current={ativo ? 'page' : undefined}>
+    <a class={cor ? `item ${cor}` : 'item'} href={hrefDe(id, param, pastaId)} aria-current={ativo ? 'page' : undefined}>
       {icone ? <Icone nome={icone} /> : <span class="ponto-da-sala" aria-hidden="true" />}
       <span>{rotulo}</span>
+      {contagem ? <Contagem n={contagem} /> : null}
     </a>
   );
 }
@@ -75,8 +79,26 @@ function Grupo({ titulo, children }: { titulo: string; children: ComponentChildr
   );
 }
 
+const SALA_CASA = 'sala-casa';
+
+/** As pastas da Casa, debaixo do link dela: um toque leva à pasta. Sem pastas, nada. */
+function PastasDaCasaNoMenu({ rota }: { rota: RotaAtual }) {
+  const pastas = usePastasDaSala(SALA_CASA) ?? [];
+  if (pastas.length === 0) return null;
+  return (
+    <ul class="menu-pastas" aria-label="Pastas da Casa">
+      {pastas.map((pasta) => (
+        <li key={pasta.id}>
+          <Item rota={rota} id="pasta" param={SALA_CASA} pastaId={pasta.id} rotulo={pasta.nome} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function MenuLateral({ rota, hoje }: Props) {
   const salas = useSalas();
+  const novasIdeias = useNovasIdeias();
   const item = (id: IdComHref, icone: NomeDoIcone) => (
     <li key={id}>
       <Item rota={rota} id={id} icone={icone} rotulo={rotuloDe(id, hoje)} />
@@ -88,6 +110,7 @@ export function MenuLateral({ rota, hoje }: Props) {
       {/* O meio rola; a marca e o rodapé ficam sempre à vista. */}
       <div class="menu-rolagem">
         <Item rota={rota} id="hoje" icone="painel" rotulo="Painel do dia" />
+        <Item rota={rota} id="ideias" icone="ideias" rotulo="Ideias" contagem={novasIdeias} />
         <Grupo titulo="Calendário">
           {item('semana', 'semana')}
           {item('mes', 'mes')}
@@ -103,6 +126,7 @@ export function MenuLateral({ rota, hoje }: Props) {
           {salas.map((sala) => (
             <li key={sala.id}>
               <Item rota={rota} id="sala" param={sala.id} rotulo={sala.nome} cor={corDaSala(sala.id)} />
+              {sala.id === SALA_CASA && <PastasDaCasaNoMenu rota={rota} />}
             </li>
           ))}
         </Grupo>
@@ -119,13 +143,14 @@ const ATALHOS: { id: IdComHref; icone: NomeDoIcone; rotulo: string; contem?: IdD
   { id: 'hoje', icone: 'painel', rotulo: 'Painel' },
   { id: 'atividades', icone: 'atividades', rotulo: 'Atividades' },
   { id: 'agora', icone: 'agora', rotulo: 'Agora' },
-  { id: 'salas', icone: 'salas', rotulo: 'Salas', contem: ['sala', 'pessoa'] },
+  { id: 'salas', icone: 'salas', rotulo: 'Salas', contem: ['sala', 'pasta', 'pessoa'] },
   { id: 'chat', icone: 'chat', rotulo: 'Chat' },
 ];
 
 /** `barra`: embaixo no celular. `trilho`: ao lado no tablet. Mesmos atalhos. */
 export function Atalhos({ rota, hoje, variante }: Props & { variante: 'barra' | 'trilho' }) {
   const [aberto, setAberto] = useState(false);
+  const novasIdeias = useNovasIdeias();
   const botao = useRef<HTMLButtonElement | null>(null);
 
   // A página mudou (link, voltar do navegador): a folha não fica aberta sobre ela.
@@ -162,6 +187,7 @@ export function Atalhos({ rota, hoje, variante }: Props & { variante: 'barra' | 
           <li>
             <BotaoMais
               aberto={aberto}
+              contagem={novasIdeias}
               // O que tem atalho próprio na barra (Atividades, Agora) é página atual lá, não "dentro do Mais".
               dentro={ROTAS_DO_MAIS.has(rota.id) && !ATALHOS.some((atalho) => atalho.id === rota.id)}
               aoAlternar={() => setAberto((valor) => !valor)}
@@ -170,7 +196,7 @@ export function Atalhos({ rota, hoje, variante }: Props & { variante: 'barra' | 
           </li>
         </ul>
       </nav>
-      {aberto && <FolhaMais rotulo={(id) => rotuloDe(id, hoje)} rotaAtual={rota.id} aoFechar={fechar} />}
+      {aberto && <FolhaMais rotulo={(id) => rotuloDe(id, hoje)} contagem={(id) => (id === 'ideias' ? novasIdeias : 0)} rotaAtual={rota.id} aoFechar={fechar} />}
     </>
   );
 }

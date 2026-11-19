@@ -61,9 +61,11 @@ function naFila<T>(paginaId: string, fazer: () => Promise<T>): Promise<T> {
   return esta;
 }
 
-export async function criarPagina(salaId: string, titulo: string): Promise<Pagina> {
+/** `pastaId`: a página nasce na pasta comum (tema) dessa sala (Tarefa 17); continua sendo da sala. */
+export async function criarPagina(salaId: string, titulo: string, pastaId?: string): Promise<Pagina> {
   return salvar('paginas', {
     salaId,
+    ...(pastaId ? { pastaId } : {}),
     titulo: titulo.trim().slice(0, TITULO_DA_PAGINA_NO_MAXIMO) || 'Página sem título',
     blocos: [novoBloco('texto')],
   });
@@ -201,17 +203,20 @@ export const SO_COM_ENTER = 'so-com-enter';
  * A linha tem data? Então vira item, pelo `interpretar` do chat, na sala da
  * página (a sala que a frase citar não vale aqui: o dono escreveu nesta página).
  * Compromisso só nasce com `compromisso: true` (Enter): sair do campo devolve
- * `SO_COM_ENTER`. `null` se a linha não diz um dia (o chat põe hoje por padrão,
+ * `SO_COM_ENTER`. Numa página de tema (`pastaId`), a tarefa nasce no tema. `null` se a linha não diz um dia (o chat põe hoje por padrão,
  * o Caderno não), se a frase tem mais de um pedido ou se nada saiu dela.
  */
-export async function itemDaLinha(texto: string, salaId: string, opcoes: { compromisso: boolean }): Promise<ItemDaLinha | typeof SO_COM_ENTER | null> {
+export async function itemDaLinha(texto: string, salaId: string, opcoes: { compromisso: boolean; pastaId?: string }): Promise<ItemDaLinha | typeof SO_COM_ENTER | null> {
   const itens = await interpretar(texto);
   if (itens.length !== 1) return null;
   const item = itens[0];
   if ((!item.data || item.diaAssumido) && !item.semana) return null;
   if (item.tipo === 'compromisso' && !opcoes.compromisso) return SO_COM_ENTER;
-  const { certeza: _certeza, pessoaNova: _nova, termoSala: _termo, pessoaNome: _nome, diaAssumido: _assumido, ...puro } = item;
-  const criado = await criarItem({ ...puro, salaId });
+  const {
+    certeza: _certeza, pessoaNova: _nova, termoSala: _termo, pessoaNome: _nome, diaAssumido: _assumido,
+    pastaId: _pasta, temaNome: _tema, temaNaoAchado: _naoAchado, ...puro
+  } = item;
+  const criado = await criarItem({ ...puro, salaId, ...(opcoes.pastaId ? { pastaId: opcoes.pastaId } : {}) });
   const base = { titulo: item.titulo, data: item.data, semana: item.semana, inicio: item.inicio, desfazer: criado.desfazer };
   return criado.tarefa
     ? { ...base, itemId: criado.tarefa.id, tipo: 'tarefa' }

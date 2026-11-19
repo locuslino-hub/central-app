@@ -53,6 +53,13 @@ export type Tarefa = Base & {
   marcar: boolean;
   emailId?: string;
   adiadaAte?: string;
+  /**
+   * Pasta comum (tema) a que a tarefa pertence (V02, Tarefa 17). Só pontos para
+   * a pasta: apagar a pasta não regrava a tarefa, que continua viva na sala; sem
+   * pasta viva com este id o campo simplesmente não é usado. Mudar a sala da
+   * tarefa o tira (a pasta é de uma sala só).
+   */
+  pastaId?: string;
 };
 
 export type Palavra = Base & { termo: string; salaId: string };
@@ -62,6 +69,8 @@ export type Documento = Base & {
   url: string;
   salaId?: string;
   pessoaId?: string;
+  /** Pasta comum (tema) em que foi guardado (V02, Tarefa 17); ver `Tarefa.pastaId`. */
+  pastaId?: string;
   arquivado: boolean;
 };
 
@@ -73,7 +82,8 @@ export type Bloco = {
   itemId?: string;
 };
 
-export type Pagina = Base & { salaId: string; titulo: string; blocos: Bloco[] };
+/** `pastaId`: a pasta comum (tema) em que a página foi criada (V02, Tarefa 17); ver `Tarefa.pastaId`. */
+export type Pagina = Base & { salaId: string; pastaId?: string; titulo: string; blocos: Bloco[] };
 
 export type EstadoEmail = Base & { feito: boolean; adiadaAte?: string };
 
@@ -124,6 +134,42 @@ export type CorDaSala = Base & { chave: string; salaId: string | null };
  */
 export type AguaRegistro = Base & { data: string; hora: string; ml: number };
 
+/**
+ * Ideia capturada por voz ou texto (V02). `nova`: ainda sem destino; `atribuida`:
+ * o dono escolheu a sala; `tarefa`: já virou tarefa. `audioId` é o arquivo no
+ * Drive (só se ele ligou "Gravar áudio"). Coleção própria: a antiga `rascunhos`
+ * foi tirada (C-16) e continua ignorada.
+ */
+export type Ideia = Base & {
+  texto: string;
+  salaId?: string | null;
+  estado: 'nova' | 'atribuida' | 'tarefa';
+  /** A tarefa criada a partir desta ideia (id gravado antes de criá-la, para repetir sem duplicar). */
+  tarefaId?: string;
+  audioId?: string;
+  audioSegundos?: number;
+};
+
+export type TipoDePasta = 'lista' | 'registro' | 'planilha' | 'comum';
+
+/**
+ * Pasta dentro de uma sala (V02). `planilhaId` (só nas que têm planilha) é a
+ * planilha Google no Drive do dono; vive aqui e nunca no código.
+ */
+export type Pasta = Base & {
+  salaId: string;
+  tipo: TipoDePasta;
+  nome: string;
+  ordem: number;
+  planilhaId?: string;
+  modelo?: 'compras' | 'consumo' | 'financeiro';
+  servico?: 'agua' | 'luz' | 'gas';
+  unidade?: 'm³' | 'kWh';
+  /** Dia do mês (1 a 31) em que se envia a leitura ao portal. */
+  diaDeEnvio?: number;
+  categorias?: string[];
+};
+
 export type Colecoes = {
   salas: Sala;
   pessoas: Pessoa;
@@ -136,6 +182,8 @@ export type Colecoes = {
   eventosFeitos: EventoFeito;
   coresDasSalas: CorDaSala;
   agua: AguaRegistro;
+  ideias: Ideia;
+  pastas: Pasta;
 };
 
 export type Colecao = keyof Colecoes;
@@ -233,7 +281,32 @@ export type PendenteMarcarTarefaGoogle = ControleDaFila & {
 };
 export type PendenteEspelho = PendenteEspelharTarefa | PendenteMarcarEventoFeito | PendenteMarcarTarefaGoogle;
 
-export type Pendente = PendenteRegistro | PendenteAgenda | PendenteEspelho;
+/**
+ * Planilhas da Casa (V02, Tarefa 10): o que ainda não chegou à planilha do Drive.
+ * O id da linha é do cliente: o script não duplica uma linha com o mesmo id,
+ * então reenviar nunca repete. Mesmas tentativas e limite das ações de agenda.
+ * - `anexar`: uma linha nova no fim da planilha.
+ * - `atualizar`: muda células de uma linha já enviada (o "desfeito" de um anexo
+ *   enviado fica aqui quando não há rede; nunca se apaga linha).
+ */
+export type PendentePlanilha = ControleDaFila & {
+  seq: number;
+  tipo: 'planilha';
+  acao: 'anexar' | 'atualizar';
+  planilhaId: string;
+  idDaLinha: string;
+  valores: Record<string, string>;
+  /**
+   * Só em `atualizar`: o que o app tinha lido nas colunas mudadas, antes da
+   * mudança. O script o compara com a planilha e responde conflito se alguém
+   * mexeu nesse meio tempo (a entrada fica na fila, com tentativas contadas).
+   */
+  antes?: Record<string, string>;
+  /** A última tentativa deu conflito (a linha mudou em outro lugar). "Tentar de novo" a envia sem `antes`. */
+  conflito?: boolean;
+};
+
+export type Pendente = PendenteRegistro | PendenteAgenda | PendenteEspelho | PendentePlanilha;
 
 /** `remota`: a escrita veio de outro aparelho, pela sincronia. */
 export type Mudanca = { colecao: Colecao; id: string; remota?: true };

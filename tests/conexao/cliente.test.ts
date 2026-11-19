@@ -139,6 +139,17 @@ describe('chamar', () => {
 });
 
 describe('tempo limite', () => {
+  it('chamar aceita um limite próprio (ex.: 120 s para áudio); sem ele, 30 s', async () => {
+    await salvarConexao(CONEXAO);
+    respondeCom(JSON.stringify({ ok: true, dados: {} }));
+    const espia = vi.spyOn(globalThis, 'setTimeout');
+    await chamar('salvarAudio', {}, { tempoLimiteMs: 120_000 });
+    await chamar('ping');
+    const atrasos = espia.mock.calls.map((c) => c[1]);
+    expect(atrasos).toContain(120_000);
+    expect(atrasos).toContain(30_000);
+  });
+
   it('aos 30 s desiste e lança ErroConexao, não antes', async () => {
     ficaPendente();
     vi.useFakeTimers();

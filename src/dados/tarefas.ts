@@ -85,11 +85,12 @@ const diaExiste = (dia: string) => {
  * Tarefa escrita pelo dono, sem passar pelo chat: Sem prazo, ou do dia dado.
  * Título vazio ou dia que não existe: `undefined`, sem escrever. A sala fica
  * em branco (o dono a escolhe ao editar), salvo quando quem chama já sabe: a
- * tarefa que vem de um e-mail (`emailId`) leva a sala e a pessoa dele.
+ * tarefa que vem de um e-mail (`emailId`) leva a sala e a pessoa dele; a que
+ * nasce numa pasta comum (tema) leva a sala e o `pastaId` dela.
  */
 export async function criarTarefa(
   titulo: string,
-  { data, salaId, pessoaId, emailId }: { data?: string; salaId?: string | null; pessoaId?: string; emailId?: string } = {},
+  { data, salaId, pessoaId, emailId, pastaId }: { data?: string; salaId?: string | null; pessoaId?: string; emailId?: string; pastaId?: string } = {},
 ): Promise<Tarefa | undefined> {
   const limpo = titulo.trim();
   if (!limpo || (data !== undefined && !diaExiste(data))) return undefined;
@@ -98,6 +99,7 @@ export async function criarTarefa(
     salaId: salaId ?? null,
     ...(pessoaId !== undefined ? { pessoaId } : {}),
     ...(emailId !== undefined ? { emailId } : {}),
+    ...(pastaId ? { pastaId } : {}),
     ...(data !== undefined ? { data } : {}),
     duracaoMin: 60,
     duracaoConfirmada: false,
@@ -129,7 +131,14 @@ export async function editarTarefa(id: string, edicao: Edicao): Promise<boolean>
   return !!(await atualizar(id, (atual) => {
     let nova: Tarefa = { ...atual };
     if (titulo !== undefined) nova.titulo = titulo;
-    if (edicao.salaId !== undefined) nova.salaId = edicao.salaId;
+    if (edicao.salaId !== undefined) {
+      // A pasta comum é de uma sala só: noutra sala a tarefa deixa o tema.
+      if (edicao.salaId !== atual.salaId && nova.pastaId !== undefined) {
+        const { pastaId: _tema, ...semTema } = nova;
+        nova = semTema as Tarefa;
+      }
+      nova.salaId = edicao.salaId;
+    }
     const quando = edicao.quando;
     if (quando && !atual.prazoHora) {
       const { data: _data, semana: _semana, semanaVencida: _vencida, ...resto } = nova;

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
+import { contarNovas } from '../dados/ideias';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
 import { lerNome, NOME_MUDOU } from '../dados/nome';
-import type { AguaRegistro, Colecoes, Config, CorDaSala, Documento, EstadoEmail, EventoFeito, Pagina, Palavra, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { AguaRegistro, Colecoes, Config, CorDaSala, Documento, EstadoEmail, EventoFeito, Ideia, Pagina, Palavra, Pasta, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -29,6 +30,32 @@ export function useTela(): Tela {
     return () => { if (typeof window !== 'undefined') window.removeEventListener('resize', medir); };
   }, []);
   return tela;
+}
+
+/** O aparelho é "celular" abaixo desta menor medida da tela física, em px do CSS. */
+export const LARGURA_FISICA_DO_CELULAR = 700;
+
+/**
+ * O aparelho em mãos é um celular: o toque é o ponteiro principal (`(pointer: coarse)`) E a menor medida da tela física
+ * (não da janela) é menor que 700 px. Janela estreita ou zoom de 200 a 400% no computador não faz do computador um celular.
+ */
+export function ehAparelhoCelular(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  if (!window.matchMedia('(pointer: coarse)').matches) return false;
+  const medidas = [window.screen?.width, window.screen?.height].filter((m): m is number => typeof m === 'number' && m > 0);
+  return medidas.length > 0 && Math.min(...medidas) < LARGURA_FISICA_DO_CELULAR;
+}
+
+/** Se o aparelho é um celular (ver `ehAparelhoCelular`). Só o Financeiro e o link da planilha da lista dependem dele; o resto do layout segue `useTela`. */
+export function useAparelhoCelular(): boolean {
+  const [celular, setCelular] = useState(ehAparelhoCelular);
+  useEffect(() => {
+    const medir = () => setCelular(ehAparelhoCelular());
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
+  return celular;
 }
 
 // ---- Rota e data ----
@@ -104,7 +131,7 @@ export function useTituloDaAba(titulo: string) {
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
 function useLista<
-  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos' | 'coresDasSalas' | 'agua',
+  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos' | 'coresDasSalas' | 'agua' | 'ideias' | 'pastas',
 >(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
@@ -135,6 +162,30 @@ export function useSalas(): Sala[] {
 export function useSala(id: string | undefined): Sala | null | undefined {
   const lista = useLista('salas');
   return lista && (lista.find((sala) => sala.id === id) ?? null);
+}
+
+/** As pastas vivas da sala, por ordem. `undefined` enquanto lê. */
+export function usePastasDaSala(salaId: string): Pasta[] | undefined {
+  const lista = useLista('pastas');
+  return lista
+    ?.filter((pasta) => pasta.salaId === salaId)
+    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/** Uma pasta viva. `undefined` enquanto lê; `null` se não existe (ou foi apagada, ou é de outra sala). */
+export function usePasta(salaId: string, pastaId: string): Pasta | null | undefined {
+  const lista = useLista('pastas');
+  return lista && (lista.find((pasta) => pasta.id === pastaId && pasta.salaId === salaId) ?? null);
+}
+
+/** As ideias vivas, de todos os estados. `undefined` enquanto lê. */
+export function useIdeias(): Ideia[] | undefined {
+  return useLista('ideias');
+}
+
+/** Quantas ideias esperam um destino (o contador do menu). Zero enquanto lê. */
+export function useNovasIdeias(): number {
+  return contarNovas(useLista('ideias') ?? []);
 }
 
 /** As tarefas vivas (nenhuma apagada). `undefined` enquanto lê. */

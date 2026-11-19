@@ -6,6 +6,7 @@ export const contar = (n: number, um: string, varios: string): string => `${n} $
 
 export const nTarefas = (n: number) => contar(n, 'tarefa', 'tarefas');
 export const nEmails = (n: number) => contar(n, 'e-mail', 'e-mails');
+export const nIdeiasNovas = (n: number) => contar(n, 'ideia nova', 'ideias novas');
 export const nItens = (n: number) => contar(n, 'item', 'itens');
 
 /** "a", "a e b", "a, b e c". */

@@ -10,10 +10,13 @@ import { CoresDoGoogle } from './CoresDoGoogle';
 import { ConfigIA } from './ConfigIA';
 import { Exportar } from './Exportar';
 import { useTituloDaAba } from './hooks';
+import { Ideias } from './Ideias';
 import { Mes } from './Mes';
 import { Painel } from './Painel';
 import { Pagina } from './Pagina';
+import { PaginaDaPasta } from './PaginaDaPasta';
 import { Pessoa } from './Pessoa';
+import { PodeFalar } from './PodeFalar';
 import { Quadro } from './Quadro';
 import { Sala } from './Sala';
 import { Salas } from './Salas';
@@ -122,8 +125,22 @@ export function Vista({ rota }: { rota: RotaAtual }) {
           </div>
         </Pagina>
       );
+    case 'falar':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <PodeFalar />
+        </Pagina>
+      );
+    case 'ideias':
+      return (
+        <Pagina titulo={rota.titulo}>
+          <Ideias />
+        </Pagina>
+      );
     case 'sala':
       return <Sala key={rota.param} id={rota.param!} />;
+    case 'pasta':
+      return <PaginaDaPasta key={`${rota.param}/${rota.pastaId}`} salaId={rota.param!} pastaId={rota.pastaId!} />;
     case 'pessoa':
       return <Pessoa key={rota.param} id={rota.param!} />;
     case 'nao-encontrada':

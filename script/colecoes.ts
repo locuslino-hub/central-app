@@ -23,6 +23,7 @@ type Tipo =
   | 'texto'
   | 'texto?'
   | 'textoOuNulo'
+  | 'textoOuNulo?'
   | 'url'
   | 'dia'
   | 'dia?'
@@ -34,7 +35,20 @@ type Tipo =
   | 'blocos?'
   | 'booleano'
   | 'booleano?'
-  | 'chaveDeCor';
+  | 'chaveDeCor'
+  | 'estadoDeIdeia'
+  | 'textoDeIdeia'
+  | 'id'
+  | 'id?'
+  | 'idDeAudio?'
+  | 'segundosDeAudio?'
+  | 'tipoDePasta'
+  | 'nomeDePasta'
+  | 'idDePlanilha?'
+  | 'modeloDePlanilha?'
+  | 'servicoDeConsumo?'
+  | 'unidadeDeConsumo?'
+  | 'diaDeEnvio?';
 
 /**
  * Campos conferidos em cada coleção: todos os que o app grava (ver
@@ -63,10 +77,12 @@ export const ESQUEMAS = {
     marcar: 'booleano?',
     emailId: 'texto?',
     adiadaAte: 'texto?',
+    /** Pasta comum (tema) da tarefa (V02, Tarefa 17). */
+    pastaId: 'id?',
   },
   palavras: { termo: 'texto', salaId: 'texto' },
-  documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?', arquivado: 'booleano?' },
-  paginas: { salaId: 'texto', titulo: 'texto', blocos: 'blocos?' },
+  documentos: { titulo: 'texto', url: 'url', salaId: 'texto?', pessoaId: 'texto?', pastaId: 'id?', arquivado: 'booleano?' },
+  paginas: { salaId: 'texto', pastaId: 'id?', titulo: 'texto', blocos: 'blocos?' },
   estadosEmail: { feito: 'booleano?', adiadaAte: 'texto?' },
   /** `diaFechado`: o dia (AAAA-MM-DD) em que o dono fechou o dia (Tarefa 16). */
   config: { fimDoDia: 'texto', diaFechado: 'dia?' },
@@ -82,6 +98,32 @@ export const ESQUEMAS = {
   coresDasSalas: { chave: 'chaveDeCor', salaId: 'textoOuNulo' },
   /** Um gole por registro: dois aparelhos registrando ao mesmo tempo somam. */
   agua: { data: 'dia', hora: 'hora', ml: 'ml' },
+  /** Captura rápida (V02, Tarefa 4). `salaId` ausente ou nulo: sem sala ainda. `audioId`: arquivo no Drive. */
+  ideias: {
+    texto: 'textoDeIdeia',
+    salaId: 'textoOuNulo?',
+    estado: 'estadoDeIdeia',
+    /** A tarefa que nasceu da ideia: virar tarefa duas vezes não duplica. */
+    tarefaId: 'id?',
+    audioId: 'idDeAudio?',
+    audioSegundos: 'segundosDeAudio?',
+  },
+  /**
+   * Pasta dentro de uma sala (V02, Tarefa 9). `planilhaId` é dado do dono (Drive dele): só vive aqui,
+   * nunca no código. Pasta `comum` não tem planilha.
+   */
+  pastas: {
+    salaId: 'id',
+    tipo: 'tipoDePasta',
+    nome: 'nomeDePasta',
+    ordem: 'numero?',
+    planilhaId: 'idDePlanilha?',
+    modelo: 'modeloDePlanilha?',
+    servico: 'servicoDeConsumo?',
+    unidade: 'unidadeDeConsumo?',
+    diaDeEnvio: 'diaDeEnvio?',
+    categorias: 'listaDeTexto?',
+  },
 } as const satisfies Record<string, Record<string, Tipo>>;
 
 export type NomeDaColecao = keyof typeof ESQUEMAS;
@@ -105,6 +147,34 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || typeof valor === 'string';
     case 'textoOuNulo':
       return valor === null || typeof valor === 'string';
+    case 'textoOuNulo?':
+      return valor === undefined || valor === null || typeof valor === 'string';
+    case 'textoDeIdeia':
+      return typeof valor === 'string' && valor.length >= 1 && valor.length <= 2000;
+    case 'id':
+      return typeof valor === 'string' && ID_VALIDO.test(valor);
+    case 'tipoDePasta':
+      return valor === 'lista' || valor === 'registro' || valor === 'planilha' || valor === 'comum';
+    case 'nomeDePasta':
+      return typeof valor === 'string' && valor.length >= 1 && valor.length <= 100;
+    case 'idDePlanilha?':
+      return valor === undefined || (typeof valor === 'string' && /^[\w-]{1,200}$/.test(valor));
+    case 'modeloDePlanilha?':
+      return valor === undefined || valor === 'compras' || valor === 'consumo' || valor === 'financeiro';
+    case 'servicoDeConsumo?':
+      return valor === undefined || valor === 'agua' || valor === 'luz' || valor === 'gas';
+    case 'unidadeDeConsumo?':
+      return valor === undefined || valor === 'm³' || valor === 'kWh';
+    case 'diaDeEnvio?':
+      return valor === undefined || (typeof valor === 'number' && Number.isInteger(valor) && valor >= 1 && valor <= 31);
+    case 'id?':
+      return valor === undefined || (typeof valor === 'string' && ID_VALIDO.test(valor));
+    case 'idDeAudio?':
+      return valor === undefined || (typeof valor === 'string' && /^[\w-]{1,100}$/.test(valor));
+    case 'segundosDeAudio?':
+      return valor === undefined || (typeof valor === 'number' && Number.isFinite(valor) && valor >= 0 && valor <= 600);
+    case 'estadoDeIdeia':
+      return valor === 'nova' || valor === 'atribuida' || valor === 'tarefa';
     case 'url':
       return typeof valor === 'string' && URL_VALIDA.test(valor);
     case 'dia':

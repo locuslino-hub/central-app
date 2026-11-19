@@ -32,9 +32,9 @@ export class ErroScript extends Error {
   }
 }
 
-async function postar(conexao: Conexao, acao: string, dados: object): Promise<string> {
+async function postar(conexao: Conexao, acao: string, dados: object, tempoLimiteMs: number): Promise<string> {
   const controle = new AbortController();
-  const relogio = setTimeout(() => controle.abort(), TEMPO_LIMITE_MS);
+  const relogio = setTimeout(() => controle.abort(), tempoLimiteMs);
   try {
     const resposta = await fetch(conexao.url, {
       method: 'POST',
@@ -72,15 +72,16 @@ function interpretar<T>(texto: string): T {
   throw new ErroScript('interno');
 }
 
-async function chamarEm<T>(conexao: Conexao, acao: string, dados: object): Promise<T> {
+async function chamarEm<T>(conexao: Conexao, acao: string, dados: object, tempoLimiteMs = TEMPO_LIMITE_MS): Promise<T> {
   if (!enderecoAceito(conexao.url)) throw new ErroConexao();
-  return interpretar<T>(await postar(conexao, acao, dados));
+  return interpretar<T>(await postar(conexao, acao, dados, tempoLimiteMs));
 }
 
-export async function chamar<T>(acao: string, dados: object = {}): Promise<T> {
+/** `tempoLimiteMs`: só para pedidos pesados (áudio), que levam mais que os 30 s padrão. */
+export async function chamar<T>(acao: string, dados: object = {}, opcoes: { tempoLimiteMs?: number } = {}): Promise<T> {
   const conexao = await lerConexao().catch(() => null);
   if (!conexao) throw new ErroConexao();
-  return chamarEm<T>(conexao, acao, dados);
+  return chamarEm<T>(conexao, acao, dados, opcoes.tempoLimiteMs);
 }
 
 /** Testa uma conexão, salva ou não, e devolve quanto levou em milissegundos. */

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { publicar } from '../../script/publicar.mjs';
+import { enviar, implantar, publicar } from '../../script/publicar.mjs';
 
 const ID_FICTICIO = 'AKfycb-id_ficticio-123';
 
@@ -14,8 +14,28 @@ function cenario(opcoes: { env?: Record<string, string>; arquivo?: string | null
     },
     rodar: (argumentos: string[]) => void comandos.push(argumentos),
   };
-  return { comandos, executar: () => publicar(deps) };
+  return { comandos, executar: () => publicar(deps), enviar: () => enviar(deps), implantar: () => implantar(deps) };
 }
+
+describe('enviar e implantar (em separado, para autorizar no meio)', () => {
+  it('enviar só faz push, sem precisar do id da implantação', () => {
+    const { comandos, enviar: rodarEnviar } = cenario({ arquivo: null });
+    rodarEnviar();
+    expect(comandos).toEqual([['push', '-f']]);
+  });
+
+  it('implantar só faz deploy, sem push', () => {
+    const { comandos, implantar: rodarImplantar } = cenario({ arquivo: ID_FICTICIO });
+    rodarImplantar();
+    expect(comandos).toEqual([['deploy', '-i', ID_FICTICIO]]);
+  });
+
+  it('implantar sem id não roda nada', () => {
+    const { comandos, implantar: rodarImplantar } = cenario({ arquivo: null });
+    expect(rodarImplantar).toThrow(/implantação/);
+    expect(comandos).toEqual([]);
+  });
+});
 
 describe('publicar', () => {
   it('envia o código e só depois atualiza a implantação', () => {

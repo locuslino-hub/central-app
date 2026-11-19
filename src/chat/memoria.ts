@@ -18,12 +18,14 @@
 // mesmo tempo não criam a mesma pessoa ou palavra duas vezes neste aparelho.
 
 import { listar, salvar } from '../dados/loja';
-import type { Palavra, Pessoa, Sala } from '../dados/tipos';
+import type { Palavra, Pasta, Pessoa, Sala } from '../dados/tipos';
 import { normalizar } from './datas';
-import type { Memoria } from './regras';
+import type { Memoria, Tema } from './regras';
 
 /** A memória que o chat usa: a de `regras.ts` (R7) e o que o cartão precisa a mais. */
 export type MemoriaDoChat = Memoria & {
+  /** As pastas comuns (temas) vivas, por ordem (Tarefa 17). */
+  temas(): Tema[];
   /** O termo guardado (com os acentos dele) que decidiu a sala nesta frase. */
   termoDaSala(frase: string): string | null;
   pessoaPorId(id: string): Pessoa | undefined;
@@ -67,10 +69,16 @@ function partesDoNome(nome: string): string[] {
 }
 
 /** A memória a partir de listas já lidas (o chat lê da loja; a tela usa o que já tem). */
-export function montarMemoria(pessoas: Pessoa[], palavras: Palavra[], salas: Sala[]): MemoriaDoChat {
+export function montarMemoria(pessoas: Pessoa[], palavras: Palavra[], salas: Sala[], pastas: Pasta[] = []): MemoriaDoChat {
   const vivas = <T extends { apagado?: boolean }>(lista: T[]) => lista.filter((x) => !x.apagado);
   pessoas = vivas(pessoas);
   palavras = vivas(palavras);
+  // Temas: só pasta comum viva, de sala que existe, por ordem (o empate de nomes iguais fica com a primeira).
+  const idsDeSalas = new Set(vivas(salas).map((sala) => sala.id));
+  const temas = vivas(pastas)
+    .filter((pasta) => pasta.tipo === 'comum' && idsDeSalas.has(pasta.salaId))
+    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome, 'pt-BR'))
+    .map(({ id, nome, salaId }) => ({ id, nome, salaId }));
   const nomesDeSala = new Set(vivas(salas).map((sala) => comparavel(sala.nome)));
 
   /** A palavra que aparece primeiro na frase; na mesma posição, a mais longa. */
@@ -112,6 +120,10 @@ export function montarMemoria(pessoas: Pessoa[], palavras: Palavra[], salas: Sal
       return palavraDa(frase)?.salaId ?? null;
     },
 
+    temas() {
+      return temas;
+    },
+
     termoDaSala(frase) {
       return palavraDa(frase)?.termo ?? null;
     },
@@ -150,8 +162,8 @@ function emOrdem<T>(gravar: () => Promise<T>): Promise<T> {
 
 /** Lê pessoas, palavras e salas da loja. Ler de novo a cada frase pega o que veio do outro aparelho. */
 export async function carregarMemoria(): Promise<MemoriaDoChat> {
-  const [pessoas, palavras, salas] = await Promise.all([listar('pessoas'), listar('palavras'), listar('salas')]);
-  return montarMemoria(pessoas, palavras, salas);
+  const [pessoas, palavras, salas, pastas] = await Promise.all([listar('pessoas'), listar('palavras'), listar('salas'), listar('pastas')]);
+  return montarMemoria(pessoas, palavras, salas, pastas);
 }
 
 /**

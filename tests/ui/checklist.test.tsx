@@ -29,6 +29,13 @@ describe('Checklist do dia', () => {
     );
   });
 
+  it('tarefa de um tema (pastaId) aparece na checklist, como qualquer outra', async () => {
+    await criar('Revisar capítulo de métodos', { data: '2026-11-05', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia' });
+    render(<Checklist />);
+    expect(await checkbox('Revisar capítulo de métodos')).toBeTruthy();
+    expect(await within(linha('Revisar capítulo de métodos')).findByText('Doutoramento')).toBeTruthy();
+  });
+
   it('tarefa de ontem aberta aparece hoje, mesmo antes de a virada gravar', async () => {
     await criar('Validar dados do projeto Aurora', { data: '2026-11-04' });
     render(<Checklist />);

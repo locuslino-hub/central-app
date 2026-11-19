@@ -22,6 +22,11 @@ const tarefa = (titulo: string) => ({
 });
 
 describe('Exportar', () => {
+  it('avisa que a cópia inclui as ideias e os endereços das planilhas', () => {
+    render(<Exportar baixar={vi.fn()} />);
+    expect(screen.getByText('A cópia inclui as suas ideias e os endereços das planilhas.')).toBeTruthy();
+  });
+
   it('baixa um arquivo com todas as coleções e avisa em região viva', async () => {
     await salvar('tarefas', tarefa('Mandar mensagem para a Marina'));
     const baixar = vi.fn();

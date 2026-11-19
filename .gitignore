@@ -11,3 +11,4 @@ script/.implantacao
 .env*
 creds*.json
 client_secret*.json
+.termos-proibidos.txt

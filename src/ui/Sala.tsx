@@ -20,6 +20,7 @@ import { notasPorGuardar } from '../dados/notas';
 import { Notas } from './Notas';
 import { NovaTarefa } from './NovaTarefa';
 import { Pagina } from './Pagina';
+import { PastasDaSala } from './PastasDaSala';
 import { juntar, nEmails, nTarefas } from './plural';
 import { AvisoDeEmail, EstadoDosEmails, ListaDeEmails } from './PorResponder';
 import { nomeDoDia } from './quando';
@@ -122,6 +123,8 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
       <p class="sala-faixa">
         {resumo.length === 0 ? ' ' : `${juntar(resumo)}.`}
       </p>
+
+      <PastasDaSala sala={sala} />
 
       <div class="sala-grade">
         <div class="sala-coluna">

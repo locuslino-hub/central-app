@@ -4,6 +4,8 @@ import { lerConexao } from './conexao/guarda';
 import { enfileirarEspelhosQueFaltam, largarMigracoesDaFila, semear, semearPalavras } from './dados/loja';
 import { iniciarSincronia, puxouNaUltimaRodada, sincronizar } from './dados/sincronia';
 import { iniciarVirada } from './dados/virada';
+import { marcarProblemaDeAudio } from './voz/audios-pendentes';
+import { reenviarAudiosPendentes } from './voz/gravador';
 
 /** Pede ao navegador que não apague os dados do app quando faltar espaço. Sem resposta na tela. */
 function pedirArmazenamentoPersistente() {
@@ -12,6 +14,27 @@ function pedirArmazenamentoPersistente() {
   } catch {
     // Navegador sem a API: o app segue igual.
   }
+}
+
+let ouvindoARede = false;
+
+/**
+ * Áudios do Pode falar que esperavam rede seguem para o Drive ao abrir o app e
+ * quando a internet volta. Sem rede ou sem conexão guardada, a rodada para e o
+ * áudio continua guardado neste aparelho. O único áudio tirado da fila sem ir ao
+ * Drive é o de ideia apagada ou que não existe mais (privacidade).
+ */
+function reenviarAudios() {
+  reenviarAudiosPendentes()
+    .then(({ descartados, falhas }) => {
+      // O que o Drive recusou de vez sai da fila: fica anotado, e a ideia mostra "Áudio não enviado".
+      // (Os que a fila desistiu de reenviar, `falhas`, continuam guardados e a ideia os acha por lá.)
+      for (const { id } of descartados) marcarProblemaDeAudio(id, 'recusado').catch((erro: unknown) => console.error('Não consegui anotar o áudio recusado', erro));
+      // No registro, sem dado pessoal:
+      if (descartados.length) console.warn(`${descartados.length} áudio(s) recusado(s) pelo Drive e tirado(s) da fila`);
+      if (falhas.length) console.warn(`${falhas.length} áudio(s) não foram enviados e seguem guardados neste aparelho`);
+    })
+    .catch((erro: unknown) => console.error('Não consegui reenviar os áudios guardados', erro));
 }
 
 export function iniciarApp() {
@@ -40,4 +63,9 @@ export function iniciarApp() {
     },
   });
   pedirArmazenamentoPersistente();
+  reenviarAudios();
+  if (!ouvindoARede && typeof window !== 'undefined') {
+    ouvindoARede = true;
+    window.addEventListener('online', reenviarAudios);
+  }
 }

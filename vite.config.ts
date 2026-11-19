@@ -85,7 +85,7 @@ export default defineConfig({
           }),
         ],
         navigateFallback: 'index.html',
-        // O teste é feito com caminho e busca (`?…`): a página de teste nunca vira o app.
+        // O teste é feito com caminho e busca (`?…`): páginas de teste nunca viram o app.
         navigateFallbackDenylist: [/\/teste-[^/]*\.html(\?|$)/],
         cleanupOutdatedCaches: true,
         skipWaiting: true,

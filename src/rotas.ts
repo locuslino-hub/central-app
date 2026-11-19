@@ -13,12 +13,15 @@ export type IdDaRota =
   | 'ano'
   | 'salas'
   | 'sala'
+  | 'pasta'
   | 'cores'
   | 'pessoa'
   | 'caixa'
   | 'quadro'
   | 'atividades'
   | 'chat'
+  | 'falar'
+  | 'ideias'
   | 'conectar'
   | 'ia'
   | 'nao-encontrada';
@@ -30,8 +33,10 @@ export const PAINEIS_DIREITOS: readonly Painel[] = ['agora', 'agua', 'chat'];
 export type RotaAtual = {
   id: IdDaRota;
   titulo: string;
-  /** Parte `:id` de `#/sala/:id` e `#/pessoa/:id`, já decodificada. */
+  /** Parte `:id` de `#/sala/:id`, `#/pessoa/:id` e `#/sala/:id/pasta/:pastaId` (a sala), já decodificada. */
   param?: string;
+  /** Só na pasta: a parte `:pastaId` de `#/sala/:id/pasta/:pastaId`, já decodificada. */
+  pastaId?: string;
   /** Semana, mês e ano: o dia pedido em `?d=` (existe de verdade). Sem ele, vale hoje. */
   data?: string;
   /** Para onde o link "Voltar" leva, nas páginas que não estão no menu. */
@@ -77,15 +82,22 @@ const ROTAS: Record<Exclude<IdDaRota, 'nao-encontrada'>, Definicao> = {
   },
   salas: { caminho: 'salas', titulo: fixo('Salas') },
   sala: { caminho: 'sala/:id', titulo: fixo('Sala'), voltarPara: '#/salas' },
+  // Duas partes variáveis: resolverRota e hrefDe tratam esta rota à parte (a volta é a sala dela).
+  pasta: { caminho: 'sala/:id/pasta/:pastaId', titulo: fixo('Pasta') },
   cores: { caminho: 'cores', titulo: fixo('Cores do Google'), voltarPara: '#/salas' },
   pessoa: { caminho: 'pessoa/:id', titulo: fixo('Pessoa'), voltarPara: '#/salas' },
   caixa: { caminho: 'caixa', titulo: fixo('Caixa') },
   quadro: { caminho: 'quadro', titulo: fixo('Quadro') },
   atividades: { caminho: 'atividades', titulo: fixo('Atividades') },
   chat: { caminho: 'chat', titulo: fixo('Chat') },
+  falar: { caminho: 'falar', titulo: fixo('Pode falar') },
+  ideias: { caminho: 'ideias', titulo: fixo('Ideias') },
   conectar: { caminho: 'conectar', titulo: fixo('Conectar aparelho'), voltarPara: '#/' },
   ia: { caminho: 'ia', titulo: fixo('IA local'), voltarPara: '#/' },
 };
+
+/** `sala/:id/pasta/:pastaId`, sem barra dentro de cada id. */
+const PASTA_DA_SALA = /^sala\/([^/]+)\/pasta\/([^/]+)$/;
 
 /** Páginas que deixaram de existir e para onde levam agora. */
 const ENDERECOS_ANTIGOS = new Map<string, string>([['sem-prazo', 'atividades']]);
@@ -134,6 +146,14 @@ export function resolverRota(hash: string, agora: Date = new Date()): RotaAtual 
   // Endereços antigos: a página Sem prazo virou o grupo "Sem prazo" de Atividades.
   const caminho = ENDERECOS_ANTIGOS.get(semBarra) ?? semBarra;
 
+  const pasta = PASTA_DA_SALA.exec(caminho);
+  if (pasta) {
+    const sala = decodificar(pasta[1]);
+    const pastaId = decodificar(pasta[2]);
+    if (sala === undefined || pastaId === undefined) return NAO_ENCONTRADA;
+    return { id: 'pasta', titulo: ROTAS.pasta.titulo(agora), param: sala, pastaId, voltarPara: hrefDe('sala', sala) };
+  }
+
   for (const [id, definicao] of Object.entries(ROTAS) as [Exclude<IdDaRota, 'nao-encontrada'>, Definicao][]) {
     if (!definicao.caminho.endsWith(':id')) {
       if (definicao.caminho !== caminho) continue;
@@ -152,9 +172,10 @@ export function resolverRota(hash: string, agora: Date = new Date()): RotaAtual 
 }
 
 /** O hash de uma rota. */
-export function hrefDe(id: Exclude<IdDaRota, 'nao-encontrada'>, param?: string): string {
+export function hrefDe(id: Exclude<IdDaRota, 'nao-encontrada'>, param?: string, pastaId?: string): string {
   const { caminho } = ROTAS[id];
-  const completo = param === undefined ? caminho : caminho.replace(':id', encodeURIComponent(param));
+  let completo = param === undefined ? caminho : caminho.replace(':id', encodeURIComponent(param));
+  if (pastaId !== undefined) completo = completo.replace(':pastaId', encodeURIComponent(pastaId));
   return `#/${completo}`;
 }
 

@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { hrefDe, type IdDaRota } from '../rotas';
 import { Icone, type NomeDoIcone } from './icones';
+import { Contagem } from './Contagem';
 
 type Destino = { id: Exclude<IdDaRota, 'nao-encontrada'>; icone: NomeDoIcone };
 
@@ -18,6 +19,7 @@ export const GRUPOS_DO_MAIS: { titulo: string; destinos: Destino[] }[] = [
   {
     titulo: 'Ver',
     destinos: [
+      { id: 'ideias', icone: 'ideias' },
       { id: 'agora', icone: 'agora' },
       { id: 'quadro', icone: 'quadro' },
       { id: 'atividades', icone: 'atividades' },
@@ -37,9 +39,16 @@ export const ROTAS_DO_MAIS = new Set<IdDaRota>(GRUPOS_DO_MAIS.flatMap((g) => g.d
 
 export const ID_DA_FOLHA = 'folha-mais';
 
-type BotaoProps = { aberto: boolean; dentro: boolean; aoAlternar: () => void; botaoRef: { current: HTMLButtonElement | null } };
+type BotaoProps = {
+  aberto: boolean;
+  dentro: boolean;
+  /** Ideias novas: o número aparece no botão fechado, para quem está no celular saber que há o que arrumar. */
+  contagem?: number;
+  aoAlternar: () => void;
+  botaoRef: { current: HTMLButtonElement | null };
+};
 
-export function BotaoMais({ aberto, dentro, aoAlternar, botaoRef }: BotaoProps) {
+export function BotaoMais({ aberto, dentro, contagem, aoAlternar, botaoRef }: BotaoProps) {
   return (
     <button
       type="button"
@@ -53,12 +62,15 @@ export function BotaoMais({ aberto, dentro, aoAlternar, botaoRef }: BotaoProps) 
     >
       <Icone nome="mais" />
       <span>Mais</span>
+      {contagem ? <Contagem n={contagem} classe="contagem-mais" /> : null}
     </button>
   );
 }
 
 type FolhaProps = {
   rotulo: (id: Destino['id']) => string;
+  /** Quantas pendências mostrar ao lado do nome (0 não mostra nada). */
+  contagem?: (id: Destino['id']) => number;
   rotaAtual: IdDaRota;
   /** `devolverFoco`: true quando fechou sem navegar (Esc, Fechar, fundo). */
   aoFechar: (devolverFoco: boolean) => void;
@@ -66,7 +78,7 @@ type FolhaProps = {
 
 const FOCAVEIS = 'a[href], button:not([disabled])';
 
-export function FolhaMais({ rotulo, rotaAtual, aoFechar }: FolhaProps) {
+export function FolhaMais({ rotulo, contagem, rotaAtual, aoFechar }: FolhaProps) {
   const folha = useRef<HTMLDivElement>(null);
 
   // Efeito de layout (roda antes da pintura): `useEffect` do Preact roda depois dela, e um Esc
@@ -133,6 +145,7 @@ export function FolhaMais({ rotulo, rotaAtual, aoFechar }: FolhaProps) {
                   >
                     <Icone nome={destino.icone} />
                     <span>{rotulo(destino.id)}</span>
+                    {contagem?.(destino.id) ? <Contagem n={contagem(destino.id)} /> : null}
                   </a>
                 </li>
               ))}

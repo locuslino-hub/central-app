@@ -26,7 +26,14 @@ interface ArquivoNoDrive {
   mimeType?: string;
   trashed: boolean;
   conteudo: string;
+  pais?: string[];
+  /** Falso = de outra pessoa (compartilhado comigo). */
+  dono?: boolean;
 }
+
+const TIPO_PASTA = 'application/vnd.google-apps.folder';
+/** Id que o Drive real dá à raiz do Meu Drive (nas consultas ela é "root"). */
+const RAIZ_DO_DRIVE = 'id-real-da-raiz';
 
 interface BlobFalso {
   getDataAsString(): string;
@@ -37,17 +44,19 @@ interface BlobFalso {
 function driveFalso() {
   const arquivos = new Map<string, ArquivoNoDrive>();
   const listas: string[] = [];
+  const movimentos: { id: string; addParents?: string; removeParents?: string }[] = [];
   let proximo = 0;
   let atualizacoes = 0;
   const Files = {
-    create(recurso: { name: string; mimeType?: string }, midia: BlobFalso) {
+    create(recurso: { name: string; mimeType?: string; parents?: string[] }, midia?: BlobFalso) {
       proximo += 1;
       const arquivo = {
         id: `arquivo-${proximo}`,
         name: recurso.name,
         mimeType: recurso.mimeType,
         trashed: false,
-        conteudo: midia.getDataAsString(),
+        conteudo: midia?.getDataAsString() ?? '',
+        pais: (recurso.parents ?? []).map((p) => (p === 'root' ? RAIZ_DO_DRIVE : p)),
       };
       arquivos.set(arquivo.id, arquivo);
       return { id: arquivo.id, name: arquivo.name };
@@ -56,14 +65,27 @@ function driveFalso() {
       const arquivo = arquivos.get(id);
       if (!arquivo) throw new Error('File not found');
       if (opcoes?.alt !== 'media') {
-        return { id, name: arquivo.name, trashed: arquivo.trashed, size: String(arquivo.conteudo.length), mimeType: arquivo.mimeType };
+        return {
+          id,
+          name: arquivo.name,
+          trashed: arquivo.trashed,
+          size: String(arquivo.conteudo.length),
+          mimeType: arquivo.mimeType,
+          ownedByMe: arquivo.dono !== false,
+          parents: arquivo.pais?.length ? [...arquivo.pais] : [RAIZ_DO_DRIVE],
+        };
       }
       // Como o Drive real (issue 149104685): alt=media no serviço avançado lança.
       const erro = new Error(`Response Code: 200. Message: ${arquivo.conteudo}`);
       erro.name = 'HttpResponseException';
       throw erro;
     },
-    update(recurso: { trashed?: boolean }, id: string, midia?: BlobFalso): unknown {
+    update(
+      recurso: { trashed?: boolean },
+      id: string,
+      midia?: BlobFalso | null,
+      opcoes?: { addParents?: string; removeParents?: string },
+    ): unknown {
       const arquivo = arquivos.get(id);
       if (!arquivo) throw new Error('File not found');
       if (recurso.trashed !== undefined) arquivo.trashed = recurso.trashed;
@@ -71,22 +93,38 @@ function driveFalso() {
         atualizacoes += 1;
         arquivo.conteudo = midia.getDataAsString();
       }
+      if (opcoes) {
+        movimentos.push({ id, ...opcoes });
+        const atuais = arquivo.pais?.length ? arquivo.pais : [RAIZ_DO_DRIVE];
+        const saem = new Set((opcoes.removeParents ?? '').split(',').filter(Boolean));
+        arquivo.pais = [...atuais.filter((p) => !saem.has(p)), ...(opcoes.addParents ? [opcoes.addParents] : [])];
+      }
       return { id };
     },
     list(opcoes: { q: string }) {
       listas.push(opcoes.q);
-      const nome = /name = '([^']+)'/.exec(opcoes.q)?.[1];
-      const prefixo = /name contains '([^']+)'/.exec(opcoes.q)?.[1];
+      const q = opcoes.q;
+      const nome = /name = '([^']+)'/.exec(q)?.[1];
+      const prefixo = /name contains '([^']+)'/.exec(q)?.[1];
+      const pai = /'([^']+)' in parents/.exec(q)?.[1];
+      const soPasta = q.includes(`mimeType = '${TIPO_PASTA}'`);
+      const semPasta = q.includes(`mimeType != '${TIPO_PASTA}'`);
+      const soDoDono = q.includes("'me' in owners");
       const files = [...arquivos.values()]
         .filter((a) => !a.trashed)
         .filter((a) => (nome ? a.name === nome : prefixo ? a.name.includes(prefixo) : true))
-        .map((a) => ({ id: a.id, name: a.name }));
+        .filter((a) => !pai || (pai === 'root' ? !a.pais?.length || a.pais.includes(RAIZ_DO_DRIVE) : !!a.pais?.includes(pai)))
+        .filter((a) => !soPasta || a.mimeType === TIPO_PASTA)
+        .filter((a) => !semPasta || a.mimeType !== TIPO_PASTA)
+        .filter((a) => !soDoDono || a.dono !== false)
+        .map((a) => ({ id: a.id, name: a.name, parents: a.pais?.length ? [...a.pais] : [RAIZ_DO_DRIVE] }));
       return { files };
     },
   };
   return {
     arquivos,
     listas,
+    movimentos,
     servico: { Files },
     get atualizacoes() {
       return atualizacoes;
@@ -251,7 +289,10 @@ function carregar({
         setProperty: (chave: string, valor: string) => void propriedades.set(chave, valor),
       }),
     },
+    // Planilhas: só a pergunta pela planilha ativa (o script não tem nenhuma).
+    SpreadsheetApp: { getActiveSpreadsheet: () => null },
     Utilities: {
+      base64Decode: (texto: string) => texto,
       newBlob: (dados: string, tipo: string): BlobFalso => ({
         getDataAsString: () => dados,
         getContentType: () => tipo,
@@ -316,6 +357,324 @@ function conectado() {
   return { ...carregado, pedir };
 }
 
+describe('autorizarV02', () => {
+  it('é função global no topo do arquivo, para o dono rodar pelo editor', () => {
+    expect(pacote).toMatch(/^function autorizarV02\(/m);
+  });
+
+  it('toca só Drive e Planilhas, registra a aprovação, cria só a pasta Central e não troca propriedades', () => {
+    const { globais, propriedades, registros, drive } = carregar();
+    globais.gerarCodigo();
+    const antes = new Map(propriedades);
+    (globais as unknown as { autorizarV02(): void }).autorizarV02();
+    expect(drive.listas.length).toBeGreaterThan(0);
+    expect([...drive.arquivos.values()].map((a) => [a.name, a.mimeType])).toEqual([['Central', TIPO_PASTA]]);
+    expect(propriedades).toEqual(antes);
+    expect(registros.at(-1)).toBe('Permissão V02 aprovada');
+  });
+
+  it('arruma os arquivos antigos (organizarPastaCentral) antes de registrar a aprovação', () => {
+    const { globais, registros, drive } = carregar();
+    drive.arquivos.set('dados', { id: 'dados', name: 'central-dados.json', trashed: false, conteudo: '{}' });
+    (globais as unknown as { autorizarV02(): void }).autorizarV02();
+    const central = [...drive.arquivos.values()].find((a) => a.name === 'Central')!;
+    expect(drive.arquivos.get('dados')!.pais).toEqual([central.id]);
+    expect(registros.at(-1)).toBe('Permissão V02 aprovada');
+    expect(registros.some((r) => /arquivo de dados movido/.test(r))).toBe(true);
+  });
+
+  it('se a organização falha (duas pastas Central), a autorização conclui mesmo assim', () => {
+    const { globais, registros, drive } = carregar();
+    for (const id of ['c1', 'c2']) drive.arquivos.set(id, { id, name: 'Central', mimeType: TIPO_PASTA, trashed: false, conteudo: '' });
+    expect(() => (globais as unknown as { autorizarV02(): void }).autorizarV02()).not.toThrow();
+    expect(registros.at(-1)).toBe('Permissão V02 aprovada');
+    expect(drive.movimentos).toEqual([]);
+  });
+});
+
+describe('organizarPastaCentral', () => {
+  type Editor = { organizarPastaCentral(): void };
+  const raizDe = (drive: ReturnType<typeof driveFalso>) => ({
+    pasta(id: string, nome: string, extra: Partial<ArquivoNoDrive> = {}) {
+      drive.arquivos.set(id, { id, name: nome, mimeType: TIPO_PASTA, trashed: false, conteudo: '', ...extra });
+    },
+    arquivo(id: string, nome: string, extra: Partial<ArquivoNoDrive> = {}) {
+      drive.arquivos.set(id, { id, name: nome, mimeType: 'application/json', trashed: false, conteudo: '{}', ...extra });
+    },
+  });
+
+  it('é função global no topo do arquivo, para o dono rodar pelo editor', () => {
+    expect(pacote).toMatch(/^function organizarPastaCentral\(/m);
+  });
+
+  it('move o arquivo de dados, as cópias e a Casa (partilhada) da raiz para Central, sem apagar nem mudar propriedades', () => {
+    const { globais, propriedades, registros, drive } = carregar();
+    const d = raizDe(drive);
+    d.arquivo('dados', 'central-dados.json');
+    d.arquivo('copia1', 'central-dados-2026-11-01.json');
+    d.arquivo('copia2', 'central-dados-2026-11-02.json');
+    d.pasta('casa', 'Casa (partilhada)');
+    d.arquivo('compras', 'Compras', { mimeType: 'application/vnd.google-apps.spreadsheet', pais: ['casa'] });
+    const antes = new Map(propriedades);
+
+    (globais as unknown as Editor).organizarPastaCentral();
+
+    const central = [...drive.arquivos.values()].find((a) => a.name === 'Central')!;
+    for (const id of ['dados', 'copia1', 'copia2', 'casa']) expect(drive.arquivos.get(id)!.pais).toEqual([central.id]);
+    expect(drive.arquivos.get('compras')!.pais).toEqual(['casa']);
+    expect([...drive.arquivos.values()].some((a) => a.trashed)).toBe(false);
+    expect(drive.arquivos.size).toBe(6);
+    expect(propriedades).toEqual(antes);
+    // Drive v3: sai da raiz (id real), entra em Central.
+    expect(drive.movimentos[0]).toMatchObject({ addParents: central.id, removeParents: RAIZ_DO_DRIVE });
+    const texto = registros.join('\n');
+    expect(texto).toMatch(/2 cópias diárias movidas/);
+    expect(texto).toMatch(/Casa \(partilhada\) movida/);
+    expect(texto).not.toMatch(/copia1|2026-11/);
+  });
+
+  it('é idempotente: a segunda vez não move nada', () => {
+    const { globais, drive } = carregar();
+    const d = raizDe(drive);
+    d.arquivo('dados', 'central-dados.json');
+    d.pasta('casa', 'Casa (partilhada)');
+    (globais as unknown as Editor).organizarPastaCentral();
+    const movimentos = drive.movimentos.length;
+    const fotografia = JSON.stringify([...drive.arquivos.values()]);
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(drive.movimentos).toHaveLength(movimentos);
+    expect(JSON.stringify([...drive.arquivos.values()])).toBe(fotografia);
+  });
+
+  it('usa o id guardado do arquivo de dados, mesmo com outro de mesmo nome (de outro dono) por aí', () => {
+    const { globais, propriedades, drive } = carregar();
+    const d = raizDe(drive);
+    d.arquivo('meu', 'central-dados.json');
+    propriedades.set('ID_DO_ARQUIVO_DE_DADOS', 'meu');
+    d.arquivo('alheio', 'central-dados.json', { dono: false });
+    (globais as unknown as Editor).organizarPastaCentral();
+    const central = [...drive.arquivos.values()].find((a) => a.name === 'Central')!;
+    expect(drive.arquivos.get('meu')!.pais).toEqual([central.id]);
+    expect(drive.arquivos.get('alheio')!.pais).toBeUndefined();
+  });
+
+  it('arquivo de dados de outro dono e cópias de outro dono não são tocados', () => {
+    const { globais, drive } = carregar();
+    const d = raizDe(drive);
+    d.arquivo('dados', 'central-dados.json', { dono: false });
+    d.arquivo('copia', 'central-dados-2026-11-01.json', { dono: false });
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(drive.movimentos).toEqual([]);
+  });
+
+  it('id guardado que aponta para arquivo de outro dono: aviso dados_de_outro_dono e nada é movido', () => {
+    const { globais, propriedades, registros, drive } = carregar();
+    raizDe(drive).arquivo('alheio', 'central-dados.json', { dono: false });
+    propriedades.set('ID_DO_ARQUIVO_DE_DADOS', 'alheio');
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO dados_de_outro_dono/);
+    expect(drive.movimentos).toEqual([]);
+  });
+
+  it('Casa na raiz e também dentro de Central: não mexe em nenhuma e avisa', () => {
+    const { globais, registros, drive } = carregar();
+    const d = raizDe(drive);
+    d.pasta('central', 'Central');
+    d.pasta('casa-raiz', 'Casa (partilhada)');
+    d.pasta('casa-dentro', 'Casa (partilhada)', { pais: ['central'] });
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(drive.movimentos).toEqual([]);
+    expect(registros.join('\n')).toMatch(/AVISO/);
+  });
+
+  it('falha ao mover o arquivo de dados não impede mover a Casa, e nada lança', () => {
+    const { globais, drive } = carregar();
+    const d = raizDe(drive);
+    d.arquivo('dados', 'central-dados.json');
+    d.pasta('casa', 'Casa (partilhada)');
+    const original = drive.servico.Files.update;
+    drive.servico.Files.update = (recurso, id, midia, opcoes) => {
+      if (id === 'dados') throw new Error('Drive fora do ar');
+      return original(recurso, id, midia, opcoes);
+    };
+    expect(() => (globais as unknown as Editor).organizarPastaCentral()).not.toThrow();
+    const central = [...drive.arquivos.values()].find((a) => a.name === 'Central')!;
+    expect(drive.arquivos.get('casa')!.pais).toEqual([central.id]);
+    expect(drive.arquivos.get('dados')!.pais).toBeUndefined();
+  });
+
+  it('com a trava ocupada, avisa e não mexe em nada', () => {
+    const { globais, trava, registros, drive } = carregar();
+    raizDe(drive).arquivo('dados', 'central-dados.json');
+    trava.livre = false;
+    expect(() => (globais as unknown as Editor).organizarPastaCentral()).not.toThrow();
+    expect(drive.movimentos).toEqual([]);
+    expect(registros.join('\n')).toMatch(/AVISO/);
+  });
+});
+
+describe('revisão: cópia não fatal e buscas só do dono', () => {
+  it('com duas pastas Central e o arquivo de dados já existente, a gravação segue e a cópia falha só no registro (sem ids)', () => {
+    const { pedir, drive, erros } = conectado();
+    drive.arquivos.set('antigo', { id: 'antigo', name: 'central-dados.json', trashed: false, conteudo: '{"versao":1,"ultimo":0,"registros":[]}' });
+    for (const id of ['central-um', 'central-dois']) drive.arquivos.set(id, { id, name: 'Central', mimeType: TIPO_PASTA, trashed: false, conteudo: '' });
+
+    const resposta = pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+
+    expect(resposta.ok).toBe(true);
+    expect(drive.arquivos.get('antigo')!.conteudo).toContain('t1');
+    expect([...drive.arquivos.values()].some((a) => a.name.startsWith('central-dados-'))).toBe(false);
+    const registrado = erros.join('\n');
+    expect(registrado).toMatch(/cópia diária/);
+    expect(registrado).not.toMatch(/central-um|central-dois|antigo/);
+  });
+
+  it('arquivo central-dados.json de outra pessoa (compartilhado comigo) não conta como duplicado', () => {
+    const { pedir, drive } = conectado();
+    drive.arquivos.set('meu', { id: 'meu', name: 'central-dados.json', trashed: false, conteudo: '{"versao":1,"ultimo":0,"registros":[]}' });
+    drive.arquivos.set('alheio', { id: 'alheio', name: 'central-dados.json', trashed: false, conteudo: '{}', dono: false });
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'a')] }).ok).toBe(true);
+    expect(drive.arquivos.get('meu')!.conteudo).toContain('t1');
+    expect(drive.arquivos.get('alheio')!.conteudo).toBe('{}');
+  });
+
+  it('as consultas por nome (arquivo de dados e cópias) filtram só o dono', () => {
+    const { pedir, drive } = conectado();
+    drive.arquivos.set('meu', { id: 'meu', name: 'central-dados.json', trashed: false, conteudo: '{"versao":1,"ultimo":0,"registros":[]}' });
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    const porNome = drive.listas.filter((q) => q.includes("name = 'central-dados.json'") || q.includes("name contains 'central-dados-'"));
+    expect(porNome.length).toBeGreaterThan(0);
+    for (const q of porNome) expect(q).toContain("'me' in owners");
+  });
+
+  it('cópia velha de outra pessoa não é mandada para a lixeira', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    drive.arquivos.set('velha-alheia', { id: 'velha-alheia', name: 'central-dados-2026-09-01.json', trashed: false, conteudo: '{}', dono: false });
+    drive.arquivos.set('velha-minha', { id: 'velha-minha', name: 'central-dados-2026-09-01.json', trashed: false, conteudo: '{}' });
+    pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
+    expect(drive.arquivos.get('velha-alheia')!.trashed).toBe(false);
+    expect(drive.arquivos.get('velha-minha')!.trashed).toBe(true);
+  });
+});
+
+describe('avisos com código fixo no registro da organização', () => {
+  type Editor = { organizarPastaCentral(): void };
+  const pasta = (drive: ReturnType<typeof driveFalso>, id: string, nome: string, extra: Partial<ArquivoNoDrive> = {}) =>
+    drive.arquivos.set(id, { id, name: nome, mimeType: TIPO_PASTA, trashed: false, conteudo: '', ...extra });
+  const dados = (drive: ReturnType<typeof driveFalso>, id: string, extra: Partial<ArquivoNoDrive> = {}) =>
+    drive.arquivos.set(id, { id, name: 'central-dados.json', mimeType: 'application/json', trashed: false, conteudo: '{}', ...extra });
+
+  it('central_duplicada', () => {
+    const { globais, registros, drive } = carregar();
+    pasta(drive, 'c1', 'Central');
+    pasta(drive, 'c2', 'Central');
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO central_duplicada/);
+  });
+
+  it('dados_na_lixeira (id guardado na lixeira)', () => {
+    const { globais, propriedades, registros, drive } = carregar();
+    dados(drive, 'meu', { trashed: true });
+    propriedades.set('ID_DO_ARQUIVO_DE_DADOS', 'meu');
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO dados_na_lixeira/);
+  });
+
+  it('dados_duplicados (dois com o nome, sem id guardado)', () => {
+    const { globais, registros, drive } = carregar();
+    dados(drive, 'um');
+    dados(drive, 'dois');
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO dados_duplicados/);
+    expect(drive.movimentos).toEqual([]);
+  });
+
+  it('casa_duplicada (duas na raiz)', () => {
+    const { globais, registros, drive } = carregar();
+    pasta(drive, 'a', 'Casa (partilhada)');
+    pasta(drive, 'b', 'Casa (partilhada)');
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO casa_duplicada/);
+  });
+
+  it('casa_em_dois_lugares, mesmo com a de Central vazia: não mexe', () => {
+    const { globais, registros, drive } = carregar();
+    pasta(drive, 'central', 'Central');
+    pasta(drive, 'raiz', 'Casa (partilhada)');
+    pasta(drive, 'dentro', 'Casa (partilhada)', { pais: ['central'] });
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO casa_em_dois_lugares/);
+    expect(drive.movimentos).toEqual([]);
+  });
+
+  it('o central-dados.json de outra pessoa nem entra na busca: o do dono é achado e movido, sem aviso de duplicado', () => {
+    const { globais, registros, drive } = carregar();
+    dados(drive, 'alheio', { dono: false });
+    dados(drive, 'meu');
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).not.toMatch(/dados_duplicados/);
+    expect(drive.arquivos.get('meu')!.pais).toBeDefined();
+    expect(drive.arquivos.get('alheio')!.pais).toBeUndefined();
+  });
+
+  it('trava_ocupada', () => {
+    const { globais, trava, registros } = carregar();
+    trava.livre = false;
+    (globais as unknown as Editor).organizarPastaCentral();
+    expect(registros.join('\n')).toMatch(/AVISO trava_ocupada/);
+  });
+});
+
+describe('arquivos novos dentro da pasta Central', () => {
+  it('o arquivo de dados e a cópia diária nascem em Central; só há uma pasta Central', () => {
+    const { pedir, drive } = conectado();
+    pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
+    pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
+    const todos = [...drive.arquivos.values()];
+    const centrais = todos.filter((a) => a.name === 'Central' && a.mimeType === TIPO_PASTA);
+    expect(centrais).toHaveLength(1);
+    expect(centrais[0]!.pais).toEqual([RAIZ_DO_DRIVE]);
+    const dados = todos.find((a) => a.name === 'central-dados.json')!;
+    const copia = todos.find((a) => a.name === `central-dados-${hojeEmLisboa()}.json`)!;
+    expect(dados.pais).toEqual([centrais[0]!.id]);
+    expect(copia.pais).toEqual([centrais[0]!.id]);
+  });
+
+  it('arquivo de dados antigo na raiz continua achado pelo nome e atualizado onde está (sem mover nem duplicar)', () => {
+    const { pedir, drive } = conectado();
+    drive.arquivos.set('antigo', { id: 'antigo', name: 'central-dados.json', trashed: false, conteudo: '{"versao":1,"ultimo":0,"registros":[]}' });
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'a')] }).ok).toBe(true);
+    expect([...drive.arquivos.values()].filter((a) => a.name === 'central-dados.json')).toHaveLength(1);
+    expect(drive.arquivos.get('antigo')!.pais).toBeUndefined();
+    expect(drive.arquivos.get('antigo')!.conteudo).toContain('t1');
+    expect(drive.movimentos).toEqual([]);
+  });
+
+  it('com duas pastas Central, gravar dados novos dá interno e não cria o arquivo', () => {
+    const { pedir, drive } = conectado();
+    for (const id of ['c1', 'c2']) drive.arquivos.set(id, { id, name: 'Central', mimeType: TIPO_PASTA, trashed: false, conteudo: '' });
+    expect(pedir('enviar', { mudancas: [tarefa('t1', 'a')] })).toEqual({ ok: false, erro: 'interno' });
+    expect([...drive.arquivos.values()].some((a) => a.name === 'central-dados.json')).toBe(false);
+  });
+});
+
+describe('salvarAudio no pacote', () => {
+  it('grava em Central/Audios pelo Drive, é idempotente e não confunde a pasta com o arquivo de dados', () => {
+    const { pedir, drive } = conectado();
+    const base64 = 'T2dnUwACAAAAAAAAAAA=';
+    const a = pedir('salvarAudio', { id: 'audio-1', base64, mime: 'audio/webm' }) as { ok: boolean; dados: { ok: boolean; driveId: string } };
+    const b = pedir('salvarAudio', { id: 'audio-1', base64, mime: 'audio/webm' }) as typeof a;
+    expect(a.ok && a.dados.ok).toBe(true);
+    expect(b.dados.driveId).toBe(a.dados.driveId);
+    const nomes = [...drive.arquivos.values()].map((x) => x.name).sort();
+    expect(nomes).toEqual(['Audios', 'Central', 'audio-audio-1.webm']);
+    const arquivo = [...drive.arquivos.values()].find((x) => x.name === 'audio-audio-1.webm')!;
+    expect(arquivo.mimeType).toBe('audio/webm');
+    expect(arquivo.pais).toHaveLength(1);
+  });
+});
+
 describe('autorizarDrive', () => {
   it('é função global no topo do arquivo, para o dono rodar pelo editor', () => {
     expect(pacote).toMatch(/^function autorizarDrive\(/m);
@@ -346,7 +705,7 @@ describe('autorizarDrive', () => {
     const mensagem = registros.at(-1)!;
     expect(mensagem).toMatch(/Permissão do Drive/);
     expect(mensagem).not.toContain('Segredo');
-    expect(mensagem).not.toContain('arquivo-1');
+    for (const id of ['arquivo-1', 'arquivo-2']) expect(mensagem).not.toContain(id);
   });
 });
 
@@ -360,6 +719,7 @@ describe('dados no Drive pelo pacote', () => {
 
     const arquivos = [...drive.arquivos.values()];
     expect(arquivos.map((a) => [a.name, a.mimeType])).toEqual([
+      ['Central', TIPO_PASTA],
       ['central-dados.json', 'application/json'],
     ]);
     expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'Ler com Marina')]);
@@ -378,9 +738,10 @@ describe('dados no Drive pelo pacote', () => {
   });
 
   it('acha o arquivo já existente pelo nome quando o id não está guardado', () => {
-    const { pedir, propriedades } = conectado();
+    const { pedir, propriedades, drive } = conectado();
     pedir('enviar', { mudancas: [tarefa('t1', 'Aula da Aurora')] });
-    const guardado = [...propriedades].find(([, valor]) => valor === 'arquivo-1');
+    const idDosDados = [...drive.arquivos.values()].find((x) => x.name === 'central-dados.json')!.id;
+    const guardado = [...propriedades].find(([, valor]) => valor === idDosDados);
     expect(guardado).toBeDefined();
     propriedades.delete(guardado![0]);
 
@@ -430,7 +791,7 @@ describe('dados no Drive pelo pacote', () => {
     pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
 
     const vivos = [...drive.arquivos.values()].filter((a) => !a.trashed).map((a) => a.name);
-    expect(vivos.sort()).toEqual([`central-dados-${hojeEmLisboa()}.json`, 'central-dados.json']);
+    expect(vivos.sort()).toEqual(['Central', `central-dados-${hojeEmLisboa()}.json`, 'central-dados.json']);
     expect(drive.arquivos.get('velha')!.trashed).toBe(true);
   });
 });
@@ -531,7 +892,9 @@ describe('manifesto publicado', () => {
 
   it('declara os escopos explicitamente: Drive do próprio script, chamada externa (R24), Google Agenda mínimo (T10) e Gmail só leitura (T13)', () => {
     expect(manifesto().oauthScopes).toEqual([
-      'https://www.googleapis.com/auth/drive.file',
+      // V02: Drive completo (pasta Central/Audios) e Planilhas (finanças e listas).
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/script.external_request',
       // Lista de agendas, só leitura (calendarList.list).
       'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
@@ -554,9 +917,9 @@ describe('manifesto publicado', () => {
     expect(escopos.filter((e) => /gmail|mail\.google/.test(e))).toEqual(['https://www.googleapis.com/auth/gmail.readonly']);
   });
 
-  it('nenhum escopo largo do Google Agenda nem do Drive', () => {
+  it('nenhum escopo largo do Google Agenda; do Drive só o completo da V02, sem o somente leitura nem o drive.file antigo', () => {
     const escopos = manifesto().oauthScopes as string[];
-    for (const largo of ['calendar', 'calendar.events', 'calendar.readonly', 'drive', 'drive.readonly']) {
+    for (const largo of ['calendar', 'calendar.events', 'calendar.readonly', 'drive.readonly', 'drive.file']) {
       expect(escopos).not.toContain(`https://www.googleapis.com/auth/${largo}`);
     }
   });
@@ -677,7 +1040,7 @@ describe('R24: leitura pela API do Drive', () => {
 
     expect(pedir('puxar', { desde: 0 }).dados.registros).toEqual([tarefa('t1', 'Ler com Marina')]);
     const ultima = rede.chamadas.at(-1)!;
-    expect(ultima.url).toBe(`${ENDPOINT}arquivo-1?alt=media`);
+    expect(ultima.url).toBe(`${ENDPOINT}arquivo-2?alt=media`);
     expect(ultima.params).toMatchObject({
       method: 'get',
       muteHttpExceptions: true,
@@ -689,7 +1052,7 @@ describe('R24: leitura pela API do Drive', () => {
   it('o id vai codificado na URL', () => {
     const { pedir, rede, drive, propriedades } = conectado();
     pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
-    const original = drive.arquivos.get('arquivo-1')!;
+    const original = drive.arquivos.get('arquivo-2')!;
     drive.arquivos.set('a b/c?d', { ...original, id: 'a b/c?d' });
     propriedades.set('ID_DO_ARQUIVO_DE_DADOS', 'a b/c?d');
 
@@ -721,23 +1084,23 @@ describe('R24: leitura pela API do Drive', () => {
     pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
     pedir('enviar', { mudancas: [tarefa('t2', 'b')] });
     expect(drive.atualizacoes).toBeGreaterThan(0);
-    expect(JSON.parse(drive.arquivos.get('arquivo-1')!.conteudo).registros).toHaveLength(2);
+    expect(JSON.parse(drive.arquivos.get('arquivo-2')!.conteudo).registros).toHaveLength(2);
     expect(rede.chamadas.every((c) => c.params.method === 'get')).toBe(true);
   });
 
   it.each([403, 404, 500, 302])('HTTP %i dá interno, sem gravar, e o registro não leva token, URL, id nem corpo', (status) => {
     const { pedir, rede, erros, drive } = conectado();
     pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
-    const antes = drive.arquivos.get('arquivo-1')!.conteudo;
+    const antes = drive.arquivos.get('arquivo-2')!.conteudo;
     rede.status = status;
-    rede.corpoDoErro = `{"error":{"message":"Segredo da Marina arquivo-1 ${TOKEN_FICTICIO}"}}`;
+    rede.corpoDoErro = `{"error":{"message":"Segredo da Marina arquivo-2 ${TOKEN_FICTICIO}"}}`;
 
     expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
     expect(pedir('enviar', { mudancas: [tarefa('t2', 'b')] })).toEqual({ ok: false, erro: 'interno' });
-    expect(drive.arquivos.get('arquivo-1')!.conteudo).toBe(antes);
+    expect(drive.arquivos.get('arquivo-2')!.conteudo).toBe(antes);
     const registrado = erros.join('\n');
     expect(registrado).toContain(`HTTP ${status}`);
-    for (const proibido of [TOKEN_FICTICIO, ENDPOINT, 'arquivo-1', 'Segredo']) {
+    for (const proibido of [TOKEN_FICTICIO, ENDPOINT, 'arquivo-2', 'Segredo']) {
       expect(registrado).not.toContain(proibido);
     }
   });
@@ -745,12 +1108,12 @@ describe('R24: leitura pela API do Drive', () => {
   it('falha de rede dá interno, e a mensagem original (com URL e token) não vai ao registro', () => {
     const { pedir, rede, erros } = conectado();
     pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
-    rede.falharCom = `Address unavailable: ${ENDPOINT}arquivo-1?alt=media Bearer ${TOKEN_FICTICIO}`;
+    rede.falharCom = `Address unavailable: ${ENDPOINT}arquivo-2?alt=media Bearer ${TOKEN_FICTICIO}`;
 
     expect(pedir('puxar', { desde: 0 })).toEqual({ ok: false, erro: 'interno' });
     const registrado = erros.join('\n');
     expect(registrado).toMatch(/Leitura do Drive falhou na rede/);
-    for (const proibido of [TOKEN_FICTICIO, ENDPOINT, 'arquivo-1']) expect(registrado).not.toContain(proibido);
+    for (const proibido of [TOKEN_FICTICIO, ENDPOINT, 'arquivo-2']) expect(registrado).not.toContain(proibido);
   });
 
   it('o serviço avançado com alt=media nunca é usado para ler', () => {
@@ -785,8 +1148,8 @@ describe('R24: autorizarDrive usa os dois escopos', () => {
     expect(rede.chamadas.length).toBe(antes + 1);
     const mensagem = registros.at(-1)!;
     expect(mensagem).toMatch(/Permissão do Drive aprovada/);
-    expect(mensagem).toContain(`${drive.arquivos.get('arquivo-1')!.conteudo.length} caracteres`);
-    for (const proibido of ['Segredo', 'arquivo-1', TOKEN_FICTICIO, ENDPOINT]) expect(mensagem).not.toContain(proibido);
+    expect(mensagem).toContain(`${drive.arquivos.get('arquivo-2')!.conteudo.length} caracteres`);
+    for (const proibido of ['Segredo', 'arquivo-2', TOKEN_FICTICIO, ENDPOINT]) expect(mensagem).not.toContain(proibido);
   });
 
   it('sem arquivo, pede o token (os dois escopos) e não chama a rede', () => {
@@ -804,7 +1167,7 @@ describe('R24: autorizarDrive usa os dois escopos', () => {
     (globais as unknown as { autorizarDrive(): void }).autorizarDrive();
     const mensagem = registros.at(-1)!;
     expect(mensagem).toMatch(/HTTP 403/);
-    for (const proibido of ['arquivo-1', TOKEN_FICTICIO]) expect(mensagem).not.toContain(proibido);
+    for (const proibido of ['arquivo-2', TOKEN_FICTICIO]) expect(mensagem).not.toContain(proibido);
   });
 });
 
@@ -812,7 +1175,7 @@ describe('diagnosticarDrive (leitura pela API)', () => {
   function preparado() {
     const carregado = conectado();
     carregado.pedir('enviar', { mudancas: [tarefa('t1', 'Segredo da Marina')] });
-    const principal = carregado.drive.arquivos.get('arquivo-1')!;
+    const principal = carregado.drive.arquivos.get('arquivo-2')!;
     const diagnosticar = () => {
       const antes = carregado.registros.length;
       (carregado.globais as unknown as { diagnosticarDrive(): void }).diagnosticarDrive();
@@ -829,7 +1192,7 @@ describe('diagnosticarDrive (leitura pela API)', () => {
     const { principal, diagnosticar } = preparado();
     const relatorio = diagnosticar();
     expect(relatorio).toContain(`Leitura pela API do Drive: ok, ${principal.conteudo.length} caracteres, JSON.parse: ok`);
-    for (const proibido of ['Segredo', 'arquivo-1', TOKEN_FICTICIO, ENDPOINT]) expect(relatorio).not.toContain(proibido);
+    for (const proibido of ['Segredo', 'arquivo-2', TOKEN_FICTICIO, ENDPOINT]) expect(relatorio).not.toContain(proibido);
   });
 
   it('leitura recusada mostra o status HTTP', () => {
@@ -899,7 +1262,7 @@ describe('revisão: redirecionamento e busca sem gravar o id', () => {
     pedir('enviar', { mudancas: [tarefa('t1', 'a')] });
     propriedades.delete('ID_DO_ARQUIVO_DE_DADOS');
     pedir('puxar', { desde: 0 });
-    expect(propriedades.get('ID_DO_ARQUIVO_DE_DADOS')).toBe('arquivo-1');
+    expect(propriedades.get('ID_DO_ARQUIVO_DE_DADOS')).toBe('arquivo-2');
   });
 });
 

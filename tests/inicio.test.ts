@@ -7,6 +7,8 @@ const iniciarVirada = vi.fn((_opcoes?: unknown) => () => {});
 
 vi.mock('../src/dados/sincronia', () => ({ iniciarSincronia, puxouNaUltimaRodada, sincronizar }));
 vi.mock('../src/dados/virada', () => ({ iniciarVirada }));
+const reenviarAudiosPendentes = vi.fn(async () => ({ enviados: [], descartados: [], restantes: 0, falhas: [] }));
+vi.mock('../src/voz/gravador', () => ({ reenviarAudiosPendentes }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -18,6 +20,47 @@ describe('iniciarApp (o que o main.tsx liga ao abrir)', () => {
     iniciarApp();
     expect(iniciarSincronia).toHaveBeenCalledTimes(1);
     expect(iniciarVirada).toHaveBeenCalledTimes(1);
+  });
+
+  it('tenta enviar os áudios que esperavam rede ao abrir e sempre que a internet volta', async () => {
+    const { iniciarApp } = await import('../src/inicio');
+    iniciarApp();
+    await vi.waitFor(() => expect(reenviarAudiosPendentes).toHaveBeenCalledTimes(1));
+
+    window.dispatchEvent(new Event('online'));
+    await vi.waitFor(() => expect(reenviarAudiosPendentes).toHaveBeenCalledTimes(2));
+  });
+
+  it('chamar iniciarApp duas vezes não duplica o ouvinte do evento online', async () => {
+    const { iniciarApp } = await import('../src/inicio');
+    iniciarApp();
+    iniciarApp();
+    await vi.waitFor(() => expect(reenviarAudiosPendentes).toHaveBeenCalledTimes(2));
+
+    window.dispatchEvent(new Event('online'));
+    await vi.waitFor(() => expect(reenviarAudiosPendentes).toHaveBeenCalledTimes(3));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(reenviarAudiosPendentes).toHaveBeenCalledTimes(3);
+  });
+
+  it('erro no reenvio de áudio não derruba o app', async () => {
+    reenviarAudiosPendentes.mockRejectedValueOnce(new Error('falhou'));
+    const { iniciarApp } = await import('../src/inicio');
+    expect(() => iniciarApp()).not.toThrow();
+    await vi.waitFor(() => expect(reenviarAudiosPendentes).toHaveBeenCalled());
+  });
+
+  it('áudio que o Drive recusou no reenvio fica anotado para a ideia avisar "Áudio não enviado"', async () => {
+    reenviarAudiosPendentes.mockResolvedValueOnce({
+      enviados: [],
+      descartados: [{ id: 'a-1', motivo: 'grande_demais' }],
+      restantes: 0,
+      falhas: [],
+    } as never);
+    const { iniciarApp } = await import('../src/inicio');
+    iniciarApp();
+    const { problemasDosAudios } = await import('../src/voz/audios-pendentes');
+    await vi.waitFor(async () => expect((await problemasDosAudios()).get('a-1')).toBe('recusado'));
   });
 
   it('a virada espera a sincronia: o "antes" é a sincronização de verdade', async () => {

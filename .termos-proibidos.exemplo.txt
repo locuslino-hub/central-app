@@ -1,0 +1,16 @@
+# Termos que NÃO podem aparecer em nenhum arquivo versionado deste repositório público
+# (nome real, e-mail, modelo de aparelho, nome de instituição...).
+#
+# Como usar:
+#   1. Copie este arquivo para `.termos-proibidos.txt` (ele fica só na sua máquina: o git o ignora).
+#   2. Troque os exemplos abaixo pelos seus termos, um por linha.
+#   3. `npx vitest run tests/repositorio.test.ts` falha se algum termo aparecer em `git ls-files`.
+#
+# Regras: uma expressão regular por linha, sem diferenciar maiúsculas de minúsculas.
+# Linhas vazias e linhas que começam com # são ignoradas. Sem o arquivo, o teste é pulado.
+# As expressões são lidas com as flags i e u (Unicode): o limite de palavra e as classes tratam letras acentuadas como letras;
+# no modo Unicode, um escape desnecessário (por exemplo \-) é erro de sintaxe: escreva só o caractere.
+# Os termos abaixo são inventados, só para mostrar o formato.
+Zenobia\s+Quimera
+\bProjeto\s+Fantasma\b
+modelo-ficticio-9000

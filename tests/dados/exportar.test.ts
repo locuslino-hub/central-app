@@ -122,6 +122,35 @@ describe('restaurarCopia', () => {
   });
 });
 
+describe('pastaId na cópia (V02, Tarefa 17)', () => {
+  it('exportar e restaurar preserva o pastaId de tarefas, páginas e documentos', async () => {
+    const t = await salvar('tarefas', { ...tarefa('Revisar capítulo'), pastaId: 'pasta-metodologia' });
+    const p = await salvar('paginas', { salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', titulo: 'Amostragem', blocos: [] });
+    const d = await salvar('documentos', { titulo: 'Protocolo', url: 'https://exemplo.invalid/p.docx', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', arquivado: false });
+    const copia = await montarCopia();
+    expect(copia.colecoes.tarefas[0]).toMatchObject({ pastaId: 'pasta-metodologia' });
+    await apagar('tarefas', t.id);
+    await apagar('paginas', p.id);
+    await apagar('documentos', d.id);
+
+    const r = await restaurarCopia(copia);
+
+    expect(r.recusados).toBe(0);
+    expect((await listar('tarefas'))[0]).toMatchObject({ titulo: 'Revisar capítulo', pastaId: 'pasta-metodologia' });
+    expect((await listar('paginas'))[0]).toMatchObject({ pastaId: 'pasta-metodologia' });
+    expect((await listar('documentos'))[0]).toMatchObject({ pastaId: 'pasta-metodologia' });
+  });
+
+  it('pastaId inválido na cópia recusa só aquele registro', async () => {
+    await salvar('tarefas', { ...tarefa('Boa'), pastaId: 'pasta-metodologia' });
+    const copia = await montarCopia();
+    const ruim = { ...copia.colecoes.tarefas[0]!, id: 'outra', pastaId: 'com espaço' };
+    copia.colecoes.tarefas.push(ruim);
+    const r = await restaurarCopia(copia);
+    expect(r.recusados).toBe(1);
+  });
+});
+
 describe('cópia antiga com a coleção rascunhos (tirada na V02)', () => {
   it('rascunhos vazio é ignorado: restaura o resto, sem recusar nada e sem quebrar', async () => {
     const criada = await salvar('tarefas', tarefa('Ler o artigo da Aurora'));

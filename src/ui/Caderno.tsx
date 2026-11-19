@@ -197,7 +197,7 @@ function TituloDaPagina({ pagina }: { pagina: Pagina }) {
 
 type Aviso = { texto: string; item?: ItemDaLinha };
 
-function PaginaAberta({ pagina, salaId, nomeDaSala }: { pagina: Pagina; salaId: string; nomeDaSala: string }) {
+function PaginaAberta({ pagina, salaId, nomeDaSala, pastaId }: { pagina: Pagina; salaId: string; nomeDaSala: string; pastaId?: string }) {
   const [blocos, setBlocos] = useState<Bloco[]>(pagina.blocos);
   const [situacao, setSituacao] = useState<Situacao>('parado');
   const [menu, setMenu] = useState<MenuAberto | null>(null);
@@ -259,7 +259,7 @@ function PaginaAberta({ pagina, salaId, nomeDaSala }: { pagina: Pagina; salaId: 
     if (!texto || texto.startsWith('/') || tentadas.current.get(id) === texto) return;
     tentadas.current.set(id, texto);
     try {
-      const item = await itemDaLinha(texto, salaId, { compromisso });
+      const item = await itemDaLinha(texto, salaId, { compromisso, ...(pastaId ? { pastaId } : {}) });
       if (item === SO_COM_ENTER) {
         // Compromisso é evento de verdade no Google Agenda: espera o Enter.
         tentadas.current.delete(id);
@@ -459,13 +459,17 @@ function PaginaAberta({ pagina, salaId, nomeDaSala }: { pagina: Pagina; salaId: 
   );
 }
 
-export function Caderno({ salaId, nomeDaSala }: { salaId: string; nomeDaSala: string }) {
+/**
+ * O caderno de uma sala. Com `pastaId` é o das "Notas" de uma pasta comum (tema): só as páginas do tema, e página
+ * nova e tarefa criada por linha com data nascem nele. As páginas do tema continuam na sala (nada some com a pasta).
+ */
+export function Caderno({ salaId, nomeDaSala, pastaId }: { salaId: string; nomeDaSala: string; pastaId?: string }) {
   const todas = usePaginas();
   const [escolhida, setEscolhida] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const criando = useRef(false);
 
-  const daSala = (todas ?? []).filter((p) => p.salaId === salaId && !p.apagado).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR', { numeric: true }));
+  const daSala = (todas ?? []).filter((p) => p.salaId === salaId && !p.apagado && (pastaId === undefined || p.pastaId === pastaId)).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR', { numeric: true }));
   const aberta = daSala.find((p) => p.id === escolhida) ?? daSala[0];
 
   async function nova() {
@@ -473,7 +477,7 @@ export function Caderno({ salaId, nomeDaSala }: { salaId: string; nomeDaSala: st
     criando.current = true;
     setErro(null);
     try {
-      const criada = await criarPagina(salaId, `Página ${daSala.length + 1}`);
+      const criada = await criarPagina(salaId, `Página ${daSala.length + 1}`, pastaId);
       setEscolhida(criada.id);
     } catch (falha) {
       console.error('Não consegui criar a página', falha);
@@ -484,12 +488,16 @@ export function Caderno({ salaId, nomeDaSala }: { salaId: string; nomeDaSala: st
   }
 
   return (
-    <section class="painel caderno" aria-labelledby={`titulo-caderno-${salaId}`} aria-busy={todas === undefined}>
-      <h2 id={`titulo-caderno-${salaId}`}>Caderno</h2>
+    <section class="painel caderno" aria-labelledby={`titulo-caderno-${pastaId ?? salaId}`} aria-busy={todas === undefined}>
+      <h2 id={`titulo-caderno-${pastaId ?? salaId}`}>{pastaId === undefined ? 'Caderno' : 'Notas'}</h2>
       {todas !== undefined && daSala.length === 0 && (
         <div>
           <p class="lista-vazia-titulo">Nenhuma página ainda.</p>
-          <p class="lista-vazia-texto">{`Crie uma página para anotar o que for de ${nomeDaSala}. Linha com data vira tarefa.`}</p>
+          <p class="lista-vazia-texto">
+            {pastaId === undefined
+              ? `Crie uma página para anotar o que for de ${nomeDaSala}. Linha com data vira tarefa.`
+              : 'Crie uma página para anotar o que for deste tema. Linha com data vira tarefa do tema.'}
+          </p>
         </div>
       )}
       {daSala.length > 0 && (
@@ -506,7 +514,7 @@ export function Caderno({ salaId, nomeDaSala }: { salaId: string; nomeDaSala: st
           {erro}
         </p>
       )}
-      {aberta && <PaginaAberta key={aberta.id} pagina={aberta} salaId={salaId} nomeDaSala={nomeDaSala} />}
+      {aberta && <PaginaAberta key={aberta.id} pagina={aberta} salaId={salaId} nomeDaSala={nomeDaSala} pastaId={pastaId} />}
       <button type="button" class="botao-texto caderno-nova" onClick={() => void nova()}>
         Nova página
       </button>

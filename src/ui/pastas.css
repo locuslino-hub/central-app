@@ -1,0 +1,999 @@
+/* Pastas na sala, "Nova pasta" e a página da pasta (V02, Tarefa 12), conforme prototipo-esbocos/v02.
+   Moderno 3, paleta Sálvia: o cartão da pasta usa a cor da sala (--c texto, --f fundo, de .sala-*),
+   o selo do tipo fica no canto, "Nova pasta" é o cartão tracejado. Toque mínimo: 44 px. */
+
+/* ---- A sala: o resultado, o vazio e a grade de cartões ---- */
+
+.pastas-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 12px;
+}
+.pastas-cabeca h2 {
+  margin: 0;
+}
+.pastas-nova-linha {
+  gap: 6px;
+}
+.pastas-nova-linha .icone {
+  width: 18px;
+  height: 18px;
+}
+
+/* A região viva dos avisos de leitura e de rede: sempre na tela; vazia, some da vista (sem ocupar linha na grade). */
+.aviso-vivo {
+  display: grid;
+  gap: 8px;
+}
+.aviso-vivo:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.pastas-resultado:empty {
+  display: none;
+}
+.pastas-cartao {
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border-radius: var(--r-p);
+  background: var(--cabe);
+  color: var(--tinta);
+}
+.pastas-cartao:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.pastas-cartao p {
+  margin: 0;
+}
+.pastas-cartao-titulo {
+  font-weight: 600;
+}
+.pastas-cartao-detalhe {
+  margin-top: 2px !important;
+  color: var(--tinta2);
+  overflow-wrap: anywhere;
+}
+.pastas-cartao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.pastas-vazio {
+  margin: 0 0 14px;
+}
+.pastas-vazio p {
+  margin: 0;
+}
+.pastas-vazio .lista-vazia-texto {
+  max-width: 38rem;
+}
+.pastas-padrao {
+  margin-top: 12px;
+}
+.pastas-padrao:disabled,
+.pastas-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* O aviso de erro é o bloco pêssego do app (como "Agenda não carregou"), com "Tentar de novo" dentro. */
+.pastas-erro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 12px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--r-m);
+  background: var(--pessego);
+  color: var(--tinta);
+  font-weight: 500;
+}
+.pastas-erro p {
+  margin: 0;
+}
+
+.pastas-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Celular: as pastas ficam empilhadas, uma por linha. */
+/* O cartão enche a célula: numa linha, todos ficam da mesma altura. */
+.pastas-lista > li {
+  display: grid;
+}
+/* Celular: duas colunas (cabe mais na tela) e o cartão "Nova pasta" ocupa a linha toda. */
+@media (max-width: 699px) {
+  .pastas-lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .pasta-cartao,
+  .pasta-nova {
+    min-height: 6.5rem;
+    padding: 12px 14px;
+  }
+  .pastas-nova-item {
+    grid-column: 1 / -1;
+  }
+  .pastas-nova-item .pasta-nova {
+    min-height: 4.5rem;
+  }
+  .pasta-nome {
+    font-size: 1rem;
+  }
+}
+
+.pasta-cartao,
+.pasta-nova {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 2px;
+  width: 100%;
+  min-height: 7.5rem;
+  padding: 14px 16px;
+  border-radius: var(--r-m);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+.pasta-cartao {
+  background: var(--f, var(--poco));
+  color: var(--c, var(--tinta2));
+  box-shadow: var(--relevo-p);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.pasta-cartao:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--relevo);
+}
+.pasta-cartao:focus-visible,
+.pasta-nova:focus-visible {
+  outline: 3px solid var(--c, var(--acao));
+  outline-offset: 2px;
+}
+/* O círculo suave do canto, como no modelo. */
+.pasta-cartao::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -24px;
+  bottom: -34px;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c, var(--tinta2)) 10%, var(--f, var(--poco)));
+}
+.pasta-cartao .icone,
+.pasta-nova .icone {
+  width: 26px;
+  height: 26px;
+}
+.pasta-selo {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 1px 9px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 0.72);
+  color: var(--tinta2);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.pasta-nome {
+  margin-top: 6px;
+  color: var(--tinta);
+  font-size: 1.06rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.pasta-detalhe {
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.pasta-nova {
+  align-content: center;
+  border: 2px dashed var(--campo);
+  background: none;
+  color: var(--tinta2);
+  cursor: pointer;
+}
+.pasta-nova:hover,
+.pasta-nova[aria-expanded='true'] {
+  border-color: var(--acao);
+  background: var(--poco);
+}
+.pasta-nova .pasta-nome {
+  margin-top: 4px;
+  color: var(--tinta2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pasta-cartao {
+    transition: none;
+  }
+  .pasta-cartao:hover {
+    transform: none;
+  }
+}
+
+/* ---- Nova pasta: o formulário ---- */
+
+.pastas-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+}
+.pastas-form-titulo {
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 1.4rem;
+  font-weight: 400;
+}
+.pastas-tipos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.pastas-tipos legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--tinta2);
+  font-weight: 600;
+}
+/* Cada tipo é um cartão: o botão de escolha, o nome e a explicação. O rótulo cobre o cartão todo. */
+.pastas-tipo {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: start;
+  align-items: center;
+  column-gap: 10px;
+  min-height: var(--toque);
+  padding: 10px 14px;
+  border: 1px solid var(--linha);
+  border-radius: var(--r-p);
+  background: var(--folha);
+}
+.pastas-tipo:has(input:checked) {
+  border-color: var(--acao);
+  box-shadow: 0 0 0 1px var(--acao);
+}
+.pastas-tipo:has(input:focus-visible) {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.pastas-tipo input {
+  position: relative;
+  z-index: 1; /* acima do rótulo que cobre o cartão: o clique no botão de escolha chega nele mesmo */
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--acao);
+}
+.pastas-tipo label {
+  font-weight: 600;
+}
+.pastas-tipo label::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.pastas-tipo-explica {
+  grid-column: 2;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+
+.pastas-dica {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+
+.pastas-campo {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.pastas-campo label {
+  font-weight: 600;
+}
+.pastas-campo .campo {
+  width: min(100%, 34rem);
+}
+.pastas-campos-juntos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 12px;
+}
+.pastas-campos-juntos .campo {
+  width: 100%;
+}
+.pastas-campo-dica,
+.pastas-campo-erro {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.pastas-campo-dica {
+  color: var(--tinta2);
+}
+.pastas-campo-erro {
+  color: var(--alerta);
+  font-weight: 500;
+}
+.pastas-rotulo {
+  font-weight: 600;
+}
+.pastas-unidade-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: var(--toque);
+  margin: 0;
+}
+.pastas-modelo {
+  margin: 0;
+  color: var(--tinta2);
+}
+.pastas-progresso {
+  margin: 0;
+  color: var(--acao2);
+  font-weight: 500;
+}
+.pastas-form > .pastas-erro {
+  margin: 0;
+}
+.pastas-form-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+@media (max-width: 699px) {
+  .pastas-tipos {
+    grid-template-columns: 1fr;
+  }
+  .pastas-form {
+    padding: 14px;
+  }
+}
+
+/* ---- A página da pasta ---- */
+
+.pasta-pagina {
+  display: grid;
+  gap: 16px;
+  max-width: 60rem;
+}
+.pasta-faixa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 12px 20px;
+  border-radius: var(--r-m);
+  background: var(--f);
+  color: var(--c);
+  font-weight: 600;
+}
+.pasta-faixa a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque);
+  min-height: var(--toque);
+  padding: 0 4px;
+  color: inherit;
+}
+.pasta-faixa-detalhe {
+  font-weight: 500;
+}
+.pasta-selo-pagina {
+  padding: 1px 10px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 0.72);
+  color: var(--tinta2);
+  font-size: 0.85rem;
+}
+.pasta-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.pasta-planilha {
+  gap: 8px;
+}
+.pasta-planilha .icone {
+  width: 18px;
+  height: 18px;
+}
+.pasta-renomear {
+  margin-top: 0;
+}
+.pasta-conteudo p {
+  margin: 0;
+}
+
+/* ---- O menu do computador: as pastas da Casa debaixo dela ---- */
+
+.menu-pastas {
+  margin: 0 0 4px 18px !important;
+  padding-left: 6px !important;
+  border-left: 2px solid var(--linha);
+}
+.menu-pastas .item {
+  padding-left: 12px;
+  font-size: 0.95rem;
+}
+.menu-pastas .ponto-da-sala {
+  display: none;
+}
+
+/* ---- O Registro de consumo (V02, Tarefa 13): faixa do envio, formulário, gráfico por mês e tabela ---- */
+
+.registro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* a coluna única nunca passa da tela: o que for largo rola no seu quadro */
+  gap: 14px;
+}
+.registro-lembrete {
+  display: block;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--r-p);
+  background: var(--pessego);
+  color: var(--tinta);
+  font-weight: 600;
+  text-decoration: none;
+}
+a.registro-lembrete {
+  display: flex;
+  align-items: center;
+  min-height: var(--toque);
+}
+a.registro-lembrete:hover {
+  background: color-mix(in srgb, var(--pessego) 80%, var(--coral));
+}
+a.registro-lembrete:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.registro-lembretes {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.registro-aviso {
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+  color: var(--tinta2);
+}
+.registro-nota {
+  margin: 0;
+  color: var(--tinta2);
+  font-size: 0.9rem;
+}
+.registro-titulo {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.registro-form {
+  margin-top: 0;
+}
+.registro-form .registro-titulo {
+  margin: 0;
+}
+
+/* Gráfico: uma coluna por mês, a mais alta é o mês de maior consumo. Sem biblioteca: só caixas. */
+.registro-figura {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin: 0;
+}
+/* O quadro do gráfico rola para os lados quando há meses demais (nunca a página inteira): 12 meses não cabem em 320 px. */
+.registro-grafico-rolagem {
+  position: relative; /* contém o texto só para leitor de tela (.so-leitor, absoluto): sem isto ele escapa do quadro e a página rola */
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.registro-grafico {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+  height: 11rem;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.registro-grafico > li {
+  display: grid;
+  /* A ordem no HTML é mês, barra, valor (o leitor de tela diz "abr/25: 10 m³"); na tela o valor vem em cima. */
+  grid-template-areas: 'valor' 'trilho' 'mes';
+  grid-template-rows: auto 1fr auto;
+  flex: 1 0 4.4rem;
+  min-width: 0;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.registro-barra-trilho {
+  grid-area: trilho;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+.registro-barra {
+  display: block;
+  width: min(100%, 3rem);
+  border-radius: 8px 8px 2px 2px;
+  background: var(--c, var(--acao));
+}
+.registro-barra-valor {
+  grid-area: valor;
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.registro-barra-mes {
+  grid-area: mes;
+  color: var(--tinta2);
+  font-size: 0.82rem;
+}
+
+.registro-tabela-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  justify-items: start;
+}
+.registro-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.registro-tabela th,
+.registro-tabela td {
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--linha);
+  text-align: left;
+  vertical-align: top;
+}
+.registro-tabela th {
+  color: var(--tinta2);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.registro-obs {
+  display: block;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.registro-obs-aviso {
+  color: var(--ferrugem);
+  font-weight: 600;
+}
+@media (max-width: 699px) {
+  .registro-grafico {
+    gap: 4px;
+    height: 9rem;
+  }
+  .registro-barra-valor,
+  .registro-barra-mes {
+    font-size: 0.8rem;
+  }
+}
+
+/* ---- A Lista de compras (V02, Tarefa 14): formulário, itens com caixa de marcar e os comprados ---- */
+
+.lista {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.lista-form {
+  margin-top: 0;
+}
+.lista-form .registro-titulo {
+  margin: 0;
+}
+.lista-campos {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+.lista-campos .campo {
+  width: 100%;
+}
+.lista-botao {
+  min-height: var(--toque);
+}
+.lista-grupo {
+  display: grid;
+  gap: 4px;
+}
+.lista-grupo-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+.lista-grupo-cabeca .registro-titulo {
+  margin: 0;
+}
+.lista-grupo-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.lista-itens {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lista-item {
+  display: grid;
+  gap: 0;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--linha);
+}
+/* A área inteira da linha é a caixa: toque mínimo de 44 px, no celular e no computador. */
+.lista-caixa {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--toque);
+  cursor: pointer;
+}
+.lista-caixa input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--acao);
+}
+.lista-caixa:focus-within {
+  outline: 3px solid var(--acao);
+  outline-offset: -2px;
+  border-radius: var(--r-p);
+}
+.lista-item-nome {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lista-item-detalhe {
+  margin: -6px 0 6px 34px;
+  color: var(--tinta2);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.lista-item-comprado .lista-item-nome {
+  color: var(--tinta2);
+  text-decoration: line-through;
+}
+@media (max-width: 699px) {
+  .lista-campos {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
+/* ---- O Financeiro (V02, Tarefa 16): mês, cartões, barras por categoria, tabela e "Novo gasto" ---- */
+
+.financeiro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.fin-so-pc {
+  display: grid;
+  gap: 4px;
+  padding: 18px 8px;
+  text-align: center;
+  justify-items: center;
+}
+.fin-so-pc .lista-vazia-texto {
+  max-width: 34rem;
+}
+.fin-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.fin-mes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fin-mes-botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque);
+  min-height: var(--toque);
+  padding: 0;
+}
+.fin-mes-botao .icone {
+  width: 18px;
+  height: 18px;
+}
+.fin-mes-seguinte .icone {
+  transform: scaleX(-1);
+}
+.fin-mes-botao[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+.fin-mes-nome {
+  min-width: 10.5rem;
+  margin: 0;
+  font-family: var(--titulo);
+  font-size: 1.3rem;
+  text-align: center;
+}
+.fin-mes-nome::first-letter {
+  text-transform: uppercase;
+}
+
+/* Os três cartões do mês, como no protótipo: número grande em fonte de título. */
+.fin-cartoes {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fin-cartao-resumo {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 16px;
+  border-radius: var(--r-m);
+  background: var(--poco);
+}
+/* O total do mês é o número que se procura primeiro: o cartão sobe e o número cresce. */
+.fin-cartao-resumo:first-child {
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+}
+.fin-cartao-resumo:first-child .fin-valor {
+  font-size: 2.3rem;
+}
+.fin-rotulo {
+  color: var(--tinta2);
+  font-size: 0.88rem;
+}
+.fin-valor {
+  font-family: var(--titulo);
+  font-size: 1.7rem;
+  font-weight: 400;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fin-valor-texto {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 1.15rem;
+}
+.fin-detalhe {
+  color: var(--tinta2);
+  font-variant-numeric: tabular-nums;
+}
+.fin-fora p {
+  margin: 0;
+}
+.fin-fora summary {
+  min-height: var(--toque);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+.fin-fora summary::after {
+  content: '▾' / '';
+  margin-left: 6px;
+}
+.fin-fora details[open] summary::after {
+  content: '▴' / '';
+}
+.fin-fora summary:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.fin-fora-lista {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+.fin-bloco {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  justify-items: stretch;
+}
+
+/* Barras por categoria: nome, barra e valor. Sem biblioteca: só caixas. */
+.fin-barras {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fin-barras > li {
+  display: grid;
+  grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) minmax(5.5rem, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.fin-barra-nome {
+  overflow-wrap: anywhere;
+}
+.fin-barra-trilho {
+  display: block;
+  height: 10px;
+  border-radius: 99px;
+  background: var(--poco);
+}
+.fin-barra {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--c, var(--acao));
+}
+.fin-barra-valor {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fin-tabela-rolagem {
+  overflow-x: auto;
+}
+.fin-tabela {
+  min-width: 34rem;
+  table-layout: fixed;
+}
+.fin-tabela th:nth-child(1) {
+  width: 4.5rem;
+}
+.fin-tabela th:nth-child(3) {
+  width: 9rem;
+}
+.fin-tabela th:nth-child(4) {
+  width: 5.5rem;
+}
+.fin-tabela th:nth-child(5) {
+  width: 7rem;
+}
+.fin-tabela td {
+  overflow-wrap: normal;
+}
+.fin-tabela td:nth-child(2),
+.fin-tabela td:nth-child(3) {
+  overflow-wrap: break-word;
+}
+.fin-tabela td:nth-child(1),
+.fin-tabela td:nth-child(4) {
+  white-space: nowrap;
+}
+.fin-tabela .fin-direita,
+.fin-tabela th.fin-direita {
+  text-align: right;
+  white-space: nowrap;
+}
+.fin-tabela th:last-child,
+.fin-tabela td:last-child {
+  padding-right: 0;
+}
+.fin-form {
+  margin-top: 0;
+}
+.fin-form .fin-campos-1 {
+  grid-template-columns: 9rem minmax(0, 2fr) 10rem;
+}
+.fin-form .fin-campos-2 {
+  grid-template-columns: minmax(0, 2fr) 9rem minmax(0, 1fr);
+}
+.fin-form select.campo {
+  padding-right: 12px;
+}
+.campo[aria-invalid='true'] {
+  border-color: var(--alerta);
+  box-shadow: 0 0 0 1px var(--alerta);
+}
+.fin-topo-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+/* Reserva a altura enquanto a primeira leitura não chega: o resto da tela não pula quando ela chega. */
+.fin-lendo {
+  min-height: 4.5rem;
+}
+.fin-form .registro-titulo {
+  margin: 0;
+}
+@media (max-width: 899px) {
+  .fin-cartoes {
+    grid-template-columns: 1fr;
+  }
+  .fin-form .fin-campos-1,
+  .fin-form .fin-campos-2 {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  }
+  .fin-barras > li {
+    grid-template-columns: minmax(5rem, 7rem) minmax(0, 1fr) minmax(5rem, auto);
+  }
+}
+
+/* ---- A pasta comum (V02, Tarefa 17): tarefas e documentos lado a lado, as notas por baixo ---- */
+
+.pasta-comum {
+  display: grid;
+  gap: 16px;
+  /* Reaproveita a grade da sala: duas colunas só quando há largura (@container sala em salas.css). */
+  container: sala / inline-size;
+  max-width: 76rem;
+}
+
+/* Cores forçadas (Windows em alto contraste): as barras são só fundo e sumiriam; ficam na cor do texto do sistema. */
+@media (forced-colors: active) {
+  .registro-barra,
+  .fin-barra {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .fin-barra-trilho {
+    border: 1px solid CanvasText;
+  }
+}

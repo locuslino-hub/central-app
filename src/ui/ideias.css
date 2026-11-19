@@ -1,0 +1,215 @@
+/* Ideias (V02, Tarefa 7), conforme prototipo-esbocos/v02: caixa de entrada com a sala sugerida em destaque. */
+
+.ideias {
+  max-width: 48rem;
+}
+.ideias-cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: 12px;
+}
+.ideias-cabeca h2 {
+  margin: 0;
+}
+.ideias-sub {
+  margin: 4px 0 0;
+  color: var(--tinta2);
+}
+.ideias-nova {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ideias-nova .icone {
+  width: 18px;
+  height: 18px;
+}
+.ideias-vazio {
+  margin: 10px 0 0;
+  color: var(--tinta2);
+}
+.ideias-erro {
+  margin: 0 0 12px;
+  color: var(--alerta);
+  font-weight: 500;
+}
+
+.ideias-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ideia {
+  padding: 14px 0;
+  border-top: 1px solid var(--fio);
+}
+.ideias-lista > .ideia:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+.ideia p {
+  margin: 0;
+}
+.ideia-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tinta3);
+  font-size: 0.85rem;
+}
+.ideia-meta .icone {
+  width: 15px;
+  height: 15px;
+}
+.ideia-texto {
+  margin: 4px 0 10px !important;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.ideia-estado {
+  margin-bottom: 8px !important;
+  color: var(--tinta2);
+}
+.ideia-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A sala em destaque: fundo suave da sala; a mesma peça serve para escolher outra. */
+.ideia-sala {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--toque);
+  padding: 0 16px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--f, var(--poco));
+  color: var(--c, var(--tinta2));
+  font: 600 1rem var(--ui);
+  cursor: pointer;
+}
+.ideia-sala:hover {
+  filter: brightness(0.96);
+}
+.ideia-sala:disabled,
+.ideias .botao-pilula:disabled,
+.ideias .botao-texto:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.ideia-sem-sala {
+  color: var(--tinta3);
+  font-size: 0.9rem;
+}
+.ideia-escolha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* O áudio: pílula com ▶ e a duração. */
+.ideia-audio-bloco {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.ideia-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--toque);
+  padding: 0 14px 0 8px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--cabe);
+  color: var(--acao2);
+  font: 600 0.95rem var(--ui);
+  cursor: pointer;
+}
+.ideia-audio-icone {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--acao);
+  color: #fff;
+  font-size: 0.75rem;
+}
+.ideia-aviso-audio {
+  margin: 0 0 8px;
+  color: var(--ferrugem);
+  font-size: 0.9rem;
+}
+
+/* O cartão de resultado (Virou tarefa, com Desfazer). */
+.ideias-cartao {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: var(--tinta);
+  color: #f1f2ec;
+}
+.ideias-cartao p {
+  margin: 0;
+}
+/* O cartão é escuro (--tinta): o contorno verde do foco não se vê nele (contraste menor que 3:1). */
+.ideias-cartao :focus-visible {
+  outline-color: #fff;
+}
+.ideias-cartao-titulo {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.ideias-cartao-detalhe {
+  margin-top: 4px !important;
+  color: #d5d9cf;
+  overflow-wrap: anywhere;
+}
+.ideias-cartao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ideias-cartao .botao-pilula,
+.ideias-cartao .botao-link {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.12);
+  color: #f1f2ec;
+}
+.ideias-cartao .botao-pilula:hover,
+.ideias-cartao .botao-link:hover {
+  background: rgb(255 255 255 / 0.22);
+}
+
+/* Já arrumadas: fechada por padrão, só para achar o que se quer rever. */
+.ideias-arrumadas {
+  margin-top: 18px;
+  padding-top: 8px;
+  border-top: 1px solid var(--linha);
+}
+.ideias-arrumadas summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--toque);
+  color: var(--tinta2);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ideia-arrumada {
+  color: var(--tinta2);
+}
+.ideias-nota {
+  margin: 4px 0 0;
+  color: var(--tinta3);
+  font-size: 0.9rem;
+}

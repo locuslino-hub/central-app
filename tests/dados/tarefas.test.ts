@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { desfazer } from '../../src/dados/desfazer';
-import { apagar, listar, listarPendentes as listarTodosOsPendentes, salvar } from '../../src/dados/loja';
+import { apagar, gravarDoServidor, listar, listarPendentes as listarTodosOsPendentes, salvar } from '../../src/dados/loja';
 import {
   apagarTarefa,
   concluirTarefa,
@@ -13,6 +13,8 @@ import {
   moverParaSemana,
   reabrirTarefa,
 } from '../../src/dados/tarefas';
+import { criarPagina, itemDaLinha } from '../../src/dados/caderno';
+import { apagarPasta, listarPastas, restaurarPasta } from '../../src/dados/pastas';
 import type { ParaSalvar, Tarefa } from '../../src/dados/tipos';
 
 /** A fila sem o espelho no Google (que tem testes próprios em tests/dados/espelho.test.ts). */
@@ -331,5 +333,86 @@ describe('apagar tarefa', () => {
 
   it('tarefa que já sumiu: undefined', async () => {
     expect(await apagarTarefa('nao-existe')).toBeUndefined();
+  });
+});
+
+// ---- Pasta comum por tema (V02, Tarefa 17) ----
+
+describe('tarefa de um tema (pastaId)', () => {
+  it('criarTarefa grava o pastaId e o resto como sempre', async () => {
+    const t = await criarTarefa('Revisar capítulo', { data: HOJE, salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia' });
+    expect(t).toMatchObject({ titulo: 'Revisar capítulo', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', data: HOJE, feito: false });
+    expect(await unica()).toMatchObject({ pastaId: 'pasta-metodologia' });
+  });
+
+  it('sem pastaId, o campo nem existe no registro', async () => {
+    await criarTarefa('Sem tema', { data: HOJE });
+    expect(Object.keys(await unica())).not.toContain('pastaId');
+  });
+
+  it('pastaId vazio não vira campo (tarefa, página e linha do caderno)', async () => {
+    await criarTarefa('Vazio', { data: HOJE, pastaId: '' });
+    expect(Object.keys(await unica())).not.toContain('pastaId');
+    const pagina = await criarPagina('sala-doutoramento', 'Página', '');
+    expect(Object.keys(pagina)).not.toContain('pastaId');
+    const linha = await itemDaLinha('Ler artigo amanhã', 'sala-doutoramento', { compromisso: false, pastaId: '' });
+    expect(linha).not.toBeNull();
+    const todas = await listar('tarefas');
+    expect(todas).toHaveLength(2);
+    for (const t of todas) expect(Object.keys(t)).not.toContain('pastaId');
+  });
+
+  it('mudar o título, o dia ou concluir mantém o tema', async () => {
+    const t = await salvar('tarefas', tarefa('Ler', { salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', data: HOJE }));
+    await editarTarefa(t.id, { titulo: 'Ler artigos', quando: { tipo: 'sem-prazo' } });
+    await concluirTarefa(t.id);
+    expect(await unica()).toMatchObject({ titulo: 'Ler artigos', pastaId: 'pasta-metodologia', feito: true });
+  });
+
+  it('mudar a sala da tarefa tira do tema (a pasta é de uma sala só); a mesma sala mantém', async () => {
+    const t = await salvar('tarefas', tarefa('Ler', { salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia' }));
+    await editarTarefa(t.id, { salaId: 'sala-doutoramento' });
+    expect(await unica()).toMatchObject({ pastaId: 'pasta-metodologia' });
+    await editarTarefa(t.id, { salaId: 'sala-aulas' });
+    const depois = await unica();
+    expect(depois.salaId).toBe('sala-aulas');
+    expect(Object.keys(depois)).not.toContain('pastaId');
+  });
+
+  it('a tarefa que chega de outro aparelho com pastaId guarda o campo (e campo desconhecido não derruba)', async () => {
+    await gravarDoServidor([
+      {
+        colecao: 'tarefas',
+        registro: {
+          id: 't-remota', titulo: 'Do outro aparelho', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', campoDeOutraVersao: 1,
+          duracaoMin: 60, duracaoConfirmada: false, feito: false, fixada: false, marcar: false, atualizadoEm: AGORA - 1000, aparelho: 'outro',
+        },
+      },
+    ]);
+    expect(await unica()).toMatchObject({ id: 't-remota', pastaId: 'pasta-metodologia' });
+  });
+
+  it('apagar a pasta não apaga as tarefas: elas seguem vivas, na mesma sala, e só a pasta some da lista', async () => {
+    const pasta = await salvar('pastas', { salaId: 'sala-doutoramento', tipo: 'comum', nome: 'Metodologia', ordem: 1 });
+    const t = await salvar('tarefas', tarefa('Revisar capítulo', { salaId: 'sala-doutoramento', pastaId: pasta.id, data: HOJE }));
+
+    const antes = await unica();
+    vi.setSystemTime(AGORA + 5000);
+    await apagarPasta(pasta.id);
+
+    expect(await listarPastas('sala-doutoramento')).toEqual([]);
+    expect(await listar('tarefas')).toHaveLength(1);
+    // Decisão: nada é regravado em massa. O pastaId fica na tarefa e a pasta apagada o deixa sem uso.
+    expect(await unica()).toMatchObject({ id: t.id, titulo: 'Revisar capítulo', salaId: 'sala-doutoramento', feito: false, pastaId: pasta.id });
+    expect((await unica()).atualizadoEm).toBe(antes.atualizadoEm); // a tarefa nem foi regravada
+  });
+
+  it('restaurar a pasta devolve o tema às tarefas (o mesmo id)', async () => {
+    const pasta = await salvar('pastas', { salaId: 'sala-doutoramento', tipo: 'comum', nome: 'Metodologia', ordem: 1 });
+    await salvar('tarefas', tarefa('Revisar capítulo', { salaId: 'sala-doutoramento', pastaId: pasta.id }));
+    const antes = await apagarPasta(pasta.id);
+    await restaurarPasta(antes!);
+    expect((await listarPastas('sala-doutoramento')).map((p) => p.id)).toEqual([pasta.id]);
+    expect(await unica()).toMatchObject({ pastaId: pasta.id });
   });
 });

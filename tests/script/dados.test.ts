@@ -550,8 +550,53 @@ describe('cópia diária idempotente', () => {
       throw new Error('Drive fora do ar');
     };
 
-    expect(() => enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem)).toThrow();
+    // Limpar cópia velha é secundário: a falha é registrada e a gravação segue.
+    const falhas: unknown[] = [];
+    armazem.registrarFalhaDaCopia = (erro) => void falhas.push(erro);
+    expect(() => enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem)).not.toThrow();
     expect(armazem.marcada).toBe('2026-11-05');
+    expect(falhas).toHaveLength(1);
+    expect(armazem.conteudo).toContain('"t2"');
+  });
+});
+
+describe('cópia diária não é fatal', () => {
+  function comArquivo() {
+    const armazem = armazemNaMemoria();
+    enviar({ mudancas: [item(tarefa('t1', 'a', T0))] }, armazem);
+    return armazem;
+  }
+
+  it.each(['copiar', 'listarCopias'] as const)('se %s falha, a gravação segue, a falha é registrada e o dia não é marcado', (quebrado) => {
+    const armazem = comArquivo();
+    const falhas: unknown[] = [];
+    armazem.registrarFalhaDaCopia = (erro) => void falhas.push(erro);
+    const original = armazem[quebrado];
+    (armazem as unknown as Record<string, () => unknown>)[quebrado] = () => {
+      throw new Error('Mais de uma pasta Central');
+    };
+
+    const resposta = enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem);
+
+    expect(resposta.aceitas).toEqual([{ colecao: 'tarefas', id: 't2' }]);
+    expect(armazem.conteudo).toContain('"t2"');
+    expect(falhas).toHaveLength(1);
+    expect((falhas[0] as Error).message).toMatch(/Central/);
+    expect(armazem.marcada).toBeNull();
+
+    // Corrigido o problema, a próxima gravação do dia faz a cópia que faltou.
+    (armazem as unknown as Record<string, unknown>)[quebrado] = original;
+    enviar({ mudancas: [item(tarefa('t3', 'c', T0))] }, armazem);
+    expect([...armazem.copias.values()].map((c) => c.nome)).toEqual(['central-dados-2026-11-05.json']);
+    expect(armazem.marcada).toBe('2026-11-05');
+  });
+
+  it('sem registrarFalhaDaCopia no armazém, a falha também não derruba a gravação', () => {
+    const armazem = comArquivo();
+    armazem.copiar = () => {
+      throw new Error('x');
+    };
+    expect(() => enviar({ mudancas: [item(tarefa('t2', 'b', T0))] }, armazem)).not.toThrow();
   });
 });
 

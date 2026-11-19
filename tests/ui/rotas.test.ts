@@ -20,6 +20,7 @@ describe('resolverRota', () => {
     // A página Sem prazo deixou de existir: o endereço antigo leva a Atividades.
     ['#/sem-prazo', 'atividades', 'Atividades'],
     ['#/chat', 'chat', 'Chat'],
+    ['#/falar', 'falar', 'Pode falar'],
     ['#/conectar', 'conectar', 'Conectar aparelho'],
   ])('%j abre %s com o título %j', (hash, id, titulo) => {
     const rota = resolverRota(hash, AGORA);
@@ -31,6 +32,24 @@ describe('resolverRota', () => {
     expect(resolverRota('#/sala/sala-mba', AGORA)).toMatchObject({ id: 'sala', param: 'sala-mba', titulo: 'Sala' });
     expect(resolverRota('#/pessoa/p1', AGORA)).toMatchObject({ id: 'pessoa', param: 'p1', titulo: 'Pessoa' });
   });
+
+  it('a pasta de uma sala leva os dois ids e volta para a sala', () => {
+    expect(resolverRota('#/sala/sala-casa/pasta/pasta-1', AGORA)).toMatchObject({
+      id: 'pasta',
+      param: 'sala-casa',
+      pastaId: 'pasta-1',
+      titulo: 'Pasta',
+      voltarPara: '#/sala/sala-casa',
+    });
+    expect(resolverRota('#/sala/sala%20x/pasta/p%2F1', AGORA)).toMatchObject({ param: 'sala x', pastaId: 'p/1', voltarPara: '#/sala/sala%20x' });
+  });
+
+  it.each(['#/sala/a/pasta', '#/sala/a/pasta/', '#/sala/a/pasta/b/c', '#/sala//pasta/b', '#/sala/a/pastas/b', '#/sala/%E0%A4%A/pasta/b', '#/sala/a/pasta/%E0%A4%A'])(
+    '%j não é uma pasta',
+    (hash) => {
+      expect(resolverRota(hash, AGORA).id).toBe('nao-encontrada');
+    },
+  );
 
   it('o id com caracteres especiais é decodificado', () => {
     expect(resolverRota('#/sala/sala%20x', AGORA).param).toBe('sala x');
@@ -123,5 +142,7 @@ describe('hrefDe', () => {
     expect(hrefDe('semana')).toBe('#/semana');
     expect(hrefDe('sala', 'sala-mba')).toBe('#/sala/sala-mba');
     expect(hrefDe('pessoa', 'a b')).toBe('#/pessoa/a%20b');
+    expect(hrefDe('pasta', 'sala-casa', 'pasta-1')).toBe('#/sala/sala-casa/pasta/pasta-1');
+    expect(hrefDe('pasta', 'a b', 'c/d')).toBe('#/sala/a%20b/pasta/c%2Fd');
   });
 });

@@ -119,6 +119,7 @@ export function Exportar({ baixar = baixarArquivo }: { baixar?: (nome: string, t
         Baixa tudo o que está neste aparelho (tarefas, salas, pessoas, caderno, água e o resto, com os e-mails de contato das pessoas) num
         arquivo. A cópia não leva a conexão, o código de acesso nem as mensagens do Gmail.
       </p>
+      <p class="exportar-nota">A cópia inclui as suas ideias e os endereços das planilhas.</p>
       <button type="button" class="botao" disabled={ocupado} onClick={() => void exportar()}>
         Baixar cópia dos dados
       </button>

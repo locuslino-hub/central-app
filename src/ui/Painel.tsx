@@ -8,6 +8,7 @@
 //   7. Fechar o dia.
 // No celular as duplas viram uma coluna, na mesma ordem. Onde não há painel
 // direito (celular e tablet), o cartão do Agora vem logo depois da saudação e da linha do dia.
+// Perto do dia de envio de uma leitura (água, luz, gás), uma faixa aparece junto dos avisos, acima do painel.
 // A seguir começa depois do destaque do Agora (que está no painel direito ou
 // no alto): a mesma tarefa não aparece duas vezes.
 import { useMemo } from 'preact/hooks';
@@ -22,6 +23,7 @@ import { CaixasSalas } from './CaixasSalas';
 import { Checklist } from './Checklist';
 import { FecharDia } from './FecharDia';
 import { useNome, usePessoas, useSalas, useTela } from './hooks';
+import { LembretesDeEnvio } from './LembreteDeEnvio';
 import { LinhaDia } from './LinhaDia';
 import { juntar, nEmails, nTarefas } from './plural';
 import { PorResponder } from './PorResponder';
@@ -133,6 +135,7 @@ export function Painel() {
     <>
       <AvisosDeConflito />
       <AvisoDaFila />
+      <LembretesDeEnvio />
       <div class="painel-do-dia">
         <MensagemDoDia dia={dia} />
         <LinhaDoDia dia={dia} />

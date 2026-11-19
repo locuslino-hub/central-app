@@ -11,6 +11,14 @@
   "orientation": "any",
   "background_color": "#e8eae3",
   "theme_color": "#e8eae3",
+  "shortcuts": [
+    {
+      "name": "Pode falar",
+      "short_name": "Pode falar",
+      "description": "Falar ou escrever uma ideia, tarefa ou compromisso",
+      "url": "/central-app/#/falar"
+    }
+  ],
   "icons": [
     { "src": "/central-app/icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/central-app/icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

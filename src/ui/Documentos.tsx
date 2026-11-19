@@ -24,6 +24,12 @@ type Props = {
   de: string;
   salaId?: string;
   pessoaId?: string;
+  /**
+   * Na pasta comum (tema): a caixa mostra só os documentos do tema, e o que se adiciona nasce nele (da sala
+   * `salaId`), sem perguntar onde guardar. `nomeDaPasta` é o que o aviso "Guardado em ..." diz.
+   */
+  pastaId?: string;
+  nomeDaPasta?: string;
 };
 
 const NOME_DO_TIPO: Record<TipoDoc, string> = {
@@ -107,11 +113,14 @@ type Erro = { campo: 'link' | 'titulo'; texto: string };
 
 function FormularioNovo({
   inicial,
+  pastaId,
   aoGuardar,
   aoCancelar,
 }: {
   /** Destino de partida: `sala:ID` ou `pessoa:ID`. */
   inicial: string;
+  /** Na pasta comum: o documento nasce no tema, na sala de `inicial`, e o destino não se escolhe. */
+  pastaId?: string;
   aoGuardar: (destino: string) => void;
   aoCancelar: () => void;
 }) {
@@ -136,7 +145,9 @@ function FormularioNovo({
     const [tipoDoDono, id] = [destino.slice(0, destino.indexOf(':')), destino.slice(destino.indexOf(':') + 1)];
     const pessoa = tipoDoDono === 'pessoa' ? pessoas.find((p) => p.id === id) : undefined;
     // Pessoa guarda a sala dela também: o documento acompanha a pessoa se ela mudar de sala só na tela dela.
-    const dono = tipoDoDono === 'pessoa' ? { pessoaId: id, salaId: pessoa?.salaId } : { salaId: id };
+    const dono = pastaId
+      ? { salaId: id, pastaId }
+      : tipoDoDono === 'pessoa' ? { pessoaId: id, salaId: pessoa?.salaId } : { salaId: id };
     setGuardando(true);
     try {
       const r = await adicionarDocumento({ titulo, url: link, ...dono });
@@ -197,27 +208,29 @@ function FormularioNovo({
           onInput={(e) => setTitulo((e.target as HTMLInputElement).value)}
         />
       </div>
-      <div class="documento-campo">
-        <label for="documento-destino">Guardar em</label>
-        <select id="documento-destino" ref={campoDestino} class="campo" value={destino} onChange={(e) => setDestino((e.target as HTMLSelectElement).value)}>
-          <optgroup label="Salas">
-            {salas.map((s) => (
-              <option key={s.id} value={`sala:${s.id}`}>
-                {s.nome}
-              </option>
-            ))}
-          </optgroup>
-          {pessoas.length > 0 && (
-            <optgroup label="Pessoas">
-              {pessoas.map((p) => (
-                <option key={p.id} value={`pessoa:${p.id}`}>
-                  {p.nome}
+      {!pastaId && (
+        <div class="documento-campo">
+          <label for="documento-destino">Guardar em</label>
+          <select id="documento-destino" ref={campoDestino} class="campo" value={destino} onChange={(e) => setDestino((e.target as HTMLSelectElement).value)}>
+            <optgroup label="Salas">
+              {salas.map((s) => (
+                <option key={s.id} value={`sala:${s.id}`}>
+                  {s.nome}
                 </option>
               ))}
             </optgroup>
-          )}
-        </select>
-      </div>
+            {pessoas.length > 0 && (
+              <optgroup label="Pessoas">
+                {pessoas.map((p) => (
+                  <option key={p.id} value={`pessoa:${p.id}`}>
+                    {p.nome}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+      )}
       {erro && (
         <p id="documento-erro" class="tarefa-erro" role="alert">
           {erro.texto}
@@ -235,7 +248,7 @@ function FormularioNovo({
   );
 }
 
-export function Documentos({ de, salaId, pessoaId }: Props) {
+export function Documentos({ de, salaId, pessoaId, pastaId, nomeDaPasta }: Props) {
   const todos = useDocumentos();
   const salas = useSalas();
   const pessoas = usePessoas();
@@ -244,14 +257,16 @@ export function Documentos({ de, salaId, pessoaId }: Props) {
   const [guardadoEm, setGuardadoEm] = useState<string | null>(null);
   const botaoAdicionar = useRef<HTMLButtonElement>(null);
 
-  // Pessoa: só os dela. Sala: os da sala que não são de uma pessoa (essas ficam na página da pessoa).
+  // Tema: só os do tema. Pessoa: só os dela. Sala: os da sala que não são de uma pessoa (essas ficam na página da
+  // pessoa); os de um tema também ficam na caixa da sala, para nada sumir se a pasta for apagada.
   const daCaixa = (todos ?? [])
-    .filter((d) => !d.arquivado && (pessoaId ? d.pessoaId === pessoaId : d.salaId === salaId && !d.pessoaId))
+    .filter((d) => !d.arquivado && (pastaId ? d.pastaId === pastaId && d.salaId === salaId : pessoaId ? d.pessoaId === pessoaId : d.salaId === salaId && !d.pessoaId))
     .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
 
   const inicial = pessoaId ? `pessoa:${pessoaId}` : `sala:${salaId ?? ''}`;
 
   function nomeDoDestino(destino: string): string {
+    if (pastaId && nomeDaPasta) return nomeDaPasta;
     const id = destino.slice(destino.indexOf(':') + 1);
     return (destino.startsWith('pessoa:') ? pessoas?.find((p) => p.id === id)?.nome : salas.find((s) => s.id === id)?.nome) ?? 'o destino escolhido';
   }
@@ -281,6 +296,7 @@ export function Documentos({ de, salaId, pessoaId }: Props) {
       {aberto ? (
         <FormularioNovo
           inicial={inicial}
+          pastaId={pastaId}
           aoCancelar={() => {
             setAberto(false);
             queueMicrotask(() => botaoAdicionar.current?.focus());

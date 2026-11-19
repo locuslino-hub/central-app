@@ -16,11 +16,16 @@ import {
   type AchadoData, type Trecho,
 } from './datas';
 
+/** Pasta comum de uma sala, o "tema" de "nas tarefas do tema X" (V02, Tarefa 17). */
+export type Tema = { id: string; nome: string; salaId: string };
+
 /** Memória de pessoas e palavras (Tarefa 8). As regras só consultam. */
 export type Memoria = {
   acharPessoa(frase: string): { id: string; nome: string; salaId: string } | null;
   acharSala(frase: string): string | null;
   aprender(termo: string, salaId: string): void | Promise<void>;
+  /** As pastas comuns vivas (Tarefa 17). Memória sem esta função não conhece nenhum tema. */
+  temas?(): Tema[];
 };
 
 export type Item = {
@@ -46,7 +51,13 @@ export type Item = {
   marcar: boolean;
   pessoaId?: string;
   /** Por que a sala foi escolhida, para o cartão mostrar. */
-  motivoSala?: 'frase' | 'memoria' | 'pessoa' | 'ia';
+  motivoSala?: 'frase' | 'memoria' | 'pessoa' | 'ia' | 'tema';
+  /** "nas tarefas do tema X" achou a pasta comum X (Tarefa 17): a tarefa leva o `pastaId` e a sala dela. */
+  pastaId?: string;
+  /** O nome da pasta, como está no app, para o cartão dizer o tema. */
+  temaNome?: string;
+  /** "nas tarefas do tema X" não achou nenhuma pasta com esse nome: o nome dito, para o cartão avisar. */
+  temaNaoAchado?: string;
 };
 
 export type Resultado = { itens: Item[]; certeza: 'alta' | 'baixa'; vazia: boolean };
@@ -96,6 +107,63 @@ const RE_PREFIXO_DE_LISTA = /^(?:em|nas?|nos?|para\s+(?:as?|os?)|pra)\s/;
 const RE_LISTA_DE_TAREFAS = new RegExp(`${L}(?:em|nas|nos)\\s+(?:minhas\\s+)?(?:tarefas|atividades)${R}`, 'g');
 /** "Tarefa:", "Atividade amanhã...", "Tarefa para hoje..." no começo: a palavra sai do título (quando é pedido). */
 const RE_TAREFA_NO_INICIO = /^\s*(?:uma\s+)?(tarefas?|atividades?)(?![a-z])\s*:?/;
+
+/**
+ * "nas tarefas do tema ", "em atividades do tema ", "para as tarefas do tema ": só a forma de lista conta, para
+ * "reunião sobre o tema X" e "estudar o tema X" seguirem como antes. O nome vem logo depois.
+ */
+const RE_TEMA = new RegExp(
+  `${L}(?:em|nas?|nos?|para\\s+(?:as?|os?)|pra)\\s+(?:minhas\\s+)?(?:tarefas?|atividades?|lista|pendencias)\\s+(?:d[aoe]s?\\s+)?tema\\s+(?=[a-z0-9])`,
+);
+const escaparRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Das pastas dadas, as de nome mais longo que começa em `inicio` (palavra inteira). Várias só se o nome é o mesmo. */
+function temasQueComecamEm(n: string, inicio: number, temas: readonly Tema[]): { achados: Tema[]; fim: number } | null {
+  const resto = n.slice(inicio);
+  let melhor: { achados: Tema[]; tamanho: number } | null = null;
+  for (const tema of temas) {
+    const nome = normalizar(tema.nome.normalize('NFC')).trim().replace(/\s+/g, ' ');
+    if (!nome) continue;
+    const achou = new RegExp(`^${escaparRe(nome).replace(/ /g, '\\s+')}(?![a-z0-9])`).exec(resto);
+    if (!achou) continue;
+    if (!melhor || achou[0].length > melhor.tamanho) melhor = { achados: [tema], tamanho: achou[0].length };
+    else if (achou[0].length === melhor.tamanho) melhor.achados.push(tema);
+  }
+  return melhor && { achados: melhor.achados, fim: inicio + melhor.tamanho };
+}
+
+const RE_PALAVRA_DO_NOME = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
+/** Palavras que encerram um nome de tema que ninguém conhece: o pedido (ou o prazo) recomeça. */
+const FIM_DE_NOME_DE_TEMA = new Set(['e', 'com', 'para', 'pra', 'ate', 'as', 'a', 'o', 'sem']);
+/** O nome não termina nelas ("Estudos de" -> "Estudos"). */
+const NAO_TERMINA_O_NOME = new Set(['de', 'da', 'do', 'dos', 'das']);
+const PALAVRAS_DO_NOME_NO_MAXIMO = 3;
+
+/**
+ * Onde acaba o nome de um tema que não existe: até 3 palavras, antes de pontuação, de um dia ou hora, de "sem prazo",
+ * de um conector ou de um verbo (que começa o pedido: "do tema Metodologia revisar o capítulo"); o nome não termina
+ * em "de/da/do". `cortado`: o limite de palavras partiu o nome (havia mais palavras depois): o dono confere.
+ * `fim` é `null` se não há nome.
+ */
+function fimDoNomeDeTema(n: string, inicio: number, trechos: readonly Trecho[]): { fim: number | null; cortado: boolean } {
+  const fins: { palavra: string; fim: number }[] = [];
+  let cortado = false;
+  for (const m of n.slice(inicio).matchAll(RE_PALAVRA_DO_NOME)) {
+    const ini = inicio + m.index!;
+    if (fins.length > 0) {
+      if (/[,;.!?:]/.test(n.slice(fins[fins.length - 1]!.fim, ini))) break;
+      if (FIM_DE_NOME_DE_TEMA.has(m[0]) || temVerbo(m[0])) break;
+    }
+    if (trechos.some((t) => ini >= t.ini && ini < t.fim)) break;
+    if (fins.length >= PALAVRAS_DO_NOME_NO_MAXIMO) {
+      cortado = true;
+      break;
+    }
+    fins.push({ palavra: m[0], fim: ini + m[0].length });
+  }
+  while (fins.length > 0 && NAO_TERMINA_O_NOME.has(fins[fins.length - 1]!.palavra)) fins.pop();
+  return { fim: fins.length ? fins[fins.length - 1]!.fim : null, cortado };
+}
 
 const RE_PRAZO = /(?<![a-z])(?:entregar?|entregas|entregue|prazos?)(?![a-z])/g;
 /** "até" só é prazo quando começa um dia ou uma hora ("até sexta", "até 17h"), não em "até tarde". */
@@ -203,11 +271,35 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   }));
   tirar.push(...listasSala, ...listasHoje);
 
+  // Tema: "nas tarefas do tema Metodologia". Um nome de pasta que o dono tem vale inteiro, mesmo que lembre um
+  // dia ("Quarta Etapa"); o que ninguém tem é achado depois das datas e horas, que dizem onde o nome acaba.
+  const prefixoDoTema = RE_TEMA.exec(n);
+  const inicioDoNome = prefixoDoTema ? prefixoDoTema.index + prefixoDoTema[0].length : -1;
+  const conhecido = prefixoDoTema ? temasQueComecamEm(n, inicioDoNome, memoria.temas?.() ?? []) : null;
+  let trechoDoTema: Trecho | null = conhecido ? { ini: prefixoDoTema!.index, fim: conhecido.fim } : null;
+  const foraDoTema = (x: Trecho) => !trechoDoTema || x.fim <= trechoDoTema.ini || x.ini >= trechoDoTema.fim;
+
   // Datas, depois horas fora das datas.
-  const datas = semSobreposicao([...acharDatas(n, hoje), ...listasHoje]);
-  const { horas, ligacoes, invalidas } = acharHoras(n, [...datas, ...listasSala]);
+  const datas = semSobreposicao([...acharDatas(n, hoje).filter(foraDoTema), ...listasHoje]);
+  const { horas, ligacoes, invalidas } = acharHoras(n, [...datas, ...listasSala, ...(trechoDoTema ? [trechoDoTema] : [])]);
   if (invalidas > 0) baixa = true; // "25h", "15:60": o dono quis dizer uma hora
   tirar.push(...datas, ...horas);
+
+  let nomeDoTemaDito: string | null = null;
+  if (prefixoDoTema && !conhecido) {
+    const { fim, cortado } = fimDoNomeDeTema(n, inicioDoNome, [...datas, ...horas, ...ligacoes]);
+    if (cortado) baixa = true;
+    if (fim !== null) {
+      trechoDoTema = { ini: prefixoDoTema.index, fim };
+      nomeDoTemaDito = o.slice(inicioDoNome, fim);
+    }
+  }
+  if (trechoDoTema) tirar.push(trechoDoTema);
+  // Nome do tema não é pessoa, palavra de sala nem sala: some do que a memória e as salas leem.
+  const semTema = (texto: string) =>
+    trechoDoTema ? texto.slice(0, trechoDoTema.ini) + ' '.repeat(trechoDoTema.fim - trechoDoTema.ini) + texto.slice(trechoDoTema.fim) : texto;
+  const oSemTema = semTema(o);
+  const nSemTema = semTema(n);
 
   // "tarefa"/"atividade" como pedido (RE_PALAVRA_TAREFA): comando, começo ou lista.
   const depoisDoComando = comando ? comando[0].length : 0;
@@ -231,7 +323,7 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
     (!!comando && RE_PALAVRA_TAREFA.test(comando[0])) ||
     inicioPede ||
     listasDeTarefas.length > 0 ||
-    [...listasSala, ...listasHoje].some(listaPede);
+    [...listasSala, ...listasHoje, ...(trechoDoTema ? [trechoDoTema] : [])].some(listaPede);
 
   const fortes = datas.filter((d) => d.forca === 'forte' && (d.data || d.invalida));
   if (fortes.some((d) => d.invalida)) baixa = true;
@@ -261,14 +353,27 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   }
 
   // Pessoa e sala.
-  const pessoa = memoria.acharPessoa(o);
+  const pessoa = memoria.acharPessoa(oSemTema);
   if (pessoa) titulo = garantirNome(titulo, pessoa.nome);
-  let salaId = salaNomeada(n, listasSala);
+  let salaId = salaNomeada(nSemTema, listasSala);
   let motivoSala: Item['motivoSala'];
   if (salaId) motivoSala = 'frase';
-  else if ((salaId = memoria.acharSala(o))) motivoSala = 'memoria';
+  else if ((salaId = memoria.acharSala(oSemTema))) motivoSala = 'memoria';
   else if (pessoa) { salaId = pessoa.salaId; motivoSala = 'pessoa'; }
   else salaId = null;
+
+  // A pasta achada manda na sala (a pasta é de uma sala só). Duas com o mesmo nome: vale a da sala dita na frase;
+  // sem sala dita, fica a primeira e o cartão pede para conferir.
+  let tema: Tema | null = null;
+  if (conhecido) {
+    const daSalaDita = conhecido.achados.filter((t) => t.salaId === salaId && motivoSala === 'frase');
+    tema = daSalaDita.length === 1 ? daSalaDita[0]! : conhecido.achados[0]!;
+    if (conhecido.achados.length > 1 && daSalaDita.length !== 1) baixa = true;
+    // A frase disse outra sala: a pasta manda, mas o dono confere no cartão.
+    if (motivoSala === 'frase' && salaId !== tema.salaId) baixa = true;
+    salaId = tema.salaId;
+    motivoSala = 'tema';
+  }
 
   // Dia que a frase não disse: hoje. Hora sem dia é hoje, com certeza baixa
   // (o cartão mostra o dia entendido). "sem prazo" dito: fica sem dia.
@@ -316,6 +421,11 @@ export function interpretarRegras(frase: string, hoje: string, memoria: Memoria)
   }
   if (pessoa) item.pessoaId = pessoa.id;
   if (motivoSala) item.motivoSala = motivoSala;
+  if (tema && item.tipo === 'tarefa') {
+    item.pastaId = tema.id;
+    item.temaNome = tema.nome;
+  }
+  if (nomeDoTemaDito !== null) item.temaNaoAchado = nomeDoTemaDito;
   if (diaAssumido) item.diaAssumido = true;
 
   const reconhecida =

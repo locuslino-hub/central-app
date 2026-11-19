@@ -17,6 +17,7 @@ import {
   type ConcluidaNoGoogle,
   type ItemDoEspelho,
 } from './agenda';
+import { enviarFilaDePlanilhas } from './planilhas';
 import { lembrarEnviado, marcarEventosObsoletos } from './eventos';
 import { concluirMarcaDeTarefa } from './eventos-feitos';
 import { aplicarConcluidasNoGoogle } from './feito-no-google';
@@ -511,6 +512,7 @@ async function rodada({ chamar = chamarScript, esperar = esperarDeVerdade }: Opc
     puxou = true;
     await enviar(chamar, esperar);
     await enviarAgenda(chamar);
+    await enviarFilaDePlanilhas(chamar);
     // Antes do espelho: o que o dono concluiu no Google já vai concluído.
     if (await lerConclusoesDoGoogle(chamar)) await enviar(chamar, esperar);
     // O resultado dos blocos do Google Tarefas muda registros: saem já nesta rodada.

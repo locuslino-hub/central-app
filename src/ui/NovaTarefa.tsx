@@ -14,9 +14,11 @@ type Props = {
   /** Numa página de sala ou de pessoa: a tarefa nasce já nela. */
   salaId?: string;
   pessoaId?: string;
+  /** Numa pasta comum (tema): a tarefa nasce no tema (junto com a `salaId` da pasta). */
+  pastaId?: string;
 };
 
-export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
+export function NovaTarefa({ rotulo, data, salaId, pessoaId, pastaId }: Props) {
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   // Para o leitor de tela: a tarefa já aparece na lista, mas quem não a vê precisa saber que foi criada.
@@ -36,7 +38,7 @@ export function NovaTarefa({ rotulo, data, salaId, pessoaId }: Props) {
     }
     emAndamento.current = true;
     try {
-      await criarTarefa(limpo, { ...(data === undefined ? {} : { data }), ...(salaId === undefined ? {} : { salaId }), ...(pessoaId === undefined ? {} : { pessoaId }) });
+      await criarTarefa(limpo, { ...(data === undefined ? {} : { data }), ...(salaId === undefined ? {} : { salaId }), ...(pessoaId === undefined ? {} : { pessoaId }), ...(pastaId ? { pastaId } : {}) });
       setErro(null);
       setAviso(`Tarefa adicionada: ${limpo}`);
       // Só limpa o que foi gravado: quem já começou a próxima não perde o texto.

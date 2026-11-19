@@ -67,9 +67,26 @@ function motivo(cartao: EstadoCartao, sala: string | undefined): string | null {
       return `${item.pessoaNome ?? 'A pessoa citada'} fica em ${onde}.`;
     case 'ia':
       return 'A IA escolheu a sala.';
+    case 'tema':
+      return null; // o cartão já diz "Tema: X." e a sala é a dele
     default:
       return null;
   }
+}
+
+/** O que a frase "nas tarefas do tema X" fez com o tema: o nome achado, ou o aviso de que não achou (Tarefa 17). */
+export function avisoDoTema(item: ItemDoChat): { tipo: 'achado' | 'nao-achado'; texto: string } | null {
+  if (item.pastaId && item.temaNome) return { tipo: 'achado', texto: `Tema: ${item.temaNome}.` };
+  if (item.temaNaoAchado) {
+    return {
+      tipo: 'nao-achado',
+      texto:
+        item.salaId === null
+          ? `Não achei o tema ${item.temaNaoAchado}; a tarefa ficou sem tema.`
+          : `Não achei o tema ${item.temaNaoAchado}; ficou na sala.`,
+    };
+  }
+  return null;
 }
 
 type Alvo = 'salas' | 'trocar' | 'cartao';
@@ -118,6 +135,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
   const mostrarSalas = cartao.trocando || !!pergunta;
   const aConfirmar = situacao === 'erro';
   const porque = motivo(cartao, nomeDaSala);
+  const tema = avisoDoTema(item);
 
   const escolher = (salaId: string) => {
     pedirFoco('trocar', 'escolher');
@@ -137,6 +155,7 @@ export function Cartao({ cartao, salas, hoje }: { cartao: EstadoCartao; salas: S
       <p class="chat-titulo">{item.titulo}</p>
       <p class="chat-quando">{descreverQuando(item, hoje)}</p>
       {porque && <p class="chat-motivo">{porque}</p>}
+      {tema && <p class={tema.tipo === 'achado' ? 'chat-motivo' : 'chat-pergunta'}>{tema.texto}</p>}
       {situacao === 'erro' && !cartao.aviso && <p class="chat-pergunta">Não consegui guardar. Tente de novo.</p>}
       {pergunta && <p class="chat-pergunta">{pergunta}</p>}
       {cartao.aviso && (

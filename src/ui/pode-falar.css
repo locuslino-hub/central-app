@@ -1,0 +1,343 @@
+/* Pode falar (V02, Tarefa 6), conforme prototipo-esbocos/v02: microfone coral que pulsa, texto ao vivo, chave "Gravar áudio", cartão de resultado. */
+
+.falar {
+  max-width: 36rem;
+}
+.falar [hidden] {
+  display: none !important;
+}
+.falar-onde {
+  margin: 0 0 14px;
+  color: var(--tinta2);
+}
+
+/* O botão grande: a escuta só começa neste toque. */
+.falar-mic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 18px;
+}
+.falar-botao-mic {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--coral);
+  color: var(--coral-t);
+  box-shadow: 0 14px 22px -12px rgb(var(--som2-rgb) / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.35);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.falar-botao-mic:hover {
+  background: var(--coral2);
+}
+.falar-botao-mic .icone {
+  width: 44px;
+  height: 44px;
+}
+.falar[data-escutando='sim'] .falar-botao-mic {
+  animation: falar-pulsa 1.6s ease-in-out infinite;
+}
+@keyframes falar-pulsa {
+  50% {
+    box-shadow: 0 0 0 16px rgb(var(--coral-rgb) / 0.25);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .falar[data-escutando='sim'] .falar-botao-mic {
+    animation: none;
+    box-shadow: 0 0 0 10px rgb(var(--coral-rgb) / 0.25);
+  }
+}
+.falar-legenda {
+  margin: 0;
+  color: var(--tinta2);
+  font-weight: 500;
+}
+
+.falar-aviso-voz {
+  margin: 4px 0 0;
+  max-width: 34rem;
+  color: var(--tinta2);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
+/* Texto ao vivo e campo editável. */
+.falar-vivo {
+  min-height: 5.2rem;
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: var(--poco);
+  font-size: 1.2rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.falar-vivo.so-leitor {
+  /* Vazia, a região viva só some da vista: continua montada para o leitor de tela. */
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+}
+.falar-texto {
+  display: block;
+  width: 100%;
+  min-height: 5.2rem;
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--campo);
+  border-radius: 18px;
+  background: var(--folha);
+  box-shadow: var(--poco-in);
+  color: var(--tinta);
+  font: 1.2rem/1.4 var(--ui);
+  resize: vertical;
+}
+.falar-aviso,
+.falar-aviso-audio {
+  margin: 0 0 12px;
+  color: var(--alerta);
+  font-weight: 500;
+}
+.falar-aviso-audio {
+  margin: 12px 0 0;
+  color: var(--tinta2);
+}
+
+/* Rodapé: a chave à esquerda, os botões à direita. */
+.falar-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.falar-troca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--toque);
+  cursor: pointer;
+  font-weight: 500;
+}
+.falar-troca input {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 99px;
+  background: var(--campo);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.falar-troca input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.2s ease;
+}
+.falar-troca input:checked {
+  background: var(--alerta);
+}
+.falar-troca input:checked::after {
+  left: 21px;
+}
+.falar-troca input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.falar-gravando {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--alerta);
+  font-weight: 600;
+}
+.falar-gravando::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--alerta);
+}
+.falar-botoes {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Cartão de resultado. */
+.falar-cartao {
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: var(--tinta);
+  color: #f1f2ec;
+}
+.falar-cartao p {
+  margin: 0;
+}
+.falar-cartao-titulo {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.falar-cartao-detalhe {
+  margin-top: 4px;
+  color: #d5d9cf;
+  overflow-wrap: anywhere;
+}
+.falar-cartao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.falar-cartao .botao-pilula {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.12);
+  color: #f1f2ec;
+}
+.falar-cartao .botao-pilula:hover {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.22);
+}
+.falar-cartao .falar-ver {
+  min-height: var(--toque);
+  padding: 0 18px;
+  border-color: transparent;
+  background: var(--agua);
+  color: var(--tinta);
+  font-weight: 600;
+}
+.falar-cartao .falar-ver:hover {
+  background: var(--agua2);
+}
+
+/* "Trocar categoria" no cartão do gasto: as categorias em uso e um campo para outra. */
+.falar-troca-categoria {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(255 255 255 / 0.18);
+}
+.falar-categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.falar-cartao .falar-categorias .botao-pilula[aria-pressed='true'] {
+  background: rgb(255 255 255 / 0.92);
+  color: var(--tinta);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px var(--agua);
+}
+.falar-outra-categoria {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.falar-outra-categoria label {
+  flex: none;
+  font-weight: 600;
+}
+.falar-outra-categoria .campo {
+  flex: 1 1 10rem;
+  min-width: 0;
+  background: #fff;
+  color: var(--tinta);
+}
+
+/* Botão no topo (tablet e computador) e botão flutuante (celular). */
+.falar-no-topo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--toque);
+  padding: 0 16px 0 12px;
+  border-radius: 99px;
+  background: var(--coral);
+  color: var(--coral-t);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--relevo-p);
+}
+.falar-no-topo:hover {
+  background: var(--coral2);
+}
+.falar-flutuante {
+  position: fixed;
+  z-index: 25;
+  right: 16px;
+  /* Acima da barra de baixo (56 + 8 de folga + 10 de margem) e da faixa segura do aparelho. */
+  bottom: calc(86px + env(safe-area-inset-bottom));
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: var(--coral-t);
+  box-shadow: 0 12px 20px -8px rgb(var(--som2-rgb) / 0.55), var(--relevo-p);
+}
+.falar-flutuante:hover {
+  background: var(--coral2);
+}
+
+/* Foco nos controles do cartão escuro (--tinta): o contorno verde do app some nele; o branco passa de 3:1 (cerca de 14:1). */
+.falar-cartao :focus-visible {
+  outline-color: #fff;
+}
+/* O estado do áudio no cartão é uma região viva que mora lá desde o começo: vazia, só some da vista. */
+.falar-cartao {
+  position: relative;
+}
+.falar-cartao-vivo:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+/* A mensagem de "Outra categoria" vazia, junto do campo (claro, porque o cartão é escuro). */
+.falar-erro-campo {
+  flex: 1 0 100%;
+  margin: 0;
+  color: #ffb9a8;
+  font-weight: 600;
+}
+.falar-cartao .campo[aria-invalid='true'] {
+  border-color: #ffb9a8;
+  box-shadow: 0 0 0 1px #ffb9a8;
+}
+
+/* Cores forçadas (Windows em alto contraste): o que só tem fundo some, então ganha borda ou cor do sistema. */
+@media (forced-colors: active) {
+  .falar-troca input {
+    border: 2px solid ButtonText;
+  }
+  .falar-troca input::after {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+  .falar-troca input:checked {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .falar-botao-mic {
+    border: 2px solid ButtonText;
+  }
+}

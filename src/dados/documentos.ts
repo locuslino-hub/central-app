@@ -74,7 +74,7 @@ export function abrirDocumento(doc: Pick<Documento, 'url'>, aparelho: Aparelho):
   return janela != null;
 }
 
-export type NovoDocumento = { titulo: string; url: string; salaId?: string; pessoaId?: string };
+export type NovoDocumento = { titulo: string; url: string; salaId?: string; pessoaId?: string; pastaId?: string };
 export type ResultadoAdicionar = { ok: true; documento: Documento } | { ok: false; erro: 'titulo' | 'link' | 'dono' };
 
 export const TITULO_DO_DOCUMENTO_NO_MAXIMO = 120;
@@ -90,6 +90,7 @@ export async function adicionarDocumento(novo: NovoDocumento): Promise<Resultado
     url,
     ...(novo.salaId ? { salaId: novo.salaId } : {}),
     ...(novo.pessoaId ? { pessoaId: novo.pessoaId } : {}),
+    ...(novo.pastaId ? { pastaId: novo.pastaId } : {}),
     arquivado: false,
   });
   return { ok: true, documento };

@@ -33,12 +33,14 @@ const COMPLETOS: { [C in NomeDaColecao]: Colecoes[C] } = {
     marcar: true,
     emailId: 'email-1',
     adiadaAte: '2026-11-07',
+    pastaId: 'pasta-metodologia',
   },
   palavras: { ...base, termo: 'tese', salaId: 'sala-doutoramento' },
-  documentos: { ...base, titulo: 'Plano', url: 'https://exemplo.invalid/plano', salaId: 'sala-mba', pessoaId: 'p-marina', arquivado: false },
+  documentos: { ...base, titulo: 'Plano', url: 'https://exemplo.invalid/plano', salaId: 'sala-mba', pessoaId: 'p-marina', pastaId: 'pasta-metodologia', arquivado: false },
   paginas: {
     ...base,
     salaId: 'sala-aulas',
+    pastaId: 'pasta-metodologia',
     titulo: 'Página 1',
     blocos: [
       { id: 'b1', tipo: 'texto', texto: 'Ler o artigo da Aurora', itemId: 't-1' },
@@ -50,15 +52,93 @@ const COMPLETOS: { [C in NomeDaColecao]: Colecoes[C] } = {
   eventosFeitos: { ...base, eventoId: 'ev-1', agendaId: 'primary', data: '2026-11-05', feito: true, pendenteNoGoogle: true, soNaCentral: false },
   coresDasSalas: { ...base, chave: 'cor:5', salaId: 'sala-casa' },
   agua: { ...base, data: '2026-11-05', hora: '12:40', ml: 125 },
+  ideias: { ...base, texto: 'Ideia da Aurora', salaId: 'sala-aulas', estado: 'tarefa', tarefaId: 't-1', audioId: 'audio-1', audioSegundos: 42 },
+  pastas: { ...base, salaId: 'sala-casa', tipo: 'registro', nome: 'Consumo de Água', ordem: 3, planilhaId: 'planilha-teste-1', modelo: 'consumo', servico: 'agua', unidade: 'm³', diaDeEnvio: 5, categorias: ['Mercado'] },
 };
 
 const DA_BASE = new Set(['id', 'atualizadoEm', 'aparelho', 'apagado']);
 
 describe('esquemas do script', () => {
+  it('pastaId (pasta comum, Tarefa 17): opcional em tarefas, documentos e páginas; só id válido', () => {
+    for (const colecao of ['tarefas', 'documentos', 'paginas'] as const) {
+      const { pastaId: _tirado, ...antigo } = COMPLETOS[colecao] as Record<string, unknown>;
+      // Registro de antes do campo continua valendo.
+      expect(registroValido(colecao, antigo, AGORA), `${colecao} sem pastaId`).toBe(true);
+      expect(registroValido(colecao, { ...antigo, pastaId: 'pasta-metodologia' }, AGORA, { estrito: true }), `${colecao} com pastaId`).toBe(true);
+      for (const ruim of ['', 'com espaço', 'a'.repeat(65), 7, null, {}]) {
+        expect(registroValido(colecao, { ...antigo, pastaId: ruim }, AGORA), `${colecao} pastaId ${String(ruim)}`).toBe(false);
+      }
+    }
+  });
+
+  it('pastaId passa pela leitura do app (semCamposDesconhecidos) sem ser tirado', () => {
+    expect(semCamposDesconhecidos('tarefas', { ...COMPLETOS.tarefas, campoDeOutraVersao: 1 })).toMatchObject({ pastaId: 'pasta-metodologia' });
+  });
+
   it('rascunhos não é coleção conhecida (C-16: nenhuma tela a usava)', () => {
     expect(colecaoConhecida('rascunhos')).toBe(false);
     expect(NOMES_DAS_COLECOES).not.toContain('rascunhos');
     expect(ESQUEMAS).not.toHaveProperty('rascunhos');
+  });
+
+  it('script aceita e devolve a coleção ideias', () => {
+    expect(colecaoConhecida('ideias')).toBe(true);
+    expect(NOMES_DAS_COLECOES).toContain('ideias');
+    const minima = { ...base, texto: 'Só o texto', estado: 'nova' };
+    expect(registroValido('ideias', minima, AGORA)).toBe(true);
+    expect(registroValido('ideias', { ...minima, salaId: null }, AGORA)).toBe(true);
+    expect(registroValido('ideias', { ...minima, apagado: true }, AGORA)).toBe(true);
+  });
+
+  it('ideias: limites aceitos (texto 1 e 2000, áudio 0 e 600 s, id de 100)', () => {
+    for (const texto of ['x', 'x'.repeat(2000)]) expect(registroValido('ideias', { ...COMPLETOS.ideias, texto }, AGORA)).toBe(true);
+    for (const audioSegundos of [0, 600]) expect(registroValido('ideias', { ...COMPLETOS.ideias, audioSegundos }, AGORA)).toBe(true);
+    expect(registroValido('ideias', { ...COMPLETOS.ideias, audioId: 'a'.repeat(100) }, AGORA)).toBe(true);
+  });
+
+  it.each([
+    ['texto', [1, null, undefined, '', 'x'.repeat(2001)]],
+    ['tarefaId', [5, 'com espaço', '', 'a'.repeat(65)]],
+    ['estado', ['feita', '', 1, null, undefined]],
+    ['salaId', [5, false]],
+    ['audioId', [5, null, '', 'tem espaço', 'a'.repeat(101)]],
+    ['audioSegundos', ['42', Number.NaN, null, -1, 601, Number.POSITIVE_INFINITY]],
+  ] as const)('ideias: %s com forma errada é recusado', (campo, valores) => {
+    for (const valor of valores) {
+      expect(registroValido('ideias', { ...COMPLETOS.ideias, [campo]: valor }, AGORA)).toBe(false);
+    }
+  });
+
+  it('script aceita e devolve a coleção pastas', () => {
+    expect(colecaoConhecida('pastas')).toBe(true);
+    expect(NOMES_DAS_COLECOES).toContain('pastas');
+    const minima = { ...base, salaId: 'sala-doutoramento', tipo: 'comum', nome: 'Capítulo 2' };
+    expect(registroValido('pastas', minima, AGORA)).toBe(true);
+    expect(registroValido('pastas', COMPLETOS.pastas, AGORA, { estrito: true })).toBe(true);
+    expect(registroValido('pastas', { ...minima, apagado: true }, AGORA)).toBe(true);
+  });
+
+  it('pastas: limites aceitos (nome 1 e 100, dia de envio 1 e 31, id de planilha de 200)', () => {
+    for (const nome of ['x', 'x'.repeat(100)]) expect(registroValido('pastas', { ...COMPLETOS.pastas, nome }, AGORA)).toBe(true);
+    for (const diaDeEnvio of [1, 31]) expect(registroValido('pastas', { ...COMPLETOS.pastas, diaDeEnvio }, AGORA)).toBe(true);
+    expect(registroValido('pastas', { ...COMPLETOS.pastas, planilhaId: 'a'.repeat(200) }, AGORA)).toBe(true);
+  });
+
+  it.each([
+    ['salaId', [5, null, undefined, '', 'com espaço']],
+    ['tipo', ['outro', '', 1, null, undefined]],
+    ['nome', [1, null, undefined, '', 'x'.repeat(101)]],
+    ['ordem', ['1', Number.NaN, Number.POSITIVE_INFINITY]],
+    ['planilhaId', [5, null, '', 'tem espaço', 'a'.repeat(201)]],
+    ['modelo', ['outro', '', 1, null]],
+    ['servico', ['petroleo', '', 1, null]],
+    ['unidade', ['litros', '', 1, null]],
+    ['diaDeEnvio', [0, 32, 1.5, '5', Number.NaN, null]],
+    ['categorias', ['Mercado', [1], null]],
+  ] as const)('pastas: %s com forma errada é recusado', (campo, valores) => {
+    for (const valor of valores) {
+      expect(registroValido('pastas', { ...COMPLETOS.pastas, [campo]: valor }, AGORA)).toBe(false);
+    }
   });
 
   it.each(NOMES_DAS_COLECOES)('%s: todo campo que o app grava está no esquema', (colecao) => {

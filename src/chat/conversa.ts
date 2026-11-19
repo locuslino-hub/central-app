@@ -303,6 +303,11 @@ export function escolherSala(id: string, salaId: string): Promise<void> {
     }
     const { item } = cartao;
     let novo: ItemDoChat = { ...item, salaId };
+    if (item.pastaId && salaId !== item.salaId) {
+      // A pasta comum é de uma sala só: em outra sala a tarefa deixa o tema.
+      const { pastaId: _pasta, temaNome: _tema, ...semTema } = novo;
+      novo = semTema;
+    }
     let aprendizado: Aprendizado | undefined;
     let escolha: Escolha;
 
@@ -350,7 +355,11 @@ async function moverTarefa(cartaoId: string, tarefaId: string, item: ItemDoChat,
     const [guardada] = (await lerRegistros([{ colecao: 'tarefas', id: tarefaId }])) as (Tarefa | undefined)[];
     if (!guardada || guardada.apagado) return;
     if (acharCartao(cartaoId)?.situacao !== 'salvo') return;
-    const tarefa: Tarefa = { ...guardada, salaId: item.salaId };
+    let tarefa: Tarefa = { ...guardada, salaId: item.salaId };
+    if (guardada.pastaId && guardada.salaId !== item.salaId) {
+      const { pastaId: _pasta, ...semTema } = tarefa;
+      tarefa = semTema;
+    }
     if (item.pessoaId) tarefa.pessoaId = item.pessoaId;
     await salvar('tarefas', tarefa);
   } catch (erro) {

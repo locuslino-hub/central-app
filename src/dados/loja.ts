@@ -14,6 +14,7 @@ import type {
   Pendente,
   PendenteAgenda,
   PendenteEspelho,
+  PendentePlanilha,
   PendenteRegistro,
   Registro,
   Remoto,
@@ -25,8 +26,8 @@ import type {
 // leva o código do aparelho. O id do aparelho mora em `local`, fora das coleções.
 const BANCO = 'central-dados';
 // 1: coleções, pendentes, local. 2: avisos (Tarefa 5). 3: eventosFeitos e
-// espelhos (feito espelhado). 4: coresDasSalas. 5: agua.
-const VERSAO = 5;
+// espelhos (feito espelhado). 4: coresDasSalas. 5: agua. 6: ideias. 7: pastas.
+const VERSAO = 7;
 const PENDENTES = 'pendentes';
 const AVISOS = 'avisos';
 const LOCAL = 'local';
@@ -420,6 +421,36 @@ export function agendaEsgotada(acao: ControleDaFila, agora = Date.now()): boolea
   return acao.criadoEm !== undefined && agora - acao.criadoEm > DIAS_NA_FILA_NO_MAXIMO * 24 * 60 * 60 * 1000;
 }
 
+/** A ação de planilha, como se entrega a `enfileirarPlanilha`: o `seq` e o controle são postos aqui. */
+export type AcaoDePlanilha = Omit<PendentePlanilha, 'seq' | 'criadoEm' | 'tentativas' | 'ultimaTentativa'>;
+
+/** Põe uma ação de planilha na fila `pendentes` (a ordem da fila é a do `seq`). Devolve o `seq`. */
+export async function enfileirarPlanilha(acao: AcaoDePlanilha): Promise<number> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const seq = (await tx.objectStore(PENDENTES).add({ ...acao, criadoEm: Date.now(), tentativas: 0 })) as number;
+    await tx.done;
+    return seq;
+  });
+}
+
+/**
+ * Troca uma ação de planilha ainda na fila, de uma vez só (ex.: juntar uma
+ * mudança ao anexo que ainda não saiu). `false` se ela já não está lá ou não é
+ * de planilha: quem chamou sabe que ela já saiu e precisa de outro caminho.
+ */
+export async function alterarPendentePlanilha(seq: number, mudar: (atual: PendentePlanilha) => PendentePlanilha): Promise<boolean> {
+  return comBanco(async (banco) => {
+    const tx = escrever(banco, [PENDENTES]);
+    const fila = tx.objectStore(PENDENTES);
+    const atual: Pendente | undefined = await fila.get(seq);
+    const achou = atual?.tipo === 'planilha';
+    if (achou) await fila.put({ ...mudar(atual), seq });
+    await tx.done;
+    return achou;
+  });
+}
+
 /** Põe a ação na fila `pendentes`, junto das de registro. Devolve o `seq`. */
 export async function enfileirarAgenda(acao: AcaoDeAgenda): Promise<number> {
   return comBanco(async (banco) => {
@@ -459,7 +490,7 @@ export async function registrarTentativa(seq: number): Promise<void> {
     const fila = tx.objectStore(PENDENTES);
     const atual: Pendente | undefined = await fila.get(seq);
     const agora = Date.now();
-    if (atual?.tipo === 'agenda' || atual?.tipo === 'espelho') {
+    if (atual?.tipo === 'agenda' || atual?.tipo === 'espelho' || atual?.tipo === 'planilha') {
       const ultima = atual.ultimaTentativa;
       // Relógio que voltou também conta como dentro da hora.
       const naMesmaHora = ultima !== undefined && Math.abs(agora - ultima) < INTERVALO_ENTRE_TENTATIVAS_MS;
@@ -477,9 +508,13 @@ export async function reiniciarAgendaParada(): Promise<void> {
     const agora = Date.now();
     const todas: Pendente[] = await fila.getAll();
     for (const p of todas) {
-      if ((p.tipo === 'agenda' || p.tipo === 'espelho') && agendaEsgotada(p, agora)) {
+      if ((p.tipo === 'agenda' || p.tipo === 'espelho' || p.tipo === 'planilha') && agendaEsgotada(p, agora)) {
         const { ultimaTentativa: _ultima, ...resto } = p;
-        await fila.put({ ...resto, criadoEm: agora, tentativas: 0 });
+        // Planilha que parou por conflito: "Tentar de novo" é a escolha do dono de gravar a sua por cima.
+        if (p.tipo === 'planilha' && p.conflito) {
+          const { antes: _antes, conflito: _conflito, ...semConferencia } = resto as typeof p;
+          await fila.put({ ...semConferencia, criadoEm: agora, tentativas: 0 });
+        } else await fila.put({ ...resto, criadoEm: agora, tentativas: 0 });
       }
     }
     await tx.done;

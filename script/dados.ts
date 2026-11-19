@@ -63,6 +63,12 @@ export interface Armazem {
   /** Arquivos que podem ser cópias; só os de nome `central-dados-AAAA-MM-DD.json` são tocados. */
   listarCopias(): { id: string; nome: string }[];
   descartar(id: string): void;
+  /**
+   * A cópia diária falhou (ex.: duas pastas "Central"): o script registra só a
+   * causa resumida, sem ids. Opcional: sem ele a falha passa em silêncio. A
+   * gravação dos dados segue sempre.
+   */
+  registrarFalhaDaCopia?(erro: unknown): void;
 }
 
 /** Como fica no Drive. `recebidoEm` é o carimbo do servidor (R5); `ultimo` é o maior deles. */
@@ -71,6 +77,11 @@ type Arquivo = { versao: 1; ultimo: number; registros: Guardado[] };
 
 export function nomeDaCopia(dia: string): string {
   return `${PREFIXO_DA_COPIA}${dia}.json`;
+}
+
+/** O nome é de cópia diária (`central-dados-AAAA-MM-DD.json`)? */
+export function eNomeDeCopia(nome: string): boolean {
+  return COPIA.test(nome);
 }
 
 /**
@@ -218,8 +229,23 @@ export function enviar(dados: unknown, armazem: Armazem): RespostaEnviar {
 /**
  * Na primeira gravação do dia, guarda o arquivo como estava e descarta cópias
  * com mais de 30 dias. Se a cópia de hoje já existe (marca perdida), não copia de novo.
+ * A cópia é secundária: qualquer falha (Drive, pasta Central duplicada) é só
+ * registrada e a gravação dos dados segue. O dia fica sem marca, então a próxima
+ * gravação tenta de novo.
  */
 function copiaDoDia(armazem: Armazem, conteudo: string) {
+  try {
+    guardarCopiaDoDia(armazem, conteudo);
+  } catch (erro) {
+    try {
+      armazem.registrarFalhaDaCopia?.(erro);
+    } catch {
+      // registrar também é secundário
+    }
+  }
+}
+
+function guardarCopiaDoDia(armazem: Armazem, conteudo: string) {
   const hoje = armazem.hoje();
   if (armazem.ultimaCopia() === hoje) return;
   const copias = armazem.listarCopias();

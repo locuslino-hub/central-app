@@ -1,5 +1,6 @@
 // Lógica pura do script: nada aqui toca serviços do Google. Tudo o que vem de
 // fora chega por `Ambiente`, para rodar igual nos testes e no Apps Script.
+import { AUDIO_BASE64_NO_MAXIMO, apagarAudio, lerAudio, salvarAudio, type ServicoDeAudios } from './audio';
 import {
   criarEvento,
   listarEventos,
@@ -11,6 +12,7 @@ import {
 } from './agenda';
 import { Ocupado, TAMANHO_MAXIMO_DO_CORPO, enviar, puxar, type Armazem } from './dados';
 import { listarEmails, pedirAtualizacao, type GuardaDeEmails, type ServicoDeGmail } from './email';
+import { anexarLinha, atualizarLinha, criarPlanilha, lerLinhas, type ContextoDePlanilhas, type ServicoDePlanilhas } from './planilhas';
 import {
   concluidasNoEspelho,
   espelharTarefas,
@@ -37,6 +39,12 @@ export interface Ambiente {
   emailsGuardados?: GuardaDeEmails;
   /** Cache do que se achou no Google Tarefas (blocos agendados). Sem ele, só se lê mais. */
   guardaDeTarefas?: GuardaDeTarefas;
+  /** Drive para guardar áudios em Central/Audios. Sem ele, `salvarAudio` dá `interno`. */
+  audios?(): ServicoDeAudios;
+  /** Drive e Planilhas para as planilhas da Casa. Sem ele, as ações de planilha dão `interno`. */
+  planilhas?(): ServicoDePlanilhas;
+  /** Id novo (UUID) para linha de planilha sem id. Sem ele, as ações de planilha dão `interno`. */
+  novoId?(): string;
   /** Campos novos da agenda que o diagnosticoAgenda viu (label, taskId). */
   extrasDaAgenda?(): CampoExtra[];
   /** A API recusou os campos extras: a leitura deles se desliga até o próximo diagnosticoAgenda. */
@@ -64,6 +72,18 @@ function tarefasOpcional(ambiente: Ambiente): ServicoDeTarefas | null {
   } catch {
     return null;
   }
+}
+
+function audios(ambiente: Ambiente): ServicoDeAudios {
+  if (!ambiente.audios) throw new Error('Drive de áudios indisponível');
+  return ambiente.audios();
+}
+
+/** Serviço, trava e gerador de id das ações de planilha (planilhas.ts confere o pedido antes de usar o serviço). */
+function planilhas(ambiente: Ambiente): ContextoDePlanilhas {
+  const { novoId } = ambiente;
+  if (!ambiente.planilhas || !novoId) throw new Error('Drive e Planilhas indisponíveis');
+  return { servico: ambiente.planilhas(), comTrava: (fazer) => ambiente.armazem.comTrava(fazer), gerarId: () => novoId() };
 }
 
 function extras(ambiente: Ambiente): CampoExtra[] {
@@ -124,6 +144,23 @@ const acoes = new Map<unknown, Acao>([
   // Só leitura (ampliação 11/11): as espelhas concluídas pelo dono no Google.
   // Sem o serviço, lista vazia.
   ['lerEspelhos', (dados, ambiente) => concluidasNoEspelho(dados, tarefasOpcional(ambiente), ambiente.armazem.agora(), ambiente.guardaDeTarefas ?? null)],
+  // Áudio da Ideia (V02): na trava do script, dois pedidos juntos não criam duas pastas.
+  ['salvarAudio', (dados, ambiente) => {
+    const servico = audios(ambiente);
+    return ambiente.armazem.comTrava(() => salvarAudio(dados, servico));
+  }],
+  // Só leitura: o áudio de uma ideia, só de dentro de Central/Audios (audio.ts confere).
+  ['lerAudio', (dados, ambiente) => lerAudio(dados, audios(ambiente))],
+  // Ideia apagada: o áudio dela vai para a lixeira do Drive (só audio-<id>.* de Central/Audios, do dono).
+  ['apagarAudio', (dados, ambiente) => {
+    const servico = audios(ambiente);
+    return ambiente.armazem.comTrava(() => apagarAudio(dados, servico));
+  }],
+  // Planilhas da Casa (V02): só dentro da pasta "Casa (partilhada)" do dono, que fica dentro de "Central"; planilhas.ts confere o pedido.
+  ['criarPlanilha', (dados, ambiente) => criarPlanilha(dados, planilhas(ambiente))],
+  ['lerLinhas', (dados, ambiente) => lerLinhas(dados, planilhas(ambiente))],
+  ['anexarLinha', (dados, ambiente) => anexarLinha(dados, planilhas(ambiente))],
+  ['atualizarLinha', (dados, ambiente) => atualizarLinha(dados, planilhas(ambiente))],
   // E-mail só se lê: não há ação que mude o Gmail. Nenhuma das duas usa `dados`.
   ['emails', (_dados, ambiente) => listarEmails(() => gmail(ambiente), emailsGuardados(ambiente))],
   // Com limite de 60 s (email.ts): toques repetidos devolvem a lista guardada.
@@ -215,10 +252,34 @@ export function tratar(pedido: unknown, ambiente: Ambiente): Resposta {
   }
 }
 
+/** Corpo de `salvarAudio`: 6 MB de base64 mais folga para o código e o resto do JSON. */
+export const TAMANHO_MAXIMO_DO_CORPO_DE_AUDIO = AUDIO_BASE64_NO_MAXIMO + 64 * 1024;
+
+/**
+ * Corpo grande (áudio): só passa do limite geral se COMEÇAR exatamente assim,
+ * com `codigo` e `acao` nesta ordem, antes de `dados`. O app monta o corpo com
+ * `montarCorpoDeAudio`, que garante a ordem (JSON.stringify segue a ordem das
+ * chaves). O código é conferido sobre este prefixo, antes de qualquer
+ * JSON.parse: quem não tem o código não faz o script processar 6 MB.
+ */
+const PREFIXO_DO_AUDIO = /^\{"codigo":"([^"\\]{1,200})","acao":"salvarAudio","dados":/;
+/** O código fica nos primeiros caracteres; olhar só o começo evita varrer o corpo todo. */
+const TAMANHO_DO_PREFIXO = 300;
+
+/** Corpo de pedido `salvarAudio` com `codigo` e `acao` na frente, como `tratarCorpo` exige. */
+export function montarCorpoDeAudio(codigo: string, dados: unknown): string {
+  return JSON.stringify({ codigo, acao: 'salvarAudio', dados });
+}
+
 export function tratarCorpo(corpo: string | undefined, ambiente: Ambiente): Resposta {
   if (typeof corpo === 'string' && corpo.length > TAMANHO_MAXIMO_DO_CORPO) {
-    registrarFalha('tratarCorpo', `corpo com ${corpo.length} caracteres, acima do limite`);
-    return recusa('interno');
+    const codigo = PREFIXO_DO_AUDIO.exec(corpo.slice(0, TAMANHO_DO_PREFIXO))?.[1];
+    if (codigo === undefined || corpo.length > TAMANHO_MAXIMO_DO_CORPO_DE_AUDIO) {
+      registrarFalha('tratarCorpo', `corpo com ${corpo.length} caracteres, acima do limite`);
+      return recusa('interno');
+    }
+    // Código errado: recusa sem ler o resto do corpo.
+    if (!codigoConfere(codigo, ambiente.lerCodigo())) return recusa('codigo-invalido');
   }
   let pedido: unknown;
   try {

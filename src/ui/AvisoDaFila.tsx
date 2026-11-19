@@ -4,18 +4,18 @@
 // Nada é apagado sozinho. O espelho no Google (tarefas no Google Tarefas, "✓ "
 // dos compromissos) que parou também aparece aqui; descartar não muda a Central.
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { descartarEntradasDePlanilha } from '../dados/planilhas';
 import {
   agendaEsgotada,
-  descartarPendentes,
   listarPendentes,
   reiniciarAgendaParada,
   retomarPendentes,
 } from '../dados/loja';
 import { assinarEstado, sincronizar } from '../dados/sincronia';
-import type { PendenteAgenda, PendenteEspelho, PendenteRegistro } from '../dados/tipos';
+import type { PendenteAgenda, PendenteEspelho, PendentePlanilha, PendenteRegistro } from '../dados/tipos';
 import './tarefas.css';
 
-type Parada = PendenteAgenda | PendenteEspelho;
+type Parada = PendenteAgenda | PendenteEspelho | PendentePlanilha;
 // C-05: registro que o script recusou ou que é grande demais (`parada` na entrada).
 type RegistroParado = PendenteRegistro & { parada: NonNullable<PendenteRegistro['parada']> };
 
@@ -23,7 +23,7 @@ async function lerParadas(): Promise<{ paradas: Parada[]; registros: RegistroPar
   const agora = Date.now();
   const fila = await listarPendentes();
   return {
-    paradas: fila.filter((p): p is Parada => (p.tipo === 'agenda' || p.tipo === 'espelho') && agendaEsgotada(p, agora)),
+    paradas: fila.filter((p): p is Parada => (p.tipo === 'agenda' || p.tipo === 'espelho' || p.tipo === 'planilha') && agendaEsgotada(p, agora)),
     registros: fila.filter((p): p is RegistroParado => p.tipo === 'registro' && !!p.parada),
   };
 }
@@ -63,6 +63,9 @@ export function AvisoDaFila() {
   const feitos = paradas.filter((p) => p.acao === 'marcarEventoFeito').length;
   // C-19: o feito de um bloco do Google Tarefas é tarefa, não compromisso da agenda.
   const tarefasFeitas = paradas.filter((p) => p.acao === 'marcarTarefaGoogle').length;
+  // Planilha da Casa (V02): cada entrada é uma linha anexada ou mudada que não chegou.
+  const linhasDePlanilha = paradas.filter((p) => p.tipo === 'planilha' && !p.conflito).length;
+  const planilhasQueMudaram = paradas.filter((p) => p.tipo === 'planilha' && p.conflito).length;
   // Um registro pode ter várias entradas: conta registros.
   const alteracoes = new Set(registros.map((p) => JSON.stringify([p.colecao, p.id]))).size;
 
@@ -107,6 +110,20 @@ export function AvisoDaFila() {
             {vezes(tarefasFeitas, '1 tarefa feita não foi marcada no Google Tarefas.', '# tarefas feitas não foram marcadas no Google Tarefas.')}
           </li>
         )}
+        {linhasDePlanilha > 0 && (
+          <li class="aviso-de-conflito">
+            {vezes(linhasDePlanilha, '1 linha de planilha não chegou à planilha.', '# linhas de planilha não chegaram à planilha.')}
+          </li>
+        )}
+        {planilhasQueMudaram > 0 && (
+          <li class="aviso-de-conflito">
+            {vezes(
+              planilhasQueMudaram,
+              '1 alteração não foi gravada porque a linha mudou em outro lugar. Tentar de novo grava a sua por cima.',
+              '# alterações não foram gravadas porque as linhas mudaram em outro lugar. Tentar de novo grava as suas por cima.',
+            )}
+          </li>
+        )}
         {alteracoes > 0 && (
           <li class="aviso-de-conflito">
             {vezes(
@@ -134,7 +151,7 @@ export function AvisoDaFila() {
         <button
           type="button"
           class="tarefa-entendi"
-          onClick={() => void agir(() => descartarPendentes([...paradas, ...registros].map((p) => p.seq)))}
+          onClick={() => void agir(() => descartarEntradasDePlanilha([...paradas, ...registros].map((p) => p.seq)))}
         >
           Descartar
         </button>
