@@ -581,8 +581,10 @@ test.describe('foco que não se perde, só com o teclado (computador)', () => {
     await abrirApp(page, '#/');
     const cartao = await falar(page, 'Preciso parafusar o apoio do banheiro');
     await expect(cartao.getByRole('button', { name: 'Guardar como ideia' })).toBeVisible();
-    // O campo do chat vem logo depois do cartão: de lá, Shift+Tab chega ao último botão dele.
+    // O campo do chat vem logo depois do cartão: de lá, Shift+Tab chega ao Desfazer (o último) e depois ao Guardar como ideia.
     await page.getByRole('complementary', { name: 'Agora, água e chat' }).getByRole('textbox', { name: 'Escreva ou dite' }).focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(cartao.getByRole('button', { name: 'Desfazer' })).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(cartao.getByRole('button', { name: 'Guardar como ideia' })).toBeFocused();
     await page.keyboard.press('Enter');

@@ -122,13 +122,13 @@ describe('o bloco de baixo tem a mesma estrutura ouvindo ou não', () => {
     render(<Chat />);
     const chaveAntes = chave();
     expect(chaveAntes.disabled).toBe(false);
-    expect(screen.getByText(/envia o áudio ao Google\. Para não enviar, escreva\./)).toBeTruthy();
+    expect(screen.getByText(/vai ao Google\. Para não enviar, escreva\./)).toBeTruthy();
 
     fireEvent.click(microfone());
 
     expect(chave()).toBe(chaveAntes); // o mesmo elemento, no mesmo lugar
     expect(chave().disabled).toBe(true);
-    expect(screen.getByText('O navegador envia o áudio ao Google.')).toBeTruthy();
+    expect(screen.getByText('O áudio vai ao Google.')).toBeTruthy();
     expect(screen.getByText(/Ouvindo….*toque no microfone para parar/)).toBeTruthy();
   });
 

@@ -77,7 +77,7 @@ describe('o microfone do chat', () => {
   it('avisa, perto do microfone, que o reconhecimento de voz do navegador envia o áudio ao Google', () => {
     escutaFalsa();
     render(<Chat />);
-    expect(screen.getByText('O reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva.')).toBeTruthy();
+    expect(screen.getByText('O áudio da voz vai ao Google. Para não enviar, escreva.')).toBeTruthy();
   });
 
   it('o chat tem o botão de microfone ao lado do campo e não escuta sozinho: só um toque começa', () => {

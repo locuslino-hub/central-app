@@ -60,7 +60,7 @@ test.describe('celular, 390 px', () => {
     expect(caixaDoCampo.width).toBeGreaterThan(300);
     expect(await inicios(page)).toBe(0);
     await expect(page.getByRole('switch', { name: 'Gravar áudio' })).not.toBeChecked();
-    await expect(page.getByText(/envia o áudio ao Google/)).toBeVisible();
+    await expect(page.getByText(/vai ao Google/)).toBeVisible();
 
     expect(await pequenos(page)).toEqual([]);
     expect(await semRolagemDeLado(page)).toBe(true);
@@ -178,7 +178,7 @@ for (const [onde, largura, altura, abrir] of [
       await area.getByRole('button', { name: 'Falar no chat' }).click();
       await expect(area.getByRole('button', { name: 'Falar no chat' })).toHaveAttribute('aria-pressed', 'true');
       expect(await caixasDoCampo(area)).toEqual(antes);
-      await expect(area.getByText('O navegador envia o áudio ao Google.')).toBeVisible();
+      await expect(area.getByText('O áudio vai ao Google.')).toBeVisible();
       await expect(area.getByText(/toque no microfone para parar/)).toBeVisible();
 
       await area.getByRole('button', { name: 'Falar no chat' }).click();

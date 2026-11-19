@@ -245,18 +245,6 @@ export function Cartao({ cartao, salas, hoje, podeIdeia = true }: { cartao: Esta
             Manter a sala
           </button>
         )}
-        {situacao === 'salvo' && (
-          <button
-            type="button"
-            class="botao"
-            onClick={() => {
-              pedirFoco('cartao', 'desfazer');
-              void desfazerCartao(id);
-            }}
-          >
-            Desfazer
-          </button>
-        )}
         {situacao === 'salvo' && podeIdeia && cartao.frase && (
           <button
             type="button"
@@ -267,6 +255,19 @@ export function Cartao({ cartao, salas, hoje, podeIdeia = true }: { cartao: Esta
             }}
           >
             Guardar como ideia
+          </button>
+        )}
+        {/* Desfazer por último: no painel estreito os botões quebram linha e o último fica no pé do cartão, à vista. */}
+        {situacao === 'salvo' && (
+          <button
+            type="button"
+            class="botao"
+            onClick={() => {
+              pedirFoco('cartao', 'desfazer');
+              void desfazerCartao(id);
+            }}
+          >
+            Desfazer
           </button>
         )}
         {aConfirmar && (

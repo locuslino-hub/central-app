@@ -298,10 +298,7 @@
   font-size: 0.82rem;
   line-height: 1.3;
 }
-/* A coluna estreita do computador quebra o texto em mais linhas. */
-.cartao-chat .chat-aviso-voz {
-  min-height: calc(3 * 1.3 * 0.82rem + 4px);
-}
+/* A coluna estreita do computador: as frases curtas cabem em duas linhas, e a conversa fica com o espaço. */
 
 /* O cartão de resultado (ideia, lista, leitura, gasto) é o cartão do chat, com mais botões. */
 .chat-resultado {

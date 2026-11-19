@@ -277,12 +277,15 @@ export function Chat({ ativo = true }: { ativo?: boolean }) {
         {voz.escutando ? (
           <>
             <span class="chat-ouvindo" aria-hidden="true">
-              Ouvindo… {voz.gravando && <span class="chat-gravando">gravando</span>} toque no microfone para parar
+              Ouvindo… toque no microfone para parar
             </span>
-            <span>O navegador envia o áudio ao Google.</span>
+            {/* "gravando" na segunda linha: na primeira, a frase quebraria e o bloco cresceria ao ligar a gravação. */}
+            <span>
+              {voz.gravando && <span class="chat-gravando" aria-hidden="true">gravando · </span>}O áudio vai ao Google.
+            </span>
           </>
         ) : (
-          'O reconhecimento de voz do navegador envia o áudio ao Google. Para não enviar, escreva.'
+          'O áudio da voz vai ao Google. Para não enviar, escreva.'
         )}
       </p>
       {/* Sempre montada, vazia até haver o que dizer: o avanço do áudio é anunciado. */}
