@@ -275,8 +275,15 @@ function pastaDeLista(pastas: Pasta[], qual: NomeDeLista | null, pastaAtual?: st
   const listas = pastas.filter((p) => p.tipo === 'lista' && !!p.planilhaId);
   const daTela = listas.find((p) => p.id === pastaAtual) ?? null;
   if (qual === null) return daTela;
-  // "Lista de compras" sem nome: vale a pasta de Lista onde o dono está; fora de uma, a semanal.
-  if (qual === 'generica') return daTela ?? pastaDeLista(pastas, 'semanal');
+  // "Lista de compras" sem nome: a pasta de Lista onde o dono está; senão a semanal padrão; senão a única lista com planilha
+  // (o dono pode ter criado a dele, com nome próprio); senão a de nome "compra" de menor ordem; senão `null`.
+  if (qual === 'generica') {
+    if (daTela) return daTela;
+    const semanal = pastaDeLista(pastas, 'semanal');
+    if (semanal) return semanal;
+    if (listas.length === 1) return listas[0]!;
+    return [...listas].sort((a, b) => a.ordem - b.ordem).find((p) => /compra/.test(normalizar(p.nome))) ?? null;
+  }
   const idPadrao = qual === 'semanal' ? ID_DA_LISTA_SEMANAL : ID_DA_LISTA_DA_CASA;
   return listas.find((p) => p.id === idPadrao) ?? listas.sort((a, b) => a.ordem - b.ordem).find((p) => NOME_DA_LISTA[qual].test(normalizar(p.nome))) ?? null;
 }

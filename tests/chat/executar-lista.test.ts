@@ -307,7 +307,7 @@ describe('dentro de uma pasta de lista', () => {
   });
 
   it.each([
-    'comprar tampa para o ralo',
+    'comprar tampa para o ralo amanhã',
     'preciso de leite amanhã',
     'ligar para a Marina',
     'reunião sexta às 10h',
@@ -326,14 +326,14 @@ describe('dentro de uma pasta de lista', () => {
     expect(planilhas.linhas(SEMANAIS)).toEqual([]);
   });
 
-  it('"comprar tampa para o ralo" continua sendo tarefa (ou ideia), nunca item de lista', async () => {
+  it('"Preciso comprar tampa para o ralo" (sem dia nem hora) é item de compra: vai para a lista', async () => {
     await pastaDeLista();
     novaPlanilha(SEMANAIS);
 
     const resultado = await executarFrase('Preciso comprar tampa para o ralo', { pastaAtual: 'pasta-casa-compras-semanais' });
 
-    expect(planilhas.pedidos).toEqual([]);
-    expect(['Tarefa guardada', 'Guardado em Ideias']).toContain(resultado.titulo);
+    expect(itens(SEMANAIS)).toEqual(['tampa para o ralo']);
+    expect(resultado.titulo).toBe('Item guardado');
   });
 
   it('fora de uma pasta de lista, "leite e pão" não é lista', async () => {
@@ -440,5 +440,109 @@ describe('correções da revisão da Tarefa 14', () => {
 
     expect(anexos()).toEqual([]);
     expect(planilhas.linhas(SEMANAIS)).toEqual([]);
+  });
+});
+
+// V02.1: lista com nome próprio (o dono criou a dele). Ordem: pasta atual (se for Lista) → semanal padrão → única lista com
+// planilha → a de nome "compra" de menor ordem → nada (ideia).
+describe('lista genérica com pasta de nome próprio', () => {
+  const MINHA = 'planilha-ficticia-minha';
+  const OUTRA = 'planilha-ficticia-outra';
+  const propria = (extra: Partial<Pasta> = {}) => pastaDeLista({ id: 'pasta-propria', nome: 'Minhas Compras', ordem: 5, planilhaId: MINHA, ...extra });
+
+  it('só existe uma pasta de Lista com planilha (nome próprio): ela recebe, mesmo fora dela e sem a semanal', async () => {
+    await propria();
+    novaPlanilha(MINHA);
+
+    const resultado = await executarFrase('Coloca na lista de compra comprar pão de forma comprar café comprar beterraba');
+
+    expect(itens(MINHA)).toEqual(['pão de forma', 'café', 'beterraba']);
+    expect(resultado.titulo).toBe('3 itens guardados');
+    expect(await listar('ideias')).toEqual([]);
+  });
+
+  it('a frase "preciso comprar ..." também vai para a única lista própria', async () => {
+    await propria();
+    novaPlanilha(MINHA);
+
+    await executarFrase('eu preciso comprar pão de forma, comprar café e beterraba');
+
+    expect(itens(MINHA)).toEqual(['pão de forma', 'café', 'beterraba']);
+  });
+
+  it('a pasta de Lista onde o dono está vale mais que tudo', async () => {
+    await pastaDeLista();
+    await propria();
+    novaPlanilha(SEMANAIS);
+    novaPlanilha(MINHA);
+
+    await executarFrase('põe leite na lista de compra', { pastaAtual: 'pasta-propria' });
+
+    expect(itens(MINHA)).toEqual(['leite']);
+    expect(itens(SEMANAIS)).toEqual([]);
+  });
+
+  it('com duas listas, a semanal padrão vale quando existe', async () => {
+    await pastaDeLista();
+    await propria();
+    novaPlanilha(SEMANAIS);
+    novaPlanilha(MINHA);
+
+    await executarFrase('põe leite na lista de compra');
+
+    expect(itens(SEMANAIS)).toEqual(['leite']);
+    expect(itens(MINHA)).toEqual([]);
+  });
+
+  it('com duas listas e sem a semanal, vale a de nome "compra" de menor ordem', async () => {
+    await propria({ nome: 'Coisas da Cozinha', id: 'pasta-cozinha', ordem: 1, planilhaId: OUTRA });
+    await salvar('pastas', { id: 'pasta-c2', salaId: 'sala-casa', tipo: 'lista', nome: 'Compras do Sítio', ordem: 9, modelo: 'compras', planilhaId: DA_CASA });
+    await salvar('pastas', { id: 'pasta-c1', salaId: 'sala-casa', tipo: 'lista', nome: 'Compra Grande', ordem: 3, modelo: 'compras', planilhaId: MINHA });
+    novaPlanilha(OUTRA);
+    novaPlanilha(DA_CASA);
+    novaPlanilha(MINHA);
+
+    await executarFrase('põe leite na lista de compra');
+
+    expect(itens(MINHA)).toEqual(['leite']);
+    expect(itens(OUTRA)).toEqual([]);
+    expect(itens(DA_CASA)).toEqual([]);
+  });
+
+  it('com duas listas, sem semanal e nenhuma de nome "compra": não adivinha, vira ideia', async () => {
+    await propria({ nome: 'Despensa', id: 'pasta-despensa' });
+    await propria({ nome: 'Cozinha', id: 'pasta-cozinha', ordem: 6, planilhaId: OUTRA });
+    novaPlanilha(MINHA);
+    novaPlanilha(OUTRA);
+
+    const resultado = await executarFrase('põe leite na lista de compra');
+
+    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(planilhas.pedidos).toEqual([]);
+  });
+
+  it('lista sem planilha não conta como a única', async () => {
+    await propria({ planilhaId: undefined });
+
+    const resultado = await executarFrase('põe leite na lista de compra');
+
+    expect(resultado.titulo).toBe('Guardado em Ideias');
+  });
+
+  it('sem nenhuma pasta de lista, a frase vira ideia', async () => {
+    const resultado = await executarFrase('põe leite na lista de compra');
+
+    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(planilhas.pedidos).toEqual([]);
+  });
+
+  it('o pedido que diz "da casa" ou "da semana" continua exigindo a pasta certa (não cai na própria)', async () => {
+    await propria();
+    novaPlanilha(MINHA);
+
+    const resultado = await executarFrase('põe leite nas compras da semana');
+
+    expect(resultado.titulo).toBe('Guardado em Ideias');
+    expect(planilhas.pedidos).toEqual([]);
   });
 });

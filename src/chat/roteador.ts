@@ -400,15 +400,25 @@ export function extrairLeitura(frase: string, hoje: string): Leitura | null {
 // ------------------------------------------------------------------- lista
 
 const KW_CASA =
-  /(?<![a-z])(?:lista\s+de\s+compras\s+(?:para|pra|da|de)\s+(?:a\s+)?casa|compras\s+(?:para|pra)\s+casa|compras?\s+(?:para|pra|pro|da|de|do)\s+(?:a\s+|o\s+)?casa|lista\s+(?:da|de|pra|para)\s+casa)(?![a-z])/;
+  /(?<![a-z])(?:lista\s+de\s+compras?\s+(?:para|pra|da|de)\s+(?:a\s+)?casa|compras\s+(?:para|pra)\s+casa|compras?\s+(?:para|pra|pro|da|de|do)\s+(?:a\s+|o\s+)?casa|lista\s+(?:da|de|pra|para)\s+casa)(?![a-z])/;
 const KW_SEMANAL =
-  /(?<![a-z])(?:lista\s+de\s+compras\s+(?:da|de|pra|para)\s+(?:a\s+)?semana|lista\s+de\s+compras\s+semana(?:l|is)|compras\s+(?:da|de)\s+semana|compras?\s+(?:da|de|pra|para|na)\s+(?:a\s+)?semana|compras\s+semanais|lista\s+semanal|lista\s+da\s+semana|lista\s+de\s+compras)(?![a-z])/;
+  /(?<![a-z])(?:lista\s+de\s+compras?\s+(?:da|de|pra|para)\s+(?:a\s+)?semana|lista\s+de\s+compras?\s+semana(?:l|is)|compras\s+(?:da|de)\s+semana|compras?\s+(?:da|de|pra|para|na)\s+(?:a\s+)?semana|compras\s+semanais|lista\s+semanal|lista\s+da\s+semana)(?![a-z])/;
+/** "Lista de compra(s)" sem dizer qual: "lista do mercado", "nas compras" ("nas compras da semana" já é a semanal) e "compras:". */
+const KW_GENERICA =
+  /(?<![a-z])(?:lista\s+de\s+compras?|lista\s+d[eo]\s+(?:super)?mercado|nas?\s+(?:minhas?\s+|nossas?\s+)?compras?(?!\s+d[eoa]s?(?![a-z]))|compras?(?=\s*:))(?![a-z])/;
 const VERBO_LISTA =
-  /^\s*(?:por favor\s*,?\s*)?(?:poe|por|poem|coloca\w*|adiciona\w*|adicione\w*|acrescenta\w*|inclui\w*|inclua|anota\w*|bota\w*|inserir|insira)(?![a-z])\s*/;
-const PREP_FINAL = /(?:^|\s|,)(?:nas?|nos?|em|para|pra|pro|ao|as|a|da|de|do)\s*$/;
+  /^\s*(?:por favor\s*,?\s*)?(?:(?:pode|podes|quero|queria)\s+)?(?:poe|por|poem|ponha\w*|coloc\w*|coloqu\w*|adiciona\w*|adicione\w*|acrescenta\w*|acrescente\w*|inclui\w*|inclua\w*|anota\w*|anote\w*|bota\w*|bote\w*|mete\w*|inserir|insira)(?![a-z])\s*/;
+const PREP_FINAL = /(?:^|\s|,)(?:nas?|nos?|em|para|pra|pro|ao|as|a|o|da|de|do|minha|nossa|minhas|nossas|essa|esta|nessa|nesta|sua|seu)\s*$/;
+/** Antes do nome da lista, só artigos e possessivos ("minha lista de compras pão"). */
+const SO_ARTIGOS = /^(?:(?:nas?|a|minha|nossa|da|essa|esta|nessa|nesta)\s*)*$/;
+/** Cada "comprar" repetido separa um item; "compra" também ("comprar pão compra café"). */
+const COMPRAR_SEPARA = /(?<![a-z])compra(?:r)?(?![a-z])\s*/g;
 const MAX_ITEM = 80;
 /** Mais itens que isso num pedido só: provavelmente não é uma lista de compras. */
 const MAX_ITENS_DO_PEDIDO = 20;
+/** Sem pedido explícito ("comprar X, Y"): limites mais curtos, para não sequestrar frase de conversa. */
+const MAX_ITENS_SEM_PEDIDO = 12;
+const MAX_PALAVRAS_SEM_PEDIDO = 6;
 /** Infinitivo de tarefa no começo do item ("comprar" fica de fora: é item de compra). */
 const TAREFA_NO_ITEM =
   /^(?:ligar|telefonar|marcar|agendar|pagar|enviar|mandar|responder|fazer|avisar|falar|reservar|cancelar|renovar|resolver)(?![a-z])/;
@@ -450,28 +460,117 @@ function itemParecePedido(nItem: string): boolean {
   );
 }
 
+/** Sinal de que a frase é tarefa, compromisso, gasto, pergunta ou conversa: aí não é lista (usado onde não há pedido explícito). */
+function temSinalDePedido(n: string): boolean {
+  return (
+    n.includes('?') ||
+    PALAVRA_DE_TAREFA.test(n) ||
+    RE_PEDIDO_DE_TAREFA.test(n) ||
+    INTENCAO.test(n) ||
+    TEM_MOEDA.test(n) ||
+    VERBO_AMPLO.test(n) ||
+    FALA_DE_CONVERSA.test(n) ||
+    n.search(RE_HORA) >= 0 ||
+    n.search(RE_PALAVRA_DATA) >= 0 ||
+    /(?<![a-z])dia\s*\d|\d{1,2}\/\d{1,2}\/\d{2,4}|(?<![a-z])por\s+\d/.test(n) ||
+    /(?<![a-z])(?:de|da|pela)\s+(?:manha|tarde|noite|madrugada)|(?<![a-z])(?:a|esta|nesta)\s+(?:tarde|noite)|(?<![a-z])(?:na|nesta|esta)\s+(?:proxima\s+)?semana|(?<![a-z])(?:este|esse|neste|nesse)\s+mes|(?<![a-z])(?:mes|ano)\s+que\s+vem/.test(n)
+  );
+}
+
 /**
- * Pedido claro de lista: um verbo de pôr no começo ("põe", "adicione"...) ou os dois pontos depois do nome da lista
- * ("compras da semana: leite, pão"). "Preciso fazer as compras da semana" é tarefa, não item de lista.
+ * Parte o texto dos itens: por vírgula (fora de números como "1,5"), ";", quebra de linha, " e " e por cada "comprar"
+ * repetido (que some do começo do item). Devolve `null` se um item é inválido (comprido demais, parece tarefa, sobra do
+ * nome da lista...). Sem repetidos, na ordem dita.
+ */
+function separarItens(texto: string): string[] | null {
+  const nt = normalizar(texto);
+  const pedacos: string[] = [];
+  let desde = 0;
+  for (const m of nt.matchAll(COMPRAR_SEPARA)) {
+    pedacos.push(texto.slice(desde, m.index!));
+    desde = m.index! + m[0].length;
+  }
+  pedacos.push(texto.slice(desde));
+
+  const itens: string[] = [];
+  const vistos = new Set<string>();
+  for (const pedaco of pedacos) {
+    for (const bruto of pedaco.split(SEPARADOR_DE_ITENS)) {
+      const item = bruto.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, '').replace(/^e\s+|\s+e$/i, '').trim();
+      if (!item) continue;
+      const nItem = normalizar(item);
+      if (/^(?:da|de|do)(?![a-z])/.test(nItem) || /(?<![a-z])lista(?![a-z])/.test(nItem)) return null; // sobra do nome da lista
+      if (item.length > MAX_ITEM) return null; // item comprido demais: não some em silêncio, a frase vira ideia
+      if (/(?:^|\s)(?:para|pra|de|do|da|com|em|no|na)$/.test(nItem)) return null; // item cortado no meio ("tampa para")
+      if (vistos.has(nItem)) continue;
+      vistos.add(nItem);
+      itens.push(item);
+    }
+  }
+  // Item que é tarefa ("ligar para o dentista") não é compra: deixa seguir como tarefa.
+  if (itens.some((i) => TAREFA_NO_ITEM.test(normalizar(i)) || itemParecePedido(normalizar(i)) || itemTemVerbo(normalizar(i), true))) return null;
+  if (itens.length > MAX_ITENS_DO_PEDIDO) return null;
+  return itens.length ? itens : null;
+}
+
+/** Itens ditos sem pedido explícito de lista ("comprar leite"): só vale texto simples de compra. */
+function itensSemPedidoExplicito(texto: string): string[] | null {
+  const n = normalizar(texto);
+  if (temSinalDePedido(n) || /^e(?![a-z])|^(?:esta|estao|foi|vai|era)(?![a-z])/.test(n.trim())) return null;
+  const itens = separarItens(texto);
+  if (!itens || itens.length > MAX_ITENS_SEM_PEDIDO) return null;
+  for (const item of itens) {
+    const palavras = normalizar(item).split(/\s+/);
+    if (palavras.length > MAX_PALAVRAS_SEM_PEDIDO || palavras.some((p) => PALAVRA_DE_VERBO.test(p))) return null;
+  }
+  return itens;
+}
+
+/** "(eu) preciso comprar X", "tenho que comprar X", "comprar X": compra falada, sem hora, dia, compromisso nem pessoa. */
+const COMPRA_FALADA =
+  /^\s*(?:(?:eu|nos|a\s+gente)\s+)?(?:(?:preciso|precisamos|tenho|temos)\s+(?:de\s+|que\s+)?)?comprar(?![a-z])\s*([\s\S]*)$/;
+
+function extrairCompraFalada(frase: string): string[] | null {
+  const m = COMPRA_FALADA.exec(normalizar(frase));
+  if (!m || !m[1]!.trim()) return null;
+  const texto = frase.slice(frase.length - m[1]!.length);
+  // "com a Marina": pessoa, é compromisso ou tarefa.
+  if (/(?<![\p{L}])com\s+(?:(?:a|o)\s+)?\p{Lu}/u.test(texto)) return null;
+  return itensSemPedidoExplicito(texto);
+}
+
+/**
+ * Pedido claro de lista: um verbo de pôr ("põe", "coloque"...) antes ou depois do nome da lista, os dois pontos depois
+ * dele, ou a frase começando pelo nome da lista ("lista de compras pão e leite"). "Preciso fazer as compras da semana" é
+ * tarefa, não item de lista. Sem nome de lista, "(preciso) comprar X, Y e Z" também é lista (genérica).
  */
 export function extrairItensDeLista(frase: string): { lista: NomeDeLista; itens: string[] } | null {
   if (!utilizavel(frase)) return null;
   const n = normalizar(frase);
   const casa = KW_CASA.exec(n);
   const semanal = casa ? null : KW_SEMANAL.exec(n);
-  const kw = casa ?? semanal;
-  if (!kw) return null;
-  const lista: NomeDeLista = casa ? 'casa' : /^lista\s+de\s+compras$/.test(kw[0]) ? 'generica' : 'semanal';
+  const generica = casa || semanal ? null : KW_GENERICA.exec(n);
+  const kw = casa ?? semanal ?? generica;
+  if (!kw) {
+    const falados = extrairCompraFalada(frase);
+    return falados ? { lista: 'generica', itens: falados } : null;
+  }
+  const lista: NomeDeLista = casa ? 'casa' : semanal ? 'semanal' : 'generica';
 
   const ini = kw.index;
   const fim = ini + kw[0].length;
-  const apos = frase.slice(fim);
+  let apos = frase.slice(fim);
   let antes = frase.slice(0, ini);
   const verbo = VERBO_LISTA.exec(n.slice(0, ini));
   const doisPontos = /^\s*:\s*([\s\S]*)$/.exec(apos);
-  if (!verbo && !doisPontos) return null; // sem pedido claro de lista: segue como tarefa ou ideia
+  // "na lista de compras coloca pão": o verbo vem depois do nome da lista.
+  const aposSemPontas = apos.replace(/^[\s,.;:!?-]+/, '');
+  const verboDepois = VERBO_LISTA.exec(normalizar(aposSemPontas));
+  const soAbreComNome = SO_ARTIGOS.test(normalizar(antes).trim());
+  if (!verbo && !verboDepois && !doisPontos && !soAbreComNome) return null; // sem pedido claro de lista: segue como tarefa ou ideia
   if (PALAVRA_DE_TAREFA.test(n)) return null;
   if (verbo) antes = antes.slice(verbo[0].length);
+  if (!verbo && verboDepois && !doisPontos) apos = aposSemPontas.slice(verboDepois[0].length);
   // Tira preposições soltas no fim ("... pilhas na" antes de "lista da casa").
   for (let guarda = 0; guarda < 5; guarda++) {
     const p = PREP_FINAL.exec(normalizar(antes));
@@ -480,23 +579,9 @@ export function extrairItensDeLista(frase: string): { lista: NomeDeLista; itens:
   }
 
   const texto = (doisPontos ? doisPontos[1] : '') || antes.trim() || apos.trim();
-
-  const itens: string[] = [];
-  const vistos = new Set<string>();
-  for (const bruto of texto.split(/\s*(?:[,;\n]|\s+e\s+)\s*/i)) {
-    const item = bruto.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, '');
-    if (!item) continue;
-    if (/^(?:da|de|do)(?![a-z])/i.test(normalizar(item)) || /(?<![a-z])lista(?![a-z])/.test(normalizar(item))) return null; // sobra do nome da lista
-    if (item.length > MAX_ITEM) return null; // item comprido demais: não some em silêncio, a frase vira ideia
-    const chave = normalizar(item);
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
-    itens.push(item);
-  }
-  // Item que é tarefa ("ligar para o dentista") não é compra: deixa seguir como tarefa.
-  if (itens.some((i) => TAREFA_NO_ITEM.test(normalizar(i)) || itemParecePedido(normalizar(i)) || itemTemVerbo(normalizar(i), true))) return null;
-  if (itens.length > MAX_ITENS_DO_PEDIDO) return null;
-  return itens.length ? { lista, itens } : null;
+  const semPedido = !verbo && !verboDepois && !doisPontos;
+  const itens = semPedido ? itensSemPedidoExplicito(texto) : separarItens(texto);
+  return itens ? { lista, itens } : null;
 }
 
 // ------------------------------------------------------- lista, frase curta

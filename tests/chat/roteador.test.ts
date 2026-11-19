@@ -366,9 +366,9 @@ describe('vírgula e ponto, descrição limpa, lista sem roubar tarefa', () => {
     expect(rotear('anota ligar para o dentista na lista da casa', HOJE)).toEqual({ tipo: 'outro' });
   });
 
-  it('lista: "comprar" como item continua valendo', () => {
+  it('lista: "comprar" do começo do item some (V02.1: "põe comprar pilhas" guarda "pilhas")', () => {
     expect(extrairItensDeLista('põe comprar pilhas na lista da casa')).toEqual({
-      lista: 'casa', itens: ['comprar pilhas'],
+      lista: 'casa', itens: ['pilhas'],
     });
   });
 });
@@ -472,7 +472,7 @@ describe('lista: correções da revisão da Tarefa 14', () => {
 
   it('o pedido de lista com item de compra e artigo continua valendo', () => {
     expect(extrairItensDeLista('põe o leite nas compras da semana')).toEqual({ lista: 'semanal', itens: ['o leite'] });
-    expect(extrairItensDeLista('põe comprar pilhas na lista da casa')).toEqual({ lista: 'casa', itens: ['comprar pilhas'] });
+    expect(extrairItensDeLista('põe comprar pilhas na lista da casa')).toEqual({ lista: 'casa', itens: ['pilhas'] });
   });
 
   it.each(['põe a roupa para lavar', 'ver filme', 'ver preço', 'ir ao mercado', 'ler o contrato', 'dar comida ao gato', 'tinta para pintar'])(
@@ -574,5 +574,111 @@ describe('gasto sem moeda: lista branca da palavra depois do número', () => {
 
   it('"comprei pão por 2,50" tem a descrição "pão"', () => {
     expect(extrairGasto('comprei pão por 2,50', HOJE)!.descricao).toBe('pão');
+  });
+});
+
+// V02.1: o que o reconhecimento de voz do Android entrega (sem vírgulas, às vezes com maiúscula e ponto final).
+describe('listas faladas (voz sem vírgulas)', () => {
+  const lista = (itens: string[]) => ({ tipo: 'lista', lista: 'generica', itens });
+
+  it.each([
+    ['Coloca na lista de compra comprar pão de forma comprar café comprar beterraba', ['pão de forma', 'café', 'beterraba']],
+    ['Coloca na lista de compra comprar pão de forma comprar café e comprar beterraba.', ['pão de forma', 'café', 'beterraba']],
+    ['coloque na lista de compras pão de forma', ['pão de forma']],
+    ['coloca na minha lista de compras pão de forma', ['pão de forma']],
+    ['na lista de compras coloca pão de forma', ['pão de forma']],
+    ['Na lista de compras põe leite e ovos.', ['leite', 'ovos']],
+    ['lista de compras pão de forma café e beterraba', ['pão de forma café', 'beterraba']],
+    ['lista de compras: leite, pão', ['leite', 'pão']],
+    ['Lista de compras leite', ['leite']],
+    ['bota ovos na nossa lista de compra', ['ovos']],
+    ['ponha café na lista do mercado', ['café']],
+    ['acrescente 2 kg de arroz na lista do supermercado', ['2 kg de arroz']],
+    ['mete 1/2 dúzia de ovos na lista de compras', ['1/2 dúzia de ovos']],
+    ['anote 1,5 kg de arroz e leite na lista de compras', ['1,5 kg de arroz', 'leite']],
+    ['inclua pão nas compras', ['pão']],
+    ['pôe leite na minha lista de compras.', ['leite']],
+  ])('"%s" → lista genérica', (f, itens) => {
+    expect(rotear(f, HOJE)).toEqual(lista(itens));
+  });
+
+  it.each([
+    'põe', 'poe', 'pôe', 'coloca', 'coloque', 'colocar', 'bota', 'bote', 'ponha', 'adiciona', 'adicione', 'acrescenta', 'acrescente',
+    'inclui', 'inclua', 'anota', 'anote', 'mete',
+  ])('verbo "%s" vale para lista de compra no singular', (verbo) => {
+    expect(rotear(`${verbo} leite na lista de compra`, HOJE)).toEqual(lista(['leite']));
+    expect(rotear(`${verbo} na lista de compras leite`, HOJE)).toEqual(lista(['leite']));
+  });
+
+  it('as listas específicas continuam específicas, também no singular', () => {
+    expect(rotear('põe leite na lista de compra da semana', HOJE)).toEqual({ tipo: 'lista', lista: 'semanal', itens: ['leite'] });
+    expect(rotear('coloca na lista da casa pilhas', HOJE)).toEqual({ tipo: 'lista', lista: 'casa', itens: ['pilhas'] });
+    expect(rotear('põe pilhas na lista de compra para casa', HOJE)).toEqual({ tipo: 'lista', lista: 'casa', itens: ['pilhas'] });
+  });
+
+  it('"comprar" repetido separa os itens e some do começo de cada um', () => {
+    expect(extrairItensDeLista('põe comprar pilhas na lista da casa')).toEqual({ lista: 'casa', itens: ['pilhas'] });
+    expect(extrairItensDeLista('coloca na lista de compras compra leite compra pão')!.itens).toEqual(['leite', 'pão']);
+  });
+
+  it.each([
+    ['eu preciso comprar pão de forma, comprar café e beterraba', ['pão de forma', 'café', 'beterraba']],
+    ['preciso comprar pão de forma café e beterraba', ['pão de forma café', 'beterraba']],
+    ['Preciso comprar pão de forma, café e beterraba.', ['pão de forma', 'café', 'beterraba']],
+    ['comprar pão de forma, café e beterraba', ['pão de forma', 'café', 'beterraba']],
+    ['comprar pão de forma comprar café e comprar beterraba', ['pão de forma', 'café', 'beterraba']],
+    ['tenho que comprar leite e ovos', ['leite', 'ovos']],
+    ['Tenho de comprar 2 kg de arroz', ['2 kg de arroz']],
+    ['comprar leite', ['leite']],
+    ['Comprar leite.', ['leite']],
+  ])('"%s" → lista genérica', (f, itens) => {
+    expect(rotear(f, HOJE)).toEqual(lista(itens));
+  });
+
+  it.each([
+    'comprar presente para a Marina sexta',
+    'comprar presente com a Marina',
+    'preciso comprar passagem amanhã às 10',
+    'comprar leite amanhã',
+    'comprar leite hoje',
+    'comprar pão às 10h',
+    'comprar pão dia 10',
+    'comprar pão no dia 10/12',
+    'preciso comprar presente para a Renata na sexta',
+    'comprar pão de manhã',
+    'reunião para comprar equipamento',
+    'preciso de pão',
+    'preciso de leite e ovos',
+    'preciso ligar para o dentista e comprar leite',
+    'ligar para a Marina e comprar leite',
+    'preciso comprar pão porque acabou',
+    'não preciso comprar pão',
+    'será que preciso comprar pão?',
+    'comprei pão e leite',
+    'preciso comprar passagem e ligar para a Renata',
+    'tarefa: comprar leite',
+    'adicione comprar leite nas tarefas',
+    'lembrete comprar leite',
+    'marcar reunião para comprar equipamento sexta',
+    'preciso fazer as compras da semana',
+    'fiz as compras da semana',
+    'lista de compras da semana está pronta?',
+    'a lista de compras é muito grande',
+  ])('"%s" não é lista', (f) => {
+    expect(rotear(f, HOJE).tipo).not.toBe('lista');
+  });
+
+  it('frases reais de tarefa, compromisso, leitura, gasto e tema não são sequestradas', () => {
+    for (const f of [
+      'Adicione em atividades do dia mandar mensagem para Marina',
+      'Adicione reunião sobre o projeto na sexta feira com inicio às 11:00 e termino 12:00',
+      'Preciso parafusar o apoio do banheiro',
+      'Marcar reunião com a Renata',
+      'Adicione Revisar parágrafo do relatório 1 nas tarefas do doutoramento',
+    ]) expect(rotear(f, HOJE)).toEqual({ tipo: 'outro' });
+    expect(rotear('luz 12345 kWh', HOJE).tipo).toBe('leitura');
+    expect(rotear('gastei 5,50 hoje comprando salgado', HOJE).tipo).toBe('gasto');
+    expect(rotear('comprei pão por 2,50', HOJE).tipo).toBe('gasto');
+    expect(rotear('Comprar pão por 2,50 euros', HOJE).tipo).not.toBe('lista');
   });
 });
