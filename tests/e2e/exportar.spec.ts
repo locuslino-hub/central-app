@@ -83,6 +83,7 @@ for (const [nome, viewport] of [
           'estadosEmail',
           'eventosFeitos',
           'ideias',
+          'notas',
           'paginas',
           'palavras',
           'pastas',

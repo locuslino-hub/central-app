@@ -54,6 +54,18 @@ const COMPLETOS: { [C in NomeDaColecao]: Colecoes[C] } = {
   agua: { ...base, data: '2026-11-05', hora: '12:40', ml: 125 },
   ideias: { ...base, texto: 'Ideia da Aurora', salaId: 'sala-aulas', estado: 'tarefa', tarefaId: 't-1', audioId: 'audio-1', audioSegundos: 42 },
   pastas: { ...base, salaId: 'sala-casa', tipo: 'registro', nome: 'Consumo de Água', ordem: 3, planilhaId: 'planilha-teste-1', modelo: 'consumo', servico: 'agua', unidade: 'm³', diaDeEnvio: 5, categorias: ['Mercado'] },
+  notas: {
+    ...base,
+    salaId: 'sala-doutoramento',
+    pastaId: 'pasta-metodologia',
+    tipo: 'lista',
+    texto: 'Texto de uma nota',
+    itens: [
+      { id: 'i-1', texto: 'Baixar dados', feito: true },
+      { id: 'i-2', texto: 'Limpar planilha' },
+    ],
+    criadaEm: AGORA - 5000,
+  },
 };
 
 const DA_BASE = new Set(['id', 'atualizadoEm', 'aparelho', 'apagado']);
@@ -138,6 +150,51 @@ describe('esquemas do script', () => {
   ] as const)('pastas: %s com forma errada é recusado', (campo, valores) => {
     for (const valor of valores) {
       expect(registroValido('pastas', { ...COMPLETOS.pastas, [campo]: valor }, AGORA)).toBe(false);
+    }
+  });
+
+  it('script aceita e devolve a coleção notas', () => {
+    expect(colecaoConhecida('notas')).toBe(true);
+    expect(NOMES_DAS_COLECOES).toContain('notas');
+    const texto = { ...base, salaId: 'sala-aulas', tipo: 'texto', texto: 'Revisar a parcela 3', criadaEm: AGORA - 1000 };
+    expect(registroValido('notas', texto, AGORA, { estrito: true })).toBe(true);
+    const lista = { ...base, salaId: 'sala-aulas', tipo: 'lista', itens: [{ id: 'a', texto: 'Um' }], criadaEm: AGORA - 1000 };
+    expect(registroValido('notas', lista, AGORA, { estrito: true })).toBe(true);
+    expect(registroValido('notas', COMPLETOS.notas, AGORA, { estrito: true })).toBe(true);
+    expect(registroValido('notas', { ...texto, apagado: true }, AGORA)).toBe(true);
+  });
+
+  it('notas: limites aceitos (texto de 20 000, 200 itens, item de 500)', () => {
+    expect(registroValido('notas', { ...COMPLETOS.notas, texto: 'x'.repeat(20_000) }, AGORA)).toBe(true);
+    const duzentos = Array.from({ length: 200 }, (_, i) => ({ id: `i-${i}`, texto: 'y'.repeat(500) }));
+    expect(registroValido('notas', { ...COMPLETOS.notas, itens: duzentos }, AGORA)).toBe(true);
+  });
+
+  it.each([
+    ['salaId', [5, null, undefined, '', 'com espaço']],
+    ['pastaId', [5, null, '', 'com espaço', 'a'.repeat(65)]],
+    ['tipo', ['diario', '', 1, null, undefined]],
+    ['texto', [5, null, 'x'.repeat(20_001)]],
+    ['criadaEm', ['ontem', null, undefined, Number.NaN, -1, Number.POSITIVE_INFINITY]],
+    [
+      'itens',
+      [
+        'um',
+        {},
+        [null],
+        ['a'],
+        [{ texto: 'sem id' }],
+        [{ id: 'a' }],
+        [{ id: 'com espaço', texto: 'x' }],
+        [{ id: 'a', texto: 5 }],
+        [{ id: 'a', texto: 'x'.repeat(501) }],
+        [{ id: 'a', texto: 'x', feito: 'sim' }],
+        Array.from({ length: 201 }, (_, i) => ({ id: `i-${i}`, texto: 'x' })),
+      ],
+    ],
+  ] as const)('notas: %s com forma errada é recusado', (campo, valores) => {
+    for (const valor of valores) {
+      expect(registroValido('notas', { ...COMPLETOS.notas, [campo]: valor }, AGORA)).toBe(false);
     }
   });
 

@@ -18,6 +18,10 @@ const HORA_VALIDA = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 export const CHAVE_DE_COR = /^(?:label:[A-Za-z0-9_-]{1,64}|cor:(?:[1-9]|1[01])|agenda:[0-9a-f]{6})$/;
 /** `AAAA-MM-DD`. */
 const DIA_VALIDO = /^\d{4}-\d{2}-\d{2}$/;
+/** Limites de uma nota independente (o app corta no mesmo valor ao gravar). */
+export const NOTA_TEXTO_NO_MAXIMO = 20_000;
+export const NOTA_ITENS_NO_MAXIMO = 200;
+export const NOTA_ITEM_TEXTO_NO_MAXIMO = 500;
 
 type Tipo =
   | 'texto'
@@ -30,6 +34,7 @@ type Tipo =
   | 'hora'
   | 'hora?'
   | 'ml'
+  | 'numero'
   | 'numero?'
   | 'listaDeTexto?'
   | 'blocos?'
@@ -44,6 +49,9 @@ type Tipo =
   | 'segundosDeAudio?'
   | 'tipoDePasta'
   | 'nomeDePasta'
+  | 'tipoDeNota'
+  | 'textoDeNota?'
+  | 'itensDeNota?'
   | 'idDePlanilha?'
   | 'modeloDePlanilha?'
   | 'servicoDeConsumo?'
@@ -124,6 +132,18 @@ export const ESQUEMAS = {
     diaDeEnvio: 'diaDeEnvio?',
     categorias: 'listaDeTexto?',
   },
+  /**
+   * Nota independente de uma sala ou de uma subpasta (comum), de texto ou de lista. `criadaEm` (ms) dá a ordem e a
+   * data do cartão. Texto até 20 000 caracteres; lista até 200 itens de até 500 caracteres.
+   */
+  notas: {
+    salaId: 'id',
+    pastaId: 'id?',
+    tipo: 'tipoDeNota',
+    texto: 'textoDeNota?',
+    itens: 'itensDeNota?',
+    criadaEm: 'numero',
+  },
 } as const satisfies Record<string, Record<string, Tipo>>;
 
 export type NomeDaColecao = keyof typeof ESQUEMAS;
@@ -157,6 +177,25 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === 'lista' || valor === 'registro' || valor === 'planilha' || valor === 'comum';
     case 'nomeDePasta':
       return typeof valor === 'string' && valor.length >= 1 && valor.length <= 100;
+    case 'tipoDeNota':
+      return valor === 'texto' || valor === 'lista';
+    case 'textoDeNota?':
+      return valor === undefined || (typeof valor === 'string' && valor.length <= NOTA_TEXTO_NO_MAXIMO);
+    case 'itensDeNota?':
+      return (
+        valor === undefined ||
+        (Array.isArray(valor) &&
+          valor.length <= NOTA_ITENS_NO_MAXIMO &&
+          valor.every(
+            (item) =>
+              objeto(item) &&
+              typeof item.id === 'string' &&
+              ID_VALIDO.test(item.id) &&
+              typeof item.texto === 'string' &&
+              item.texto.length <= NOTA_ITEM_TEXTO_NO_MAXIMO &&
+              (item.feito === undefined || typeof item.feito === 'boolean'),
+          ))
+      );
     case 'idDePlanilha?':
       return valor === undefined || (typeof valor === 'string' && /^[\w-]{1,200}$/.test(valor));
     case 'modeloDePlanilha?':
@@ -187,6 +226,8 @@ function campoValido(tipo: Tipo, valor: unknown): boolean {
       return valor === undefined || (typeof valor === 'string' && HORA_VALIDA.test(valor));
     case 'ml':
       return typeof valor === 'number' && Number.isInteger(valor) && valor >= 1 && valor <= 5000;
+    case 'numero':
+      return typeof valor === 'number' && Number.isFinite(valor) && valor >= 0;
     case 'numero?':
       return valor === undefined || (typeof valor === 'number' && Number.isFinite(valor));
     case 'listaDeTexto?':

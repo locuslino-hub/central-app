@@ -3,7 +3,7 @@ import { contarNovas } from '../dados/ideias';
 import { assinar, lerConfig, listar } from '../dados/loja';
 import { hojeEmLisboa, vigiarODia } from '../dados/dia';
 import { lerNome, NOME_MUDOU } from '../dados/nome';
-import type { AguaRegistro, Colecoes, Config, CorDaSala, Documento, EstadoEmail, EventoFeito, Ideia, Pagina, Palavra, Pasta, Pessoa, Sala, Tarefa } from '../dados/tipos';
+import type { AguaRegistro, Colecoes, Config, CorDaSala, Documento, EstadoEmail, EventoFeito, Ideia, Nota, Pagina, Palavra, Pasta, Pessoa, Sala, Tarefa } from '../dados/tipos';
 import { resolverRota, type RotaAtual } from '../rotas';
 
 // ---- Tamanho da tela ----
@@ -131,7 +131,7 @@ export function useTituloDaAba(titulo: string) {
 
 /** Recarrega a lista sempre que a coleção muda (neste aparelho ou vinda de outro). */
 function useLista<
-  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos' | 'coresDasSalas' | 'agua' | 'ideias' | 'pastas',
+  C extends 'salas' | 'pessoas' | 'palavras' | 'tarefas' | 'estadosEmail' | 'documentos' | 'paginas' | 'eventosFeitos' | 'coresDasSalas' | 'agua' | 'ideias' | 'pastas' | 'notas',
 >(colecao: C): Colecoes[C][] | undefined {
   const [lista, setLista] = useState<Colecoes[C][]>();
   useEffect(() => {
@@ -181,6 +181,11 @@ export function usePastas(): Pasta[] | undefined {
 export function usePasta(salaId: string, pastaId: string): Pasta | null | undefined {
   const lista = useLista('pastas');
   return lista && (lista.find((pasta) => pasta.id === pastaId && pasta.salaId === salaId) ?? null);
+}
+
+/** As notas independentes vivas, de todas as salas e subpastas. `undefined` enquanto lê. */
+export function useNotas(): Nota[] | undefined {
+  return useLista('notas');
 }
 
 /** As ideias vivas, de todos os estados. `undefined` enquanto lê. */

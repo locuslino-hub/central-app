@@ -170,6 +170,22 @@ export type Pasta = Base & {
   categorias?: string[];
 };
 
+/** Um item de uma nota de lista. `id` fixo: marcar e editar acham o mesmo item. */
+export type ItemDeNota = { id: string; texto: string; feito?: boolean };
+
+/**
+ * Nota independente de uma sala ou de uma subpasta comum (`pastaId`): de texto (até 20 000 caracteres) ou de lista
+ * (até 200 itens de até 500). `criadaEm` (ms) dá a ordem (mais recente em cima) e a data do cartão.
+ */
+export type Nota = Base & {
+  salaId: string;
+  pastaId?: string;
+  tipo: 'texto' | 'lista';
+  texto?: string;
+  itens?: ItemDeNota[];
+  criadaEm: number;
+};
+
 export type Colecoes = {
   salas: Sala;
   pessoas: Pessoa;
@@ -184,6 +200,7 @@ export type Colecoes = {
   agua: AguaRegistro;
   ideias: Ideia;
   pastas: Pasta;
+  notas: Nota;
 };
 
 export type Colecao = keyof Colecoes;
