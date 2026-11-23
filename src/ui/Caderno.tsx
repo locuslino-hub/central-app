@@ -80,7 +80,8 @@ function useCampoLocal(externo: string, aoMudar: (valor: string) => void) {
 
   useEffect(() => {
     if (externo === atual.current) return;
-    if (document.activeElement === campo.current) {
+    // O documento do próprio campo: na janelinha flutuante ele não é o `document` do app.
+    if (campo.current && campo.current.ownerDocument.activeElement === campo.current) {
       chegouDeFora.current = true;
       return;
     }

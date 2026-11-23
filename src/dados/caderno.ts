@@ -93,7 +93,9 @@ async function garantirDeVez(salaId: string, pastaId: string): Promise<Pagina | 
   if (existente) return undefined;
   const vivas = (await listar('paginas')).some((p) => p.pastaId === pastaId && !p.apagado);
   if (vivas) return undefined;
-  return salvar('paginas', { id, salaId, pastaId, titulo: 'Notas', blocos: [novoBloco('texto')] });
+  // Bloco com id fixo: duas criações (dois aparelhos) dão a mesma página. Carimbo automático: perde para o que o
+  // dono escreveu ou apagou noutro aparelho.
+  return salvar('paginas', { id, salaId, pastaId, titulo: 'Notas', blocos: [{ id: `${id}-1`, tipo: 'texto', texto: '' }] }, { automatico: true });
 }
 
 /**

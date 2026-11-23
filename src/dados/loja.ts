@@ -173,6 +173,9 @@ function notificar(mudanca: Mudanca) {
   }
 }
 
+/** Carimbo do registro criado sozinho, sem nada do dono: o mais baixo possível, perde para qualquer versão real. */
+export const CARIMBO_AUTOMATICO = 1;
+
 /**
  * Grava (inserindo ou substituindo) com a hora atual e este aparelho, e enfileira em `pendentes`.
  * `semEspelho`: a tarefa não entra na fila do espelho no Google Tarefas (a restauração da cópia).
@@ -180,7 +183,11 @@ function notificar(mudanca: Mudanca) {
 export async function salvar<C extends Colecao>(
   colecao: C,
   registro: ParaSalvar<Colecoes[C]>,
-  { semEspelho = false, carimboMinimo = false }: { semEspelho?: boolean; carimboMinimo?: boolean } = {},
+  {
+    semEspelho = false,
+    carimboMinimo = false,
+    automatico = false,
+  }: { semEspelho?: boolean; carimboMinimo?: boolean; automatico?: boolean } = {},
 ): Promise<Colecoes[C]> {
   const salvo = await comBanco(async (banco) => {
     const tx = escrever(banco, [colecao, PENDENTES, LOCAL]);
@@ -191,7 +198,9 @@ export async function salvar<C extends Colecao>(
     const atual: Registro | undefined = id === registro.id || colecao === 'config' ? await loja.get(id) : undefined;
     // `carimboMinimo`: escrita automática (virada do dia) não ganha da edição
     // humana que outro aparelho fez depois, mesmo com o relógio adiantado.
-    const hora = carimboMinimo && atual ? atual.atualizadoEm + 1 : carimbo(atual);
+    // `automatico`: registro criado sozinho (a página "Notas" da pasta), sem nada do dono: perde para qualquer versão
+    // de outro aparelho (texto ou exclusão), sem aviso de conflito.
+    const hora = automatico && !atual ? CARIMBO_AUTOMATICO : carimboMinimo && atual ? atual.atualizadoEm + 1 : carimbo(atual);
     let novo = { ...registro, id, atualizadoEm: hora, aparelho } as Colecoes[C];
     if (colecao === 'tarefas' && !semEspelho) {
       const diferenca: unknown = await tx.objectStore(LOCAL).get(CHAVE_RELOGIO);
@@ -893,7 +902,7 @@ export async function gravarDoServidor(itens: readonly unknown[], relogioDoServi
         if (local && temPendente) {
           for (const seq of seqs) await fila.delete(seq);
           // Alteração por enviar perdeu: sempre avisa, mesmo do mesmo aparelho.
-          if (local.atualizadoEm > 0 && !mesmoConteudo(local, remoto)) await guardarAviso(colecao, local, remoto);
+          if (local.atualizadoEm > CARIMBO_AUTOMATICO && !mesmoConteudo(local, remoto)) await guardarAviso(colecao, local, remoto);
         }
       } else if (temPendente) {
         // A local vence e segue na fila para o servidor.

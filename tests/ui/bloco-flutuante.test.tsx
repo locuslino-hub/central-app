@@ -123,6 +123,22 @@ describe('bloco flutuante', () => {
     });
   });
 
+  it('o campo em uso na janela não é redesenhado por uma versão que chega de fora', async () => {
+    comApi();
+    await metodologia();
+    mostrar(HASH);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
+    const campo = (await naJanela().findByRole('textbox', { name: 'Texto' })) as HTMLInputElement;
+    campo.focus();
+    expect(janela.document.activeElement).toBe(campo);
+    await waitFor(async () => expect((await listar('paginas')).some((p) => p.id === 'nota-pasta-metodologia')).toBe(true));
+    const [pagina] = (await listar('paginas')).filter((p) => p.id === 'nota-pasta-metodologia');
+    // Chega de outro aparelho a mesma linha com outro texto, enquanto o dono está no campo.
+    await salvar('paginas', { ...pagina, blocos: [{ ...pagina.blocos[0], texto: 'Texto de fora' }] });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(campo.value).toBe('');
+  });
+
   it('pasta apagada mostra o aviso', async () => {
     comApi();
     localStorage.setItem('central.notas.ultimaPasta', JSON.stringify({ salaId: 'sala-mba', pastaId: 'pasta-que-nao-existe' }));
