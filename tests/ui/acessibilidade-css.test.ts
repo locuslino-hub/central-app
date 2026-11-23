@@ -126,3 +126,10 @@ describe('o campo do chat (revisão da V02.1)', () => {
     expect(corpo).not.toMatch(/display:\s*none/);
   });
 });
+
+describe('o quadro de notas fica em cima na pasta comum', () => {
+  it('na grade da pasta, o quadro (que herda order: 5 de .notas) vai para o topo com order negativo', () => {
+    const quadro = ler('quadro-de-notas.css');
+    expect(regra(quadro, '.pasta-comum > .notas-quadro')).toMatch(/order:\s*-1/);
+  });
+});

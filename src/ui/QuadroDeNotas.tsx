@@ -8,7 +8,7 @@
 //   - Um formulário aberto guarda o que mostra: uma versão nova da mesma nota que chegue de outro aparelho não o
 //     redesenha (nem apaga o que se digitou), e o Salvar grava o que o formulário mostra.
 //   - Ao abrir, roda a migração do que existia antes (texto único da sala, página "Notas" da subpasta).
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { desfazer } from '../dados/desfazer';
 import {
   ITENS_NO_MAXIMO,
@@ -65,11 +65,12 @@ function FormularioDeNota({
   const raiz = useRef<HTMLFormElement>(null);
   const [focoNoItem, setFocoNoItem] = useState<string | null>(null);
 
-  // Ao abrir, o cursor já está no campo; ao criar um item novo, nele.
-  useEffect(() => {
+  // Ao abrir, o cursor já está no campo; ao criar um item novo, nele. Antes da pintura (layout), e não depois: quem
+  // digita ou dita rápido não perde as primeiras letras.
+  useLayoutEffect(() => {
     raiz.current?.querySelector<HTMLElement>(tipo === 'texto' ? 'textarea' : 'input[type="text"]')?.focus();
   }, [tipo]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focoNoItem) raiz.current?.querySelector<HTMLElement>(`[data-item="${focoNoItem}"]`)?.focus();
   }, [focoNoItem]);
 
@@ -125,6 +126,13 @@ function FormularioDeNota({
       class="nota-form"
       aria-label={inicial ? 'Editar nota' : tipo === 'texto' ? 'Nova nota de texto' : 'Nova nota de lista'}
       onSubmit={(e) => void salvar(e)}
+      onKeyDown={(e) => {
+        // Esc dentro do formulário é Cancelar.
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          aoCancelar();
+        }
+      }}
       noValidate
     >
       {tipo === 'texto' ? (
@@ -337,7 +345,20 @@ export function QuadroDeNotas({ salaId, pastaId, titulo }: { salaId: string; pas
               + Nova nota ▾
             </button>
             {menuAberto && (
-              <div id="menu-nova-nota" class="quadro-menu" role="group" aria-label="Tipo da nota">
+              <div
+                id="menu-nova-nota"
+                class="quadro-menu"
+                role="group"
+                aria-label="Tipo da nota"
+                onKeyDown={(e) => {
+                  // Esc com o foco em Texto ou Lista fecha o menu e o foco volta ao botão.
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setMenuAberto(false);
+                    botaoNova.current?.focus();
+                  }
+                }}
+              >
                 {(['texto', 'lista'] as const).map((tipo) => (
                   <button
                     key={tipo}

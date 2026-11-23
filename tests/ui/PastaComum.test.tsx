@@ -56,20 +56,32 @@ describe('notas da pasta comum', () => {
     expect(await listar('paginas')).toEqual([]);
   });
 
-  it('a página Notas automática da versão anterior vira uma nota e some', async () => {
+  it('a página Notas automática da versão anterior vira uma nota, e a página continua guardada (nada é apagado)', async () => {
     await metodologia();
     await salvar('paginas', { id: 'nota-pasta-metodologia', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', titulo: 'Notas', blocos: [{ id: 'b1', tipo: 'texto', texto: 'Falar com o Prof. Souza' }] });
     mostrar(HASH);
     expect(await within(await regiao(NOTAS)).findByText('Falar com o Prof. Souza')).toBeTruthy();
-    await waitFor(async () => expect((await listar('paginas')).filter((p) => !p.apagado)).toEqual([]));
+    expect((await listar('paginas')).filter((p) => !p.apagado).map((p) => p.id)).toEqual(['nota-pasta-metodologia']);
   });
 
-  it('Notas vêm antes de Tarefas', async () => {
+  it('o caderno da sala esconde a página Notas automática (já aparece como nota), mas mostra as outras', async () => {
+    await metodologia();
+    await salvar('paginas', { id: 'nota-pasta-metodologia', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', titulo: 'Notas', blocos: [{ id: 'b1', tipo: 'texto', texto: 'Falar com o Prof. Souza' }] });
+    await notaDoTema('Amostragem', 'Definir o tamanho da amostra');
+    mostrar('#/sala/sala-doutoramento');
+    const caderno = within(await principal().findByRole('region', { name: 'Caderno' }));
+    expect(await caderno.findByRole('button', { name: 'Amostragem' })).toBeTruthy();
+    expect(caderno.queryByRole('button', { name: 'Notas' })).toBeNull();
+  });
+
+  it('Notas vêm antes de Tarefas e de Documentos', async () => {
     await metodologia();
     mostrar(HASH);
     const notas = await regiao(NOTAS);
     const tarefas = await regiao('Tarefas');
+    const documentos = await regiao('Documentos');
     expect(notas.compareDocumentPosition(tarefas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(notas.compareDocumentPosition(documentos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('lembra a última pasta comum', async () => {

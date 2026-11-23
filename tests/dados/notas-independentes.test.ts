@@ -89,10 +89,19 @@ describe('editarNota', () => {
     expect(nova.atualizadoEm).toBe(AGORA + 60_000);
   });
 
-  it('troca os itens de uma lista', async () => {
+  it('troca os itens de uma lista; o item novo começa sem marca', async () => {
     const nota = await criarNota({ salaId: SALA, tipo: 'lista', itens: [{ id: 'a', texto: 'Um' }] });
-    const nova = await editarNota(nota.id, { itens: [{ id: 'a', texto: 'Um', feito: true }, { id: 'b', texto: 'Dois' }] });
-    expect(nova.itens).toEqual([{ id: 'a', texto: 'Um', feito: true }, { id: 'b', texto: 'Dois' }]);
+    const nova = await editarNota(nota.id, { itens: [{ id: 'a', texto: 'Um, revisado' }, { id: 'b', texto: 'Dois', feito: true }] });
+    expect(nova.itens).toEqual([{ id: 'a', texto: 'Um, revisado' }, { id: 'b', texto: 'Dois' }]);
+  });
+
+  it('a marca de um item vem da nota relida: o formulário, aberto antes de marcar, não a desfaz', async () => {
+    const nota = await criarNota({ salaId: SALA, tipo: 'lista', itens: [{ id: 'a', texto: 'Um' }, { id: 'b', texto: 'Dois', feito: true }] });
+    // O formulário abriu com a nota como estava; depois a caixinha de "a" foi marcada e a de "b" desmarcada.
+    await marcarItem(nota.id, 'a', true);
+    await marcarItem(nota.id, 'b', false);
+    const nova = await editarNota(nota.id, { itens: [{ id: 'a', texto: 'Um' }, { id: 'b', texto: 'Dois', feito: true }, { id: 'c', texto: 'Três' }] });
+    expect(nova.itens).toEqual([{ id: 'a', texto: 'Um', feito: true }, { id: 'b', texto: 'Dois' }, { id: 'c', texto: 'Três' }]);
   });
 
   it('esvaziar a nota lança nota_vazia e não muda nada', async () => {
@@ -154,14 +163,15 @@ const salaComNotas = async (notas: string, salaId = SALA) => {
   const sala = (await listar('salas')).find((s) => s.id === salaId) as Sala;
   return salvar('salas', { ...sala, notas });
 };
-const antiga = (salaId = SALA) => `nota-antiga-${salaId}`;
+/** O id da nota da migração: leva a versão (a hora da última mudança) da sala. */
+const antiga = (salaId = SALA, versao = AGORA) => `nota-antiga-${salaId}-${versao}`;
 
 describe('migrarNotasAntigas', () => {
   it('o texto antigo da sala vira uma nota de texto com a data da última mudança da sala; o campo antigo fica', async () => {
     const sala = await salaComNotas('Combinar as entregas com a Marina.');
     await migrarNotasAntigas(SALA);
     const [nota] = await vivas();
-    expect(nota).toMatchObject({ id: antiga(), salaId: SALA, tipo: 'texto', texto: 'Combinar as entregas com a Marina.', criadaEm: sala.atualizadoEm });
+    expect(nota).toMatchObject({ id: antiga(SALA, sala.atualizadoEm), salaId: SALA, tipo: 'texto', texto: 'Combinar as entregas com a Marina.', criadaEm: sala.atualizadoEm });
     expect(nota.pastaId).toBeUndefined();
     const [lida] = (await lerRegistros([{ colecao: 'salas', id: SALA }])) as Sala[];
     expect(lida.notas).toBe('Combinar as entregas com a Marina.');
@@ -181,7 +191,7 @@ describe('migrarNotasAntigas', () => {
     expect(await vivas()).toHaveLength(1);
   });
 
-  it('não ressuscita a nota que o dono apagou (a lápide do id fixo bloqueia)', async () => {
+  it('não ressuscita a nota que o dono apagou (a lápide do id da versão bloqueia)', async () => {
     await salaComNotas('Texto antigo');
     await migrarNotasAntigas(SALA);
     await apagar('notas', antiga());
@@ -214,21 +224,73 @@ describe('migrarNotasAntigas', () => {
     await salaComNotas('Das Aulas', 'sala-aulas');
     await migrarNotasAntigas(SALA);
     await migrarNotasAntigas('sala-aulas');
-    expect((await vivas()).map((n) => n.id).sort()).toEqual(['nota-antiga-sala-aulas', 'nota-antiga-sala-doutoramento']);
+    expect((await vivas()).map((n) => n.id).sort()).toEqual([antiga('sala-aulas'), antiga()].sort());
   });
 
   it('sala que não existe não faz nada', async () => {
     await migrarNotasAntigas('sala-que-nao-existe');
     expect(await vivas()).toEqual([]);
   });
+
+  it('texto editado na sala depois da migração (aparelho antigo) vira uma segunda nota; nada se perde', async () => {
+    await salaComNotas('Primeiro texto');
+    await migrarNotasAntigas(SALA);
+    vi.setSystemTime(AGORA + 60_000);
+    await salaComNotas('Primeiro texto, com um acréscimo do aparelho antigo');
+    await migrarNotasAntigas(SALA);
+    const notas = await vivas();
+    expect(notas.map((n) => n.id).sort()).toEqual([antiga(), antiga(SALA, AGORA + 60_000)].sort());
+    expect(notas.map((n) => n.texto).sort()).toEqual(['Primeiro texto', 'Primeiro texto, com um acréscimo do aparelho antigo']);
+    await migrarNotasAntigas(SALA);
+    expect(await vivas()).toHaveLength(2);
+  });
+
+  it('a sala só mudou de nome depois da migração: o texto igual não vira nota repetida (viva ou apagada)', async () => {
+    await salaComNotas('Texto antigo');
+    await migrarNotasAntigas(SALA);
+    vi.setSystemTime(AGORA + 60_000);
+    const sala = (await listar('salas')).find((s) => s.id === SALA) as Sala;
+    await salvar('salas', { ...sala, nome: 'Doutoramento 2' });
+    await migrarNotasAntigas(SALA);
+    expect(await vivas()).toHaveLength(1);
+    await apagar('notas', antiga());
+    vi.setSystemTime(AGORA + 120_000);
+    await salvar('salas', { ...sala, nome: 'Doutoramento 3' });
+    await migrarNotasAntigas(SALA);
+    expect(await vivas()).toEqual([]);
+  });
+
+  it('a nota do esquema anterior (id sem versão) conta como a versão já migrada', async () => {
+    const sala = await salaComNotas('Texto antigo');
+    await salvar('notas', { id: `nota-antiga-${SALA}`, salaId: SALA, tipo: 'texto', texto: 'Texto antigo, já editado', criadaEm: sala.atualizadoEm });
+    await migrarNotasAntigas(SALA);
+    expect((await vivas()).map((n) => n.id)).toEqual([`nota-antiga-${SALA}`]);
+    // Outra versão do texto da sala (editada num aparelho antigo): essa é nova e entra.
+    vi.setSystemTime(AGORA + 60_000);
+    await salaComNotas('Outro texto');
+    await migrarNotasAntigas(SALA);
+    expect((await vivas()).map((n) => n.texto).sort()).toEqual(['Outro texto', 'Texto antigo, já editado']);
+  });
+
+  it('texto da sala acima de 20 000 caracteres vira várias notas, sem cortar nada', async () => {
+    const texto = 'y'.repeat(NOTA_NO_MAXIMO + 10);
+    await salaComNotas(texto);
+    await migrarNotasAntigas(SALA);
+    await migrarNotasAntigas(SALA);
+    const notas = await vivas();
+    expect(notas.map((n) => n.id).sort()).toEqual([`${antiga()}-1`, `${antiga()}-2`]);
+    expect(notas.sort((a, b) => a.id.localeCompare(b.id)).map((n) => n.texto).join('')).toBe(texto);
+  });
 });
 
+const PAGINA = `nota-${PASTA}`;
 const pagina = (blocos: { id: string; tipo: string; texto?: string }[], extra: Record<string, unknown> = {}) =>
-  salvar('paginas', { id: `nota-${PASTA}`, salaId: SALA, pastaId: PASTA, titulo: 'Notas', blocos, ...extra } as never);
+  salvar('paginas', { id: PAGINA, salaId: SALA, pastaId: PASTA, titulo: 'Notas', blocos, ...extra } as never);
 const paginasVivas = async () => (await listar('paginas')).filter((p) => !p.apagado);
+const daPagina = (versao: number, sufixo = '') => `nota-pagina-${PASTA}-${versao}${sufixo}`;
 
 describe('migrarPaginaDaPasta', () => {
-  it('a página Notas automática com texto vira uma nota de texto (linhas unidas por \\n) e a página some', async () => {
+  it('a página Notas automática com texto vira uma nota de texto (linhas unidas por \\n; a linha em branco do meio fica); a página continua', async () => {
     const original = await pagina([
       { id: 'b1', tipo: 'texto', texto: 'Definir a amostra' },
       { id: 'b2', tipo: 'texto', texto: '' },
@@ -236,15 +298,15 @@ describe('migrarPaginaDaPasta', () => {
     ]);
     await migrarPaginaDaPasta(SALA, PASTA);
     const [nota] = await vivas();
-    expect(nota).toMatchObject({ id: `nota-pagina-${PASTA}`, salaId: SALA, pastaId: PASTA, tipo: 'texto', texto: 'Definir a amostra\n\nFalar com o Prof. Souza', criadaEm: original.atualizadoEm });
-    expect(await paginasVivas()).toEqual([]);
+    expect(nota).toMatchObject({ id: daPagina(original.atualizadoEm), salaId: SALA, pastaId: PASTA, tipo: 'texto', texto: 'Definir a amostra\n\nFalar com o Prof. Souza', criadaEm: original.atualizadoEm });
+    expect((await paginasVivas()).map((p) => p.id)).toEqual([PAGINA]);
   });
 
-  it('página vazia só some, sem criar nota', async () => {
+  it('página vazia não cria nota e não é apagada', async () => {
     await pagina([{ id: 'b1', tipo: 'texto', texto: '' }]);
     await migrarPaginaDaPasta(SALA, PASTA);
     expect(await vivas()).toEqual([]);
-    expect(await paginasVivas()).toEqual([]);
+    expect((await paginasVivas()).map((p) => p.id)).toEqual([PAGINA]);
   });
 
   it('outras páginas da pasta não mudam', async () => {
@@ -266,26 +328,100 @@ describe('migrarPaginaDaPasta', () => {
     expect(await vivas()).toHaveLength(1);
   });
 
-  it('não ressuscita a nota apagada pelo dono: a lápide bloqueia, e a página (se voltar) só some', async () => {
-    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Uma linha' }]);
+  it('não ressuscita a nota apagada pelo dono: a lápide bloqueia, e a página continua onde estava', async () => {
+    const original = await pagina([{ id: 'b1', tipo: 'texto', texto: 'Uma linha' }]);
     await migrarPaginaDaPasta(SALA, PASTA);
-    await apagar('notas', `nota-pagina-${PASTA}`);
-    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Uma linha' }]); // a página volta (outro aparelho velho)
+    await apagar('notas', daPagina(original.atualizadoEm));
     await migrarPaginaDaPasta(SALA, PASTA);
     expect(await vivas()).toEqual([]);
-    expect(await paginasVivas()).toEqual([]);
+    expect((await paginasVivas()).map((p) => p.id)).toEqual([PAGINA]);
   });
 
   it('a nota migrada perde para a versão que já existe em outro aparelho', async () => {
-    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Uma linha' }]);
+    const original = await pagina([{ id: 'b1', tipo: 'texto', texto: 'Uma linha' }]);
     await migrarPaginaDaPasta(SALA, PASTA);
     const remota: Nota = {
-      id: `nota-pagina-${PASTA}`, salaId: SALA, pastaId: PASTA, tipo: 'texto', texto: 'Escrito no celular', criadaEm: AGORA - 1000,
+      id: daPagina(original.atualizadoEm), salaId: SALA, pastaId: PASTA, tipo: 'texto', texto: 'Escrito no celular', criadaEm: AGORA - 1000,
       atualizadoEm: AGORA - 60_000, aparelho: 'celular-fake',
     };
     await gravarDoServidor([{ colecao: 'notas', registro: remota }]);
     expect((await vivas()).map((n) => n.texto)).toEqual(['Escrito no celular']);
     expect(await listarAvisos()).toEqual([]);
+  });
+
+  it('a página que volta com outro texto (aparelho antigo) vira uma segunda nota; nada se perde', async () => {
+    const v1 = await pagina([{ id: 'b1', tipo: 'texto', texto: 'Primeiro texto' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    vi.setSystemTime(AGORA + 60_000);
+    const v2 = await pagina([{ id: 'b1', tipo: 'texto', texto: 'Primeiro texto, com acréscimo' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    const notas = await vivas();
+    expect(notas.map((n) => n.id).sort()).toEqual([daPagina(v1.atualizadoEm), daPagina(v2.atualizadoEm)].sort());
+    expect(notas.map((n) => n.texto).sort()).toEqual(['Primeiro texto', 'Primeiro texto, com acréscimo']);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    expect(await vivas()).toHaveLength(2);
+  });
+
+  it('a página regravada com o mesmo texto não repete a nota (viva ou apagada)', async () => {
+    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Mesmo texto' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    vi.setSystemTime(AGORA + 60_000);
+    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Mesmo texto' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    expect(await vivas()).toHaveLength(1);
+    await apagar('notas', daPagina(AGORA));
+    vi.setSystemTime(AGORA + 120_000);
+    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Mesmo texto' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    expect(await vivas()).toEqual([]);
+  });
+
+  it('uma nota viva da subpasta com o mesmo texto já basta: não cria outra', async () => {
+    await criarNota({ salaId: SALA, pastaId: PASTA, tipo: 'texto', texto: 'Texto que o dono já tem em nota' });
+    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Texto que o dono já tem em nota' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    expect(await vivas()).toHaveLength(1);
+  });
+
+  it('página de 45 000 caracteres vira 3 notas, sem cortar nada', async () => {
+    const texto = 'x'.repeat(45_000);
+    const original = await pagina([{ id: 'b1', tipo: 'texto', texto }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    await migrarPaginaDaPasta(SALA, PASTA);
+    const notas = (await vivas()).sort((a, b) => a.id.localeCompare(b.id));
+    expect(notas.map((n) => n.id)).toEqual([daPagina(original.atualizadoEm, '-1'), daPagina(original.atualizadoEm, '-2'), daPagina(original.atualizadoEm, '-3')]);
+    expect(notas.map((n) => n.texto!.length)).toEqual([20_000, 20_000, 5000]);
+    expect(notas.map((n) => n.texto).join('')).toBe(texto);
+  });
+
+  it('dois aparelhos migrando versões diferentes da página dão duas notas em cada um, e nenhuma se perde', async () => {
+    const notebook = new IDBFactory();
+    const celular = new IDBFactory();
+    const servidor = servidorDeTeste();
+    const sync = () => sincronizar({ chamar: servidor.chamar, esperar: () => Promise.resolve() });
+
+    globalThis.indexedDB = notebook;
+    await semear();
+    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Escrito no notebook' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+
+    globalThis.indexedDB = celular;
+    await semear();
+    vi.setSystemTime(AGORA + 5000);
+    await pagina([{ id: 'b1', tipo: 'texto', texto: 'Escrito no celular' }]);
+    await migrarPaginaDaPasta(SALA, PASTA);
+
+    expect(await sync()).toBe('atualizado');
+    globalThis.indexedDB = notebook;
+    expect(await sync()).toBe('atualizado');
+    await migrarPaginaDaPasta(SALA, PASTA);
+    expect((await vivas()).map((n) => n.texto).sort()).toEqual(['Escrito no celular', 'Escrito no notebook']);
+    globalThis.indexedDB = celular;
+    expect(await sync()).toBe('atualizado');
+    await migrarPaginaDaPasta(SALA, PASTA);
+    const notas = await vivas();
+    expect(notas.map((n) => n.texto).sort()).toEqual(['Escrito no celular', 'Escrito no notebook']);
+    expect(new Set(notas.map((n) => n.id)).size).toBe(2);
   });
 });
 

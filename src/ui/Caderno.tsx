@@ -478,7 +478,8 @@ export function Caderno({
   const [erro, setErro] = useState<string | null>(null);
   const criando = useRef(false);
 
-  const daSala = (todas ?? []).filter((p) => p.salaId === salaId && !p.apagado && (pastaId === undefined || p.pastaId === pastaId)).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR', { numeric: true }));
+  // A página "Notas" automática da subpasta (v0.2.3, id `nota-<pasta>`) já aparece como nota no quadro: fica guardada, mas escondida aqui.
+  const daSala = (todas ?? []).filter((p) => p.salaId === salaId && !p.apagado && !(p.pastaId && p.id.startsWith('nota-')) && (pastaId === undefined || p.pastaId === pastaId)).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR', { numeric: true }));
   const aberta = daSala.find((p) => p.id === escolhida) ?? daSala[0];
 
   async function nova() {

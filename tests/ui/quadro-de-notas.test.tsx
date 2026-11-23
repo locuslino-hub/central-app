@@ -92,6 +92,41 @@ describe('nota de texto', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /Nova nota/ })));
   });
 
+  it('Esc dentro do formulário é Cancelar: fecha sem gravar e o foco volta ao Nova nota', async () => {
+    montar();
+    await abrirNova('Texto');
+    const campo = await screen.findByRole('textbox', { name: 'Texto da nota' });
+    fireEvent.input(campo, { target: { value: 'Desisti com Esc' } });
+    fireEvent.keyDown(campo, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('form')).toBeNull());
+    expect(await listar('notas')).toEqual([]);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /Nova nota/ })));
+  });
+
+  it('Esc com o foco em Texto ou Lista fecha o menu e devolve o foco ao Nova nota', async () => {
+    montar();
+    const botao = await screen.findByRole('button', { name: /Nova nota/ });
+    fireEvent.click(botao);
+    const texto = screen.getByRole('button', { name: 'Texto' });
+    texto.focus();
+    fireEvent.keyDown(texto, { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'Tipo da nota' })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(botao));
+    fireEvent.click(botao);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Lista' }), { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'Tipo da nota' })).toBeNull();
+  });
+
+  it('o cursor já está no campo logo que o formulário abre, e no item novo logo depois do Enter (sem esperar)', async () => {
+    montar();
+    await abrirNova('Lista');
+    const primeiro = screen.getByRole('textbox', { name: 'Item 1' });
+    expect(document.activeElement).toBe(primeiro);
+    fireEvent.input(primeiro, { target: { value: 'Baixar dados' } });
+    fireEvent.keyDown(primeiro, { key: 'Enter' });
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Item 2' }));
+  });
+
   it('o menu Nova nota tem Texto e Lista e fecha com Esc', async () => {
     montar();
     const botao = await screen.findByRole('button', { name: /Nova nota/ });
@@ -266,7 +301,7 @@ describe('o que o quadro mostra', () => {
     await salvar('salas', { ...sala, notas: 'Combinar as entregas com a Marina.' });
     montar();
     expect(await screen.findByText('Combinar as entregas com a Marina.')).toBeTruthy();
-    expect((await guardadas())[0].id).toBe(`nota-antiga-${SALA}`);
+    expect((await guardadas())[0].id).toMatch(/^nota-antiga-sala-doutoramento-\d+$/);
     expect(((await listar('salas')).find((s) => s.id === SALA) as Sala).notas).toBe('Combinar as entregas com a Marina.');
     cleanup();
     montar(); // abrir de novo não duplica
@@ -274,12 +309,13 @@ describe('o que o quadro mostra', () => {
     expect(await listar('notas')).toHaveLength(1);
   });
 
-  it('a página Notas automática da subpasta vira uma nota e some', async () => {
+  it('a página Notas automática da subpasta vira uma nota, e a página continua guardada (nada é apagado)', async () => {
     await salvar('paginas', { id: `nota-${PASTA}`, salaId: SALA, pastaId: PASTA, titulo: 'Notas', blocos: [{ id: 'b1', tipo: 'texto', texto: 'Falar com o Prof. Souza' }] });
     montar({ pastaId: PASTA, titulo: 'Notas · Metodologia' });
     expect(await screen.findByText('Falar com o Prof. Souza')).toBeTruthy();
-    await waitFor(async () => expect((await listar('paginas')).filter((p) => !p.apagado)).toEqual([]));
-    expect((await guardadas())[0]).toMatchObject({ id: `nota-pagina-${PASTA}`, pastaId: PASTA });
+    expect((await guardadas())[0]).toMatchObject({ pastaId: PASTA });
+    expect((await guardadas())[0].id).toMatch(/^nota-pagina-pasta-metodologia-\d+$/);
+    expect((await listar('paginas')).filter((p) => !p.apagado).map((p) => p.id)).toEqual([`nota-${PASTA}`]);
   });
 });
 

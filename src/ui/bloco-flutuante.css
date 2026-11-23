@@ -40,3 +40,7 @@
   gap: 6px;
   margin-bottom: 10px;
 }
+/* Na pasta comum o botão continua no topo, acima do quadro de notas (que tem order: -1). */
+.pasta-comum > .bloco-flutuante-abrir {
+  order: -2;
+}

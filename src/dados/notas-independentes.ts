@@ -1,10 +1,10 @@
 // Notas independentes (texto e lista) de uma sala ou de uma subpasta comum: coleção própria `notas`, um registro por
 // nota, com data de criação. Sincroniza como as outras; vale a gravação mais recente de cada nota.
 //
-// Também traz a migração, uma vez por sala e por subpasta, do que existia antes: o campo único de notas da sala e a
-// página "Notas" automática da subpasta (v0.2.3). Nada é apagado do dado antigo da sala (só deixa de aparecer).
+// Também traz a migração, por versão, do que existia antes: o campo único de notas da sala e a página "Notas"
+// automática da subpasta (v0.2.3). A migração nunca apaga nem muda o dado antigo (só deixa de aparecer na tela).
 import { NOTA_ITEM_TEXTO_NO_MAXIMO, NOTA_ITENS_NO_MAXIMO, NOTA_TEXTO_NO_MAXIMO, ID_VALIDO } from '../../script/colecoes';
-import { apagar, lerRegistros, salvar } from './loja';
+import { apagar, lerRegistros, listar, salvar } from './loja';
 import type { ItemDeNota, Nota, ParaSalvar, Pagina, Sala } from './tipos';
 
 export const NOTA_NO_MAXIMO = NOTA_TEXTO_NO_MAXIMO;
@@ -88,8 +88,8 @@ export async function criarNota(dados: DadosDeNota): Promise<Nota> {
 }
 
 /**
- * Troca o texto (nota de texto) ou os itens (nota de lista), relendo a nota antes de gravar: a sala, a subpasta e a
- * data de criação não mudam. `nota_nao_encontrada` se ela não existe mais; `nota_vazia` (nada muda) se ficaria vazia.
+ * Troca o texto (nota de texto) ou os itens (nota de lista), relendo a nota antes de gravar: a sala, a subpasta, a
+ * data de criação e a marca (`feito`) de cada item não mudam (a marca só muda por `marcarItem`). `nota_nao_encontrada` se ela não existe mais; `nota_vazia` (nada muda) se ficaria vazia.
  */
 export function editarNota(id: string, mudanca: { texto?: string; itens?: ItemDeNota[] }): Promise<Nota> {
   return naFila(id, async () => {
@@ -97,7 +97,9 @@ export function editarNota(id: string, mudanca: { texto?: string; itens?: ItemDe
     if (!atual) throw new Error(NOTA_NAO_ENCONTRADA);
     if (atual.tipo === 'lista') {
       if (mudanca.itens === undefined) return atual;
-      const itens = itensLimpos(mudanca.itens);
+      // O formulário nunca muda a marca: ela vem da nota relida agora (por id do item); item novo começa sem marca.
+      const marcados = new Set((atual.itens ?? []).filter((i) => i.feito).map((i) => i.id));
+      const itens = itensLimpos(mudanca.itens.map(({ id, texto }): ItemDeNota => (marcados.has(id) ? { id, texto, feito: true } : { id, texto })));
       if (!itens) throw new Error(NOTA_VAZIA);
       if (JSON.stringify(itens) === JSON.stringify(atual.itens)) return atual;
       return salvar('notas', { ...atual, itens });
@@ -153,48 +155,95 @@ function umaVez(chave: string, migrar: () => Promise<void>): Promise<void> {
   return feita;
 }
 
-/** O id da nota que nasceu do texto antigo das notas da sala. */
-export const idDaNotaAntiga = (salaId: string) => `nota-antiga-${salaId}`;
-/** O id da nota que nasceu da página "Notas" automática da subpasta. */
-export const idDaNotaDaPagina = (pastaId: string) => `nota-pagina-${pastaId}`;
+/** Id curto o bastante (até 64 caracteres, o que o script aceita): se a chave não cabe, entra um resumo dela. */
+function idDaMigracao(prefixo: string, chave: string, versao: number, parte?: number): string {
+  const fim = `-${versao}${parte === undefined ? '' : `-${parte}`}`;
+  if (prefixo.length + chave.length + fim.length <= 64) return `${prefixo}${chave}${fim}`;
+  let resumo = 0;
+  for (const letra of chave) resumo = (Math.imul(resumo, 31) + letra.charCodeAt(0)) >>> 0;
+  return `${prefixo}${chave.slice(0, 20)}-${resumo.toString(36)}${fim}`;
+}
+
+/** O id da nota que nasceu do texto antigo das notas da sala, nessa versão da sala (`atualizadoEm`). */
+export const idDaNotaAntiga = (salaId: string, versao: number, parte?: number) => idDaMigracao('nota-antiga-', salaId, versao, parte);
+/** O id da nota que nasceu da página "Notas" automática da subpasta, nessa versão da página. */
+export const idDaNotaDaPagina = (pastaId: string, versao: number, parte?: number) => idDaMigracao('nota-pagina-', pastaId, versao, parte);
+
+/** Quebra o texto em partes de até 20 000 caracteres (de preferência numa quebra de linha), sem perder nada. */
+function emPartes(texto: string): string[] {
+  const partes: string[] = [];
+  let resto = texto;
+  while (resto.length > NOTA_NO_MAXIMO) {
+    const quebra = resto.lastIndexOf('\n', NOTA_NO_MAXIMO - 1);
+    const corte = quebra > NOTA_NO_MAXIMO / 2 ? quebra + 1 : NOTA_NO_MAXIMO;
+    partes.push(resto.slice(0, corte));
+    resto = resto.slice(corte);
+  }
+  if (resto !== '') partes.push(resto);
+  return partes.filter((parte) => parte.trim() !== '');
+}
 
 /**
- * O texto antigo das notas da sala (campo único) vira uma nota de texto, com a data da última mudança da sala. Uma vez
- * só: se o id fixo já existe (nota viva ou apagada pelo dono), não faz nada. O campo `notas` da sala não é apagado.
- * Grava com carimbo automático: perde para qualquer versão desta nota que já exista em outro aparelho.
+ * Grava o texto de uma versão antiga como nota(s) de texto, com ids que dependem da versão (`idDe(parte)`): o mesmo
+ * texto dá sempre os mesmos ids, então dois aparelhos que migram a mesma versão gravam o mesmo registro, e versões
+ * diferentes viram notas diferentes (nada é sobrescrito). Não cria nada se o texto é vazio, se o id já existe (viva ou
+ * apagada pelo dono) ou se uma nota do mesmo lugar (viva ou apagada) já tem exatamente esse texto. Texto de mais de
+ * 20 000 caracteres vira várias notas (`-1`, `-2`...), nunca é cortado. Carimbo automático: perde para qualquer versão
+ * da mesma nota que já exista em outro aparelho.
+ */
+async function guardarComoNotas(
+  texto: string | undefined,
+  lugar: { salaId: string; pastaId?: string },
+  criadaEm: number,
+  idDe: (parte?: number) => string,
+  jaMigrada: (nota: Nota) => boolean = () => false,
+): Promise<void> {
+  const partes = texto === undefined ? [] : emPartes(texto);
+  if (partes.length === 0) return;
+  const ids = partes.map((_, i) => idDe(partes.length > 1 ? i + 1 : undefined));
+  const [existente] = await lerRegistros([{ colecao: 'notas', id: ids[0] }]);
+  if (existente) return;
+  const doLugar = (await listar('notas', { comApagados: true })).filter((n) => n.salaId === lugar.salaId && (lugar.pastaId ? n.pastaId === lugar.pastaId : !n.pastaId));
+  if (doLugar.some((n) => n.texto === partes[0] || jaMigrada(n))) return;
+  for (const [i, parte] of partes.entries()) {
+    await salvar('notas', { id: ids[i], ...lugar, tipo: 'texto', texto: parte, criadaEm }, { automatico: true });
+  }
+}
+
+/**
+ * O texto antigo das notas da sala (campo único) vira nota(s) de texto, com a data da última mudança da sala. O id leva
+ * essa data (`nota-antiga-<sala>-<atualizadoEm>`): se um aparelho antigo editar o texto depois, vira mais uma nota, e
+ * nada se perde. A nota do esquema anterior (`nota-antiga-<sala>`, sem versão) conta como já migrada para a versão cuja
+ * data ela guarda. O campo `notas` da sala não é apagado nem mudado.
  */
 export function migrarNotasAntigas(salaId: string): Promise<void> {
   return umaVez(`sala:${salaId}`, async () => {
-    const id = idDaNotaAntiga(salaId);
-    const [sala, existente] = await lerRegistros([
-      { colecao: 'salas', id: salaId },
-      { colecao: 'notas', id },
-    ]);
-    if (existente || !sala || sala.apagado) return;
-    const texto = textoLimpo((sala as Sala).notas);
-    if (texto === undefined) return;
-    await salvar('notas', { id, salaId, tipo: 'texto', texto, criadaEm: sala.atualizadoEm }, { automatico: true });
+    const [sala] = await lerRegistros([{ colecao: 'salas', id: salaId }]);
+    if (!sala || sala.apagado) return;
+    const texto = (sala as Sala).notas;
+    const versao = sala.atualizadoEm;
+    await guardarComoNotas(
+      texto,
+      { salaId },
+      versao,
+      (parte) => idDaNotaAntiga(salaId, versao, parte),
+      (nota) => nota.id === `nota-antiga-${salaId}` && nota.criadaEm === versao,
+    );
   });
 }
 
 /**
- * A página "Notas" que a v0.2.3 criava sozinha na subpasta (id `nota-<pastaId>`): se tem texto, vira uma nota de texto
- * (as linhas unidas por quebra de linha, a data da última mudança da página) e a página é apagada; se está vazia, só
- * é apagada. Se a nota já existe (viva ou apagada pelo dono), nada é criado de novo e a página só sai. Outras páginas
- * da subpasta não mudam.
+ * A página "Notas" que a v0.2.3 criava sozinha na subpasta (id `nota-<pastaId>`): o texto dela (as linhas unidas por
+ * quebra de linha) vira nota(s) de texto, com a data da última mudança da página, e o id leva essa data
+ * (`nota-pagina-<pasta>-<atualizadoEm>`). A página NUNCA é apagada: se um aparelho antigo a mudar depois, o novo texto
+ * vira mais uma nota. A tela do caderno esconde essas páginas (já aparecem como notas). Outras páginas não mudam.
  */
 export function migrarPaginaDaPasta(salaId: string, pastaId: string): Promise<void> {
   return umaVez(`pasta:${pastaId}`, async () => {
-    const paginaId = `nota-${pastaId}`;
-    const [pagina] = await lerRegistros([{ colecao: 'paginas', id: paginaId }]);
+    const [pagina] = await lerRegistros([{ colecao: 'paginas', id: `nota-${pastaId}` }]);
     if (!pagina || pagina.apagado) return;
     const linhas = (pagina as Pagina).blocos.filter((b) => b.tipo !== 'painel').map((b) => b.texto ?? '');
-    const texto = textoLimpo(linhas.join('\n').trim());
-    if (texto !== undefined) {
-      const id = idDaNotaDaPagina(pastaId);
-      const [existente] = await lerRegistros([{ colecao: 'notas', id }]);
-      if (!existente) await salvar('notas', { id, salaId, pastaId, tipo: 'texto', texto, criadaEm: pagina.atualizadoEm }, { automatico: true });
-    }
-    await apagar('paginas', paginaId);
+    const versao = pagina.atualizadoEm;
+    await guardarComoNotas(linhas.join('\n').trim(), { salaId, pastaId }, versao, (parte) => idDaNotaDaPagina(pastaId, versao, parte));
   });
 }

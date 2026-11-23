@@ -127,3 +127,9 @@
 .notas-quadro .tarefa-apagada {
   margin-top: 10px;
 }
+
+/* Na pasta comum o quadro vem primeiro, antes de Tarefas e Documentos: `.notas` (salas.css) manda a página da sala
+   para depois, e aqui a grade da pasta o levaria para o fim. */
+.pasta-comum > .notas-quadro {
+  order: -1;
+}
