@@ -10,6 +10,7 @@ import { hojeEmLisboa } from '../dados/dia';
 import {
   criarGravador,
   criarPagina,
+  garantirPaginaDaPasta,
   gravarBlocos,
   itemDaLinha,
   novoBloco,
@@ -463,14 +464,33 @@ function PaginaAberta({ pagina, salaId, nomeDaSala, pastaId }: { pagina: Pagina;
  * O caderno de uma sala. Com `pastaId` é o das "Notas" de uma pasta comum (tema): só as páginas do tema, e página
  * nova e tarefa criada por linha com data nascem nele. As páginas do tema continuam na sala (nada some com a pasta).
  */
-export function Caderno({ salaId, nomeDaSala, pastaId }: { salaId: string; nomeDaSala: string; pastaId?: string }) {
+export function Caderno({
+  salaId,
+  nomeDaSala,
+  pastaId,
+  criarPrimeira = false,
+}: {
+  salaId: string;
+  nomeDaSala: string;
+  pastaId?: string;
+  /** Só com `pastaId`: sem página nenhuma, a primeira ("Notas") nasce sozinha, pronta para escrever. */
+  criarPrimeira?: boolean;
+}) {
   const todas = usePaginas();
   const [escolhida, setEscolhida] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const criando = useRef(false);
+  const garantida = useRef(false);
 
   const daSala = (todas ?? []).filter((p) => p.salaId === salaId && !p.apagado && (pastaId === undefined || p.pastaId === pastaId)).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR', { numeric: true }));
   const aberta = daSala.find((p) => p.id === escolhida) ?? daSala[0];
+
+  const vazia = todas !== undefined && daSala.length === 0;
+  useEffect(() => {
+    if (!criarPrimeira || pastaId === undefined || !vazia || garantida.current) return;
+    garantida.current = true;
+    garantirPaginaDaPasta(salaId, pastaId).catch((falha) => console.error('Não consegui criar a página das notas', falha));
+  }, [criarPrimeira, pastaId, salaId, vazia]);
 
   async function nova() {
     if (criando.current) return;

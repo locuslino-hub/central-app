@@ -43,6 +43,34 @@ const notaDoTema = (titulo: string, texto: string, pastaId = 'pasta-metodologia'
 
 const regiao = (nome: string) => principal().findByRole('region', { name: nome });
 
+describe('notas da pasta comum prontas para escrever', () => {
+  it('abre com as Notas prontas para escrever', async () => {
+    await metodologia();
+    mostrar(HASH);
+    const notas = within(await regiao('Notas'));
+    expect(await notas.findByRole('textbox', { name: 'Texto' })).toBeTruthy();
+    expect(notas.queryByText('Nenhuma página ainda.')).toBeNull();
+    await waitFor(async () => expect((await listar('paginas')).map((p) => p.id)).toEqual(['nota-pasta-metodologia']));
+  });
+
+  it('Notas vêm antes de Tarefas', async () => {
+    await metodologia();
+    mostrar(HASH);
+    const notas = await regiao('Notas');
+    const tarefas = await regiao('Tarefas');
+    expect(notas.compareDocumentPosition(tarefas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('lembra a última pasta comum', async () => {
+    await metodologia();
+    mostrar(HASH);
+    await regiao('Notas');
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('central.notas.ultimaPasta') ?? 'null')).toEqual({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia' }),
+    );
+  });
+});
+
 describe('a pasta comum', () => {
   it('pasta comum mostra tarefas, notas e documentos do tema', async () => {
     await metodologia();
@@ -99,7 +127,8 @@ describe('a pasta comum', () => {
 
     const tarefas = within(await regiao('Tarefas'));
     expect(await tarefas.findByText('Nada em aberto neste tema.')).toBeTruthy();
-    expect(await within(await regiao('Notas')).findByText('Nenhuma página ainda.')).toBeTruthy();
+    // Notas não ficam vazias: a primeira página nasce sozinha, pronta para escrever.
+    expect(await within(await regiao('Notas')).findByRole('textbox', { name: 'Texto' })).toBeTruthy();
     expect(await within(await regiao('Documentos')).findByText('Nenhum documento ainda.')).toBeTruthy();
   });
 

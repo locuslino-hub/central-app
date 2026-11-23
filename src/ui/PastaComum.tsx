@@ -4,7 +4,9 @@
 //
 // O tema só aponta para a pasta: tarefa, nota e documento seguem sendo da sala (Painel, Checklist, caixa e caderno
 // da sala os mostram como sempre). Apagar a pasta não regrava nada: o `pastaId` fica sem uso e nada some.
+import { useEffect } from 'preact/hooks';
 import type { Pasta } from '../dados/tipos';
+import { guardarUltimaPasta } from './ultima-pasta';
 import { Caderno } from './Caderno';
 import { Documentos } from './Documentos';
 import { useDia, useSalas, useTarefas } from './hooks';
@@ -22,9 +24,11 @@ export function PastaComum({ pasta }: { pasta: Pasta }) {
   const nomeDaSala = salas.find((sala) => sala.id === pasta.salaId)?.nome ?? 'esta sala';
   const doTema = (tarefas ?? []).filter((tarefa) => tarefa.pastaId === pasta.id && tarefa.salaId === pasta.salaId && !tarefa.apagado);
   const abertas = doTema.filter((tarefa) => !tarefa.feito);
+  useEffect(() => guardarUltimaPasta(pasta.salaId, pasta.id), [pasta.salaId, pasta.id]);
 
   return (
-    <div class="pasta-comum" role="group" aria-label="Tarefas, notas e documentos" data-tipo="comum">
+    <div class="pasta-comum" role="group" aria-label="Notas, tarefas e documentos" data-tipo="comum">
+      <Caderno salaId={pasta.salaId} nomeDaSala={nomeDaSala} pastaId={pasta.id} criarPrimeira />
       <div class="sala-grade">
         <div class="sala-coluna">
           <section class="painel sala-tarefas" aria-labelledby="titulo-pasta-tarefas" aria-busy={tarefas === undefined}>
@@ -44,7 +48,6 @@ export function PastaComum({ pasta }: { pasta: Pasta }) {
           <Documentos de="deste tema" salaId={pasta.salaId} pastaId={pasta.id} nomeDaPasta={pasta.nome} />
         </div>
       </div>
-      <Caderno salaId={pasta.salaId} nomeDaSala={nomeDaSala} pastaId={pasta.id} />
     </div>
   );
 }

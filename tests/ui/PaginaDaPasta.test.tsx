@@ -72,7 +72,7 @@ describe('a página da pasta', () => {
     await pasta({ nome: 'Metodologia', tipo: 'comum', salaId: 'sala-doutoramento' });
     mostrar('#/sala/sala-doutoramento/pasta/pasta-1');
 
-    const conteudo = await principal().findByRole('group', { name: 'Tarefas, notas e documentos' });
+    const conteudo = await principal().findByRole('group', { name: 'Notas, tarefas e documentos' });
     expect(conteudo.getAttribute('data-tipo')).toBe('comum');
     expect(within(conteudo).getByRole('region', { name: 'Tarefas' })).toBeTruthy();
     expect(within(conteudo).getByRole('region', { name: 'Notas' })).toBeTruthy();
