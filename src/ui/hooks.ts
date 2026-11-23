@@ -172,6 +172,11 @@ export function usePastasDaSala(salaId: string): Pasta[] | undefined {
     .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+/** Todas as pastas vivas, de todas as salas. `undefined` enquanto lê. */
+export function usePastas(): Pasta[] | undefined {
+  return useLista('pastas');
+}
+
 /** Uma pasta viva. `undefined` enquanto lê; `null` se não existe (ou foi apagada, ou é de outra sala). */
 export function usePasta(salaId: string, pastaId: string): Pasta | null | undefined {
   const lista = useLista('pastas');

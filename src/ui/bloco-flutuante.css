@@ -1,0 +1,42 @@
+/* Bloco flutuante: janelinha estreita (340 px), sempre por cima. O caderno ocupa o que sobra. */
+.bloco-flutuante-corpo {
+  margin: 0;
+  background: var(--papel);
+}
+.bloco-flutuante {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100vh;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.bloco-flutuante-pasta {
+  width: 100%;
+  min-height: var(--toque);
+  padding: 6px 10px;
+  border: 1px solid var(--linha);
+  border-radius: var(--r-p);
+  background: var(--folha);
+  color: var(--tinta);
+  font: 500 0.95rem/1.3 var(--ui);
+}
+.bloco-flutuante .caderno {
+  flex: 1;
+  margin: 0;
+  padding: 10px;
+}
+.item-botao {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bloco-flutuante-abrir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}

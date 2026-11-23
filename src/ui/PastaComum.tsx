@@ -7,6 +7,7 @@
 import { useEffect } from 'preact/hooks';
 import type { Pasta } from '../dados/tipos';
 import { guardarUltimaPasta } from './ultima-pasta';
+import { BotaoBlocoFlutuante } from './bloco-flutuante';
 import { Caderno } from './Caderno';
 import { Documentos } from './Documentos';
 import { useDia, useSalas, useTarefas } from './hooks';
@@ -28,6 +29,7 @@ export function PastaComum({ pasta }: { pasta: Pasta }) {
 
   return (
     <div class="pasta-comum" role="group" aria-label="Notas, tarefas e documentos" data-tipo="comum">
+      <BotaoBlocoFlutuante variante="pasta" />
       <Caderno salaId={pasta.salaId} nomeDaSala={nomeDaSala} pastaId={pasta.id} criarPrimeira />
       <div class="sala-grade">
         <div class="sala-coluna">

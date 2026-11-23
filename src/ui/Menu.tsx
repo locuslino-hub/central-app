@@ -2,6 +2,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { hrefDe, nomeDoMes, type IdDaRota, type RotaAtual } from '../rotas';
+import { BotaoBlocoFlutuante } from './bloco-flutuante';
 import { Icone, type NomeDoIcone } from './icones';
 import { useNovasIdeias, usePastasDaSala, useSalas } from './hooks';
 import { Contagem } from './Contagem';
@@ -132,6 +133,7 @@ export function MenuLateral({ rota, hoje }: Props) {
         </Grupo>
       </div>
       <div class="rodape-do-menu">
+        <BotaoBlocoFlutuante variante="menu" />
         <Item rota={rota} id="conectar" icone="conectar" rotulo="Conectar aparelho" />
         <Item rota={rota} id="ia" icone="chat" rotulo="IA local" />
       </div>
