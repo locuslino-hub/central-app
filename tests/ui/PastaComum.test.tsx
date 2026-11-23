@@ -6,6 +6,7 @@ import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
 import { apagarPasta } from '../../src/dados/pastas';
 import { listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
+import { criarNota } from '../../src/dados/notas-independentes';
 import { criar } from '../apoio/tarefas';
 
 configure({ asyncUtilTimeout: 5000 });
@@ -42,21 +43,31 @@ const notaDoTema = (titulo: string, texto: string, pastaId = 'pasta-metodologia'
   salvar('paginas', { salaId: 'sala-doutoramento', titulo, pastaId, blocos: [{ id: `b-${titulo}`, tipo: 'texto', texto }] });
 
 const regiao = (nome: string) => principal().findByRole('region', { name: nome });
+const NOTAS = 'Notas · Metodologia';
 
-describe('notas da pasta comum prontas para escrever', () => {
-  it('abre com as Notas prontas para escrever', async () => {
+describe('notas da pasta comum', () => {
+  it('abre com o quadro de notas da subpasta, sem criar página nenhuma', async () => {
     await metodologia();
     mostrar(HASH);
-    const notas = within(await regiao('Notas'));
-    expect(await notas.findByRole('textbox', { name: 'Texto' })).toBeTruthy();
-    expect(notas.queryByText('Nenhuma página ainda.')).toBeNull();
-    await waitFor(async () => expect((await listar('paginas')).map((p) => p.id)).toEqual(['nota-pasta-metodologia']));
+    const notas = within(await regiao(NOTAS));
+    expect(await notas.findByRole('button', { name: /Nova nota/ })).toBeTruthy();
+    expect(await notas.findByText(/Nenhuma nota ainda/)).toBeTruthy();
+    expect(notas.queryByRole('textbox')).toBeNull();
+    expect(await listar('paginas')).toEqual([]);
+  });
+
+  it('a página Notas automática da versão anterior vira uma nota e some', async () => {
+    await metodologia();
+    await salvar('paginas', { id: 'nota-pasta-metodologia', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', titulo: 'Notas', blocos: [{ id: 'b1', tipo: 'texto', texto: 'Falar com o Prof. Souza' }] });
+    mostrar(HASH);
+    expect(await within(await regiao(NOTAS)).findByText('Falar com o Prof. Souza')).toBeTruthy();
+    await waitFor(async () => expect((await listar('paginas')).filter((p) => !p.apagado)).toEqual([]));
   });
 
   it('Notas vêm antes de Tarefas', async () => {
     await metodologia();
     mostrar(HASH);
-    const notas = await regiao('Notas');
+    const notas = await regiao(NOTAS);
     const tarefas = await regiao('Tarefas');
     expect(notas.compareDocumentPosition(tarefas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -64,7 +75,7 @@ describe('notas da pasta comum prontas para escrever', () => {
   it('lembra a última pasta comum', async () => {
     await metodologia();
     mostrar(HASH);
-    await regiao('Notas');
+    await regiao(NOTAS);
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('central.notas.ultimaPasta') ?? 'null')).toEqual({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia' }),
     );
@@ -79,8 +90,9 @@ describe('a pasta comum', () => {
     await criar('Ler artigo sobre ética', { salaId: 'sala-doutoramento', pastaId: 'pasta-etica', data: '2026-11-05' });
     await criar('Tarefa da sala sem tema', { salaId: 'sala-doutoramento', data: '2026-11-05' });
     await criar('Tarefa já feita do tema', { salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', data: '2026-11-05', feito: true });
-    await notaDoTema('Amostragem', 'Definir o tamanho da amostra');
-    await notaDoTema('Do outro tema', 'Parecer do comitê', 'pasta-etica');
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Definir o tamanho da amostra' });
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: 'pasta-etica', tipo: 'texto', texto: 'Parecer do comitê' });
+    await criarNota({ salaId: 'sala-doutoramento', tipo: 'texto', texto: 'Nota solta da sala' });
     await salvar('documentos', { titulo: 'Protocolo do estudo', url: 'https://exemplo.invalid/protocolo.docx', salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', arquivado: false });
     await salvar('documentos', { titulo: 'Termo de consentimento', url: 'https://exemplo.invalid/termo.docx', salaId: 'sala-doutoramento', pastaId: 'pasta-etica', arquivado: false });
     await salvar('documentos', { titulo: 'Documento solto da sala', url: 'https://exemplo.invalid/solto.docx', salaId: 'sala-doutoramento', arquivado: false });
@@ -94,10 +106,10 @@ describe('a pasta comum', () => {
     expect(tarefas.queryByText('Tarefa da sala sem tema')).toBeNull();
     expect(tarefas.queryByText('Tarefa já feita do tema')).toBeNull();
 
-    const notas = within(await regiao('Notas'));
-    expect(await notas.findByRole('button', { name: 'Amostragem' })).toBeTruthy();
-    expect(notas.queryByRole('button', { name: 'Do outro tema' })).toBeNull();
-    await waitFor(() => expect((notas.getByRole('textbox', { name: 'Texto' }) as HTMLInputElement).value).toBe('Definir o tamanho da amostra'));
+    const notas = within(await regiao(NOTAS));
+    expect(await notas.findByText('Definir o tamanho da amostra')).toBeTruthy();
+    expect(notas.queryByText('Parecer do comitê')).toBeNull();
+    expect(notas.queryByText('Nota solta da sala')).toBeNull();
 
     const documentos = within(await regiao('Documentos'));
     expect(await documentos.findByRole('link', { name: 'Protocolo do estudo' })).toBeTruthy();
@@ -127,8 +139,7 @@ describe('a pasta comum', () => {
 
     const tarefas = within(await regiao('Tarefas'));
     expect(await tarefas.findByText('Nada em aberto neste tema.')).toBeTruthy();
-    // Notas não ficam vazias: a primeira página nasce sozinha, pronta para escrever.
-    expect(await within(await regiao('Notas')).findByRole('textbox', { name: 'Texto' })).toBeTruthy();
+    expect(await within(await regiao(NOTAS)).findByText(/Nenhuma nota ainda/)).toBeTruthy();
     expect(await within(await regiao('Documentos')).findByText('Nenhum documento ainda.')).toBeTruthy();
   });
 
@@ -145,16 +156,20 @@ describe('a pasta comum', () => {
     expect(await tarefas.findByText('Escrever a justificativa')).toBeTruthy();
   });
 
-  it('nova nota pela pasta é uma página do caderno ligada ao tema (e continua na sala)', async () => {
+  it('nova nota pela pasta já nasce na subpasta, na sala da pasta', async () => {
     await metodologia();
     mostrar(HASH);
-    const notas = within(await regiao('Notas'));
+    const notas = within(await regiao(NOTAS));
 
-    fireEvent.click(await notas.findByRole('button', { name: 'Nova página' }));
+    fireEvent.click(await notas.findByRole('button', { name: /Nova nota/ }));
+    fireEvent.click(await notas.findByRole('button', { name: 'Texto' }));
+    fireEvent.input(await notas.findByRole('textbox', { name: 'Texto da nota' }), { target: { value: 'Definir o tamanho da amostra' } });
+    fireEvent.click(notas.getByRole('button', { name: 'Salvar nota' }));
 
-    await waitFor(async () => expect(await listar('paginas')).toHaveLength(1));
-    expect((await listar('paginas'))[0]).toMatchObject({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', titulo: 'Página 1' });
-    expect(await notas.findByRole('textbox', { name: 'Título da página' })).toBeTruthy();
+    await waitFor(async () => expect(await listar('notas')).toHaveLength(1));
+    expect((await listar('notas'))[0]).toMatchObject({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Definir o tamanho da amostra' });
+    expect(await notas.findByText('Definir o tamanho da amostra')).toBeTruthy();
+    expect(await listar('paginas')).toEqual([]);
   });
 
   it('novo documento pela pasta já nasce no tema, sem perguntar onde guardar', async () => {
@@ -187,6 +202,19 @@ describe('a pasta comum', () => {
     expect(await caixa.findByRole('link', { name: 'Protocolo do estudo' })).toBeTruthy();
     const caderno = within(await principal().findByRole('region', { name: 'Caderno' }));
     expect(await caderno.findByRole('button', { name: 'Amostragem' })).toBeTruthy();
+  });
+
+  it('apagar a pasta não esconde as notas dela: continuam na sala', async () => {
+    const pasta = await metodologia();
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: pasta.id, tipo: 'texto', texto: 'Definir o tamanho da amostra' });
+    await criarNota({ salaId: 'sala-doutoramento', tipo: 'texto', texto: 'Nota da própria sala' });
+    await apagarPasta(pasta.id);
+
+    mostrar('#/sala/sala-doutoramento');
+
+    const quadro = within(await principal().findByRole('region', { name: 'Notas' }));
+    expect(await quadro.findByText('Definir o tamanho da amostra')).toBeTruthy();
+    expect(quadro.getByText('Nota da própria sala')).toBeTruthy();
   });
 
   it('tarefa com pastaId continua aparecendo no Painel e na Checklist', async () => {
@@ -241,7 +269,7 @@ describe('a pasta comum', () => {
     await metodologia();
     mostrar(HASH, 390);
     expect(await regiao('Tarefas')).toBeTruthy();
-    expect(await regiao('Notas')).toBeTruthy();
+    expect(await regiao(NOTAS)).toBeTruthy();
     expect(await regiao('Documentos')).toBeTruthy();
   });
 });

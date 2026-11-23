@@ -1,0 +1,129 @@
+/* Quadro de notas independentes: cabeça com o título e o botão "Nova nota", formulário, cartões. */
+.quadro-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.quadro-cabeca h2 {
+  margin: 0;
+}
+.quadro-nova {
+  position: relative;
+}
+.quadro-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 3;
+  display: grid;
+  min-width: 9rem;
+  padding: 6px;
+  border: 1px solid var(--linha);
+  border-radius: var(--r-p);
+  background: var(--folha);
+  box-shadow: var(--relevo-p);
+}
+.quadro-menu .botao-texto {
+  justify-content: flex-start;
+}
+
+.nota-form {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+.nota-campo {
+  min-height: 7rem;
+}
+.nota-itens,
+.nota-itens-lista {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nota-item-linha {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nota-item-campo {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  font-size: 16px; /* 16 px ou mais: o celular não aproxima a tela ao tocar */
+}
+.nota-item-campo:focus-visible {
+  outline: 3px solid var(--acao);
+  outline-offset: 2px;
+}
+.nota-item-novo {
+  justify-self: start;
+}
+.nota-form-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.notas-lista {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.nota-cartao {
+  padding: 8px 14px 12px;
+  border: 1px solid var(--linha);
+  border-radius: var(--r-m);
+  background: var(--folha);
+}
+.nota-cartao-editando {
+  padding-top: 4px;
+}
+.nota-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.nota-data {
+  color: var(--tinta3);
+  font-size: 0.85rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.nota-acoes {
+  display: inline-flex;
+  gap: 2px;
+}
+.nota-texto {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.nota-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-height: 28px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.nota-item .caixa {
+  flex: none;
+}
+.nota-item.feito span {
+  color: var(--tinta3);
+  text-decoration: line-through;
+}
+.notas-quadro .tarefa-apagada {
+  margin-top: 10px;
+}

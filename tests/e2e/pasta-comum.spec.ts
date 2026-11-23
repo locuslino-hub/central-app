@@ -60,9 +60,12 @@ async function usarPasta(page: Page) {
   await expect(documentos.getByRole('link', { name: 'Plano de métodos' })).toBeVisible();
 
   // Nota pela própria pasta.
-  const notas = principal.getByRole('region', { name: 'Notas' });
-  await notas.getByRole('button', { name: 'Nova página' }).click();
-  await expect(notas.getByRole('textbox', { name: 'Título da página' })).toBeVisible();
+  const notas = principal.getByRole('region', { name: 'Notas · Metodologia' });
+  await notas.getByRole('button', { name: /Nova nota/ }).click();
+  await notas.getByRole('button', { name: 'Texto' }).click();
+  await notas.getByRole('textbox', { name: 'Texto da nota' }).fill('Definir o tamanho da amostra');
+  await notas.getByRole('button', { name: 'Salvar nota' }).click();
+  await expect(notas.getByText('Definir o tamanho da amostra', { exact: true })).toBeVisible();
 
   expect(await semRolagemDeLado(page)).toBe(true);
   await semAchadosDoAxe(page);

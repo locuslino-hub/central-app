@@ -16,11 +16,10 @@ import { ItemDeAgenda } from './ItemDeAgenda';
 import { AvisoDeApagada, useConclusoes } from './LinhaDeTarefa';
 import { ListaDeTarefas } from './ListaDeTarefas';
 import { corDaSala } from './Menu';
-import { notasPorGuardar } from '../dados/notas';
-import { Notas } from './Notas';
 import { NovaTarefa } from './NovaTarefa';
 import { Pagina } from './Pagina';
 import { PastasDaSala } from './PastasDaSala';
+import { QuadroDeNotas } from './QuadroDeNotas';
 import { juntar, nEmails, nTarefas } from './plural';
 import { AvisoDeEmail, EstadoDosEmails, ListaDeEmails } from './PorResponder';
 import { nomeDoDia } from './quando';
@@ -140,7 +139,7 @@ function ConteudoDaSala({ sala }: { sala: SalaDoApp }) {
           )}
           <ListaDeTarefas tarefas={daSala} salas={salas} hoje={hoje} conclusoes={conclusoes} prefixo="sala-tarefas" />
         </section>
-        <Notas colecao="salas" id={sala.id} notas={sala.notas} dica={`Anote o que não pode esquecer sobre ${sala.nome}.`} />
+        <QuadroDeNotas salaId={sala.id} titulo="Notas" />
         </div>
 
         <div class="sala-coluna">
@@ -222,8 +221,6 @@ export function Sala({ id }: { id: string }) {
     return (
       <Pagina titulo="Sala não encontrada">
         <p class="aviso">Esta sala não existe neste aparelho.</p>
-        {/* Apagada com a nota por gravar: o texto que o dono escreveu continua aqui. */}
-        {notasPorGuardar('salas', id) !== undefined && <Notas colecao="salas" id={id} notas={undefined} dica="Notas" apagado />}
         <p>
           <a class="botao-link" href={hrefDe('salas')}>
             Ver as salas

@@ -75,7 +75,7 @@ describe('a página da pasta', () => {
     const conteudo = await principal().findByRole('group', { name: 'Notas, tarefas e documentos' });
     expect(conteudo.getAttribute('data-tipo')).toBe('comum');
     expect(within(conteudo).getByRole('region', { name: 'Tarefas' })).toBeTruthy();
-    expect(within(conteudo).getByRole('region', { name: 'Notas' })).toBeTruthy();
+    expect(within(conteudo).getByRole('region', { name: 'Notas · Metodologia' })).toBeTruthy();
     expect(within(conteudo).getByRole('region', { name: 'Documentos' })).toBeTruthy();
     expect(within(conteudo).queryByText(/chega numa próxima versão/)).toBeNull();
   });

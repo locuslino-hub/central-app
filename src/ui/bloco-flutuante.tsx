@@ -1,13 +1,12 @@
 // Bloco flutuante: uma janelinha sempre por cima das outras (Document Picture-in-Picture do Chrome/Edge), que fica
-// na tela com o app minimizado. Mostra as Notas da última pasta comum aberta; escrever ali é o mesmo que na pasta
-// (mesma página, mesma loja, mesma sincronia). Só abre com um clique dentro do app e fecha junto com o app.
+// na tela com o app minimizado. Mostra as notas da última pasta comum aberta (ou da sala escolhida no seletor);
+// escrever ali é o mesmo que na pasta (mesmas notas, mesma loja, mesma sincronia). Só abre com um clique dentro do app e fecha junto com o app.
 // Navegador sem a API (Firefox, celular): o botão não aparece.
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import type { Pasta } from '../dados/tipos';
-import { Caderno } from './Caderno';
 import { useAparelhoCelular, usePastas, useSalas } from './hooks';
 import { Icone } from './icones';
+import { QuadroDeNotas } from './QuadroDeNotas';
 import { EVENTO_DA_ULTIMA_PASTA, guardarUltimaPasta, lerUltimaPasta, type UltimaPasta } from './ultima-pasta';
 import './bloco-flutuante.css';
 
@@ -72,7 +71,7 @@ export function abrirBlocoFlutuante(): Promise<void> {
       copiarAparencia(janela.document);
       const raiz = janela.document.body;
       janela.addEventListener('pagehide', () => {
-        // Desmontar grava o que ficou por gravar no caderno.
+        // O que ficou por salvar num formulário aberto se perde (só grava com "Salvar nota"); as notas salvas ficam.
         render(null, raiz);
         if (aberta === janela) aberta = null;
       });
@@ -91,48 +90,53 @@ export function fecharBlocoFlutuante(): void {
   aberta = null;
 }
 
-/** A pasta escolhida: segue a última pasta comum aberta no app. */
-function useUltimaPasta(): [UltimaPasta | null, (pasta: UltimaPasta) => void] {
+/** O que está escolhido: segue a última pasta comum aberta no app; escolher no seletor também vale (sala ou pasta). */
+function useUltimaPasta(): [UltimaPasta | null, (escolha: UltimaPasta) => void] {
   const [ultima, setUltima] = useState<UltimaPasta | null>(lerUltimaPasta);
   useEffect(() => {
     const aoMudar = (e: Event) => setUltima((e as CustomEvent<UltimaPasta>).detail ?? lerUltimaPasta());
     window.addEventListener(EVENTO_DA_ULTIMA_PASTA, aoMudar);
     return () => window.removeEventListener(EVENTO_DA_ULTIMA_PASTA, aoMudar);
   }, []);
-  return [ultima, (pasta) => guardarUltimaPasta(pasta.salaId, pasta.pastaId)];
+  return [ultima, (escolha) => guardarUltimaPasta(escolha.salaId, escolha.pastaId)];
 }
 
-/** O que aparece dentro da janelinha: seletor da pasta e as Notas dela. */
+type Opcao = { valor: string; rotulo: string; salaId: string; pastaId?: string; titulo: string };
+
+/** O que aparece dentro da janelinha: seletor (salas e pastas comuns) e o quadro de notas do que foi escolhido. */
 export function BlocoFlutuante() {
   const salas = useSalas();
   const pastas = usePastas();
   const [ultima, escolher] = useUltimaPasta();
-  const nomeDaSala = (id: string) => salas.find((sala) => sala.id === id)?.nome;
-  const comuns: Pasta[] = (pastas ?? [])
-    .filter((pasta) => pasta.tipo === 'comum' && !pasta.apagado && nomeDaSala(pasta.salaId) !== undefined)
-    .sort((a, b) => (nomeDaSala(a.salaId) ?? '').localeCompare(nomeDaSala(b.salaId) ?? '', 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
-  const atual = ultima ? comuns.find((pasta) => pasta.id === ultima.pastaId && pasta.salaId === ultima.salaId) : undefined;
+  const opcoes: Opcao[] = salas.flatMap((sala) => [
+    { valor: `sala:${sala.id}`, rotulo: sala.nome, salaId: sala.id, titulo: 'Notas' },
+    ...(pastas ?? [])
+      .filter((pasta) => pasta.tipo === 'comum' && !pasta.apagado && pasta.salaId === sala.id)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .map((pasta) => ({ valor: `pasta:${pasta.id}`, rotulo: `${sala.nome} · ${pasta.nome}`, salaId: sala.id, pastaId: pasta.id, titulo: `Notas · ${pasta.nome}` })),
+  ]);
+  const atual = ultima ? opcoes.find((o) => o.salaId === ultima.salaId && o.pastaId === ultima.pastaId) : undefined;
 
   return (
     <div class="bloco-flutuante">
       <select
-          class="bloco-flutuante-pasta"
-          aria-label="Pasta"
-          value={atual?.id ?? ''}
-          onChange={(e) => {
-            const escolhida = comuns.find((pasta) => pasta.id === (e.currentTarget as HTMLSelectElement).value);
-            if (escolhida) escolher({ salaId: escolhida.salaId, pastaId: escolhida.id });
-          }}
-        >
-          {!atual && <option value="">Escolha a subpasta</option>}
-          {comuns.map((pasta) => (
-            <option key={pasta.id} value={pasta.id}>
-              {`${nomeDaSala(pasta.salaId)} · ${pasta.nome}`}
-            </option>
-          ))}
-        </select>
+        class="bloco-flutuante-pasta"
+        aria-label="Pasta"
+        value={atual?.valor ?? ''}
+        onChange={(e) => {
+          const escolhida = opcoes.find((o) => o.valor === (e.currentTarget as HTMLSelectElement).value);
+          if (escolhida) escolher({ salaId: escolhida.salaId, pastaId: escolhida.pastaId });
+        }}
+      >
+        {!atual && <option value="">Escolha a subpasta</option>}
+        {opcoes.map((o) => (
+          <option key={o.valor} value={o.valor}>
+            {o.rotulo}
+          </option>
+        ))}
+      </select>
       {atual ? (
-        <Caderno key={atual.id} salaId={atual.salaId} nomeDaSala={nomeDaSala(atual.salaId) ?? ''} pastaId={atual.id} criarPrimeira />
+        <QuadroDeNotas key={atual.valor} salaId={atual.salaId} pastaId={atual.pastaId} titulo={atual.titulo} />
       ) : (
         pastas !== undefined && <p class="lista-vazia-texto">Abra uma subpasta ou escolha uma acima.</p>
       )}

@@ -1,10 +1,11 @@
-// Bloco flutuante: janelinha sempre por cima (Document Picture-in-Picture) com as notas da última pasta comum.
+// Bloco flutuante: janelinha sempre por cima (Document Picture-in-Picture) com as notas independentes da última pasta comum (ou da sala escolhida).
 // Quinta-feira, 2026-11-05, 12:20 em Lisboa. Nomes e ids fictícios.
-import { cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { limparConversa } from '../../src/chat/conversa';
 import { listar, salvar, semear, semearPalavras } from '../../src/dados/loja';
+import { criarNota } from '../../src/dados/notas-independentes';
 import { fecharBlocoFlutuante } from '../../src/ui/bloco-flutuante';
 
 configure({ asyncUtilTimeout: 5000 });
@@ -92,8 +93,8 @@ describe('bloco flutuante', () => {
     fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
     await waitFor(() => expect(pedir).toHaveBeenCalledTimes(1));
     const seletor = (await naJanela().findByRole('combobox', { name: 'Pasta' })) as HTMLSelectElement;
-    await waitFor(() => expect(seletor.value).toBe('pasta-metodologia'));
-    expect(await naJanela().findByRole('heading', { name: 'Notas' })).toBeTruthy();
+    await waitFor(() => expect(seletor.value).toBe('pasta:pasta-metodologia'));
+    expect(await naJanela().findByRole('heading', { name: 'Notas · Metodologia' })).toBeTruthy();
   });
 
   it('não abre duas', async () => {
@@ -109,34 +110,98 @@ describe('bloco flutuante', () => {
     expect(pedir).toHaveBeenCalledTimes(1);
   });
 
-  it('escrever na janela grava a página', async () => {
+  it('escrever uma nota na janela e salvar grava uma nota da subpasta, sem criar página', async () => {
     comApi();
     await metodologia();
     mostrar(HASH);
     fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
-    const campo = await naJanela().findByRole('textbox', { name: 'Texto' });
-    fireEvent.input(campo, { target: { value: 'Ligar para a Renata' } });
-    janela.disparar(new Event('pagehide'));
-    await waitFor(async () => {
-      const pagina = (await listar('paginas')).find((p) => p.id === 'nota-pasta-metodologia');
-      expect(pagina?.blocos.map((b) => b.texto)).toContain('Ligar para a Renata');
-    });
+    fireEvent.click(await naJanela().findByRole('button', { name: /Nova nota/ }));
+    fireEvent.click(await naJanela().findByRole('button', { name: 'Texto' }));
+    fireEvent.input(await naJanela().findByRole('textbox', { name: 'Texto da nota' }), { target: { value: 'Ligar para a Renata' } });
+    fireEvent.click(naJanela().getByRole('button', { name: 'Salvar nota' }));
+    await waitFor(async () => expect(await listar('notas')).toEqual([expect.objectContaining({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Ligar para a Renata' })]));
+    expect(await naJanela().findByText('Ligar para a Renata')).toBeTruthy();
+    expect(await listar('paginas')).toEqual([]);
   });
 
-  it('o campo em uso na janela não é redesenhado por uma versão que chega de fora', async () => {
+  it('fechar a janelinha antes de salvar perde o rascunho, mas a nota já salva fica', async () => {
     comApi();
     await metodologia();
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Nota já salva' });
     mostrar(HASH);
     fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
-    const campo = (await naJanela().findByRole('textbox', { name: 'Texto' })) as HTMLInputElement;
+    fireEvent.click(await naJanela().findByRole('button', { name: /Nova nota/ }));
+    fireEvent.click(await naJanela().findByRole('button', { name: 'Texto' }));
+    fireEvent.input(await naJanela().findByRole('textbox', { name: 'Texto da nota' }), { target: { value: 'Rascunho não salvo' } });
+    janela.disparar(new Event('pagehide'));
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await listar('notas')).map((n) => n.texto)).toEqual(['Nota já salva']);
+  });
+
+  it('o campo aberto na janela não é redesenhado por uma versão que chega de fora', async () => {
+    comApi();
+    await metodologia();
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Nota existente' });
+    mostrar(HASH);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
+    await naJanela().findByText('Nota existente');
+    fireEvent.click(await naJanela().findByRole('button', { name: /Nova nota/ }));
+    fireEvent.click(await naJanela().findByRole('button', { name: 'Texto' }));
+    const campo = (await naJanela().findByRole('textbox', { name: 'Texto da nota' })) as HTMLTextAreaElement;
+    fireEvent.input(campo, { target: { value: 'Ainda escrevendo' } });
     campo.focus();
     expect(janela.document.activeElement).toBe(campo);
-    await waitFor(async () => expect((await listar('paginas')).some((p) => p.id === 'nota-pasta-metodologia')).toBe(true));
-    const [pagina] = (await listar('paginas')).filter((p) => p.id === 'nota-pasta-metodologia');
-    // Chega de outro aparelho a mesma linha com outro texto, enquanto o dono está no campo.
-    await salvar('paginas', { ...pagina, blocos: [{ ...pagina.blocos[0], texto: 'Texto de fora' }] });
-    await new Promise((r) => setTimeout(r, 300));
-    expect(campo.value).toBe('');
+    // Chega de outro aparelho outra nota da mesma subpasta, enquanto o dono está no campo.
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Chegou de fora' });
+    expect(await naJanela().findByText('Chegou de fora')).toBeTruthy();
+    expect(naJanela().getByRole('textbox', { name: 'Texto da nota' })).toBe(campo);
+    expect(campo.value).toBe('Ainda escrevendo');
+    expect(janela.document.activeElement).toBe(campo);
+  });
+
+  it('o seletor lista as salas e as pastas comuns, e escolher a sala mostra as notas dela', async () => {
+    comApi();
+    await metodologia();
+    await criarNota({ salaId: 'sala-doutoramento', tipo: 'texto', texto: 'Nota da sala' });
+    await criarNota({ salaId: 'sala-doutoramento', pastaId: 'pasta-metodologia', tipo: 'texto', texto: 'Nota da subpasta' });
+    mostrar(HASH);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
+    const seletor = (await naJanela().findByRole('combobox', { name: 'Pasta' })) as HTMLSelectElement;
+    await waitFor(() => expect(seletor.value).toBe('pasta:pasta-metodologia'));
+    expect(Array.from(seletor.options).map((o) => o.textContent)).toEqual([
+      'Doutoramento',
+      'Doutoramento · Metodologia',
+      'Investigação',
+      'Aulas',
+      'Orientações',
+      'MBA',
+      'Pessoal',
+      'Casa',
+    ]);
+    expect(await naJanela().findByText('Nota da subpasta')).toBeTruthy();
+    expect(naJanela().queryByText('Nota da sala')).toBeNull();
+
+    fireEvent.change(seletor, { target: { value: 'sala:sala-doutoramento' } });
+    expect(await naJanela().findByText('Nota da sala')).toBeTruthy();
+    expect(naJanela().queryByText('Nota da subpasta')).toBeNull();
+    expect(await naJanela().findByRole('heading', { name: 'Notas' })).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem('central.notas.ultimaPasta') ?? 'null')).toEqual({ salaId: 'sala-doutoramento' });
+  });
+
+  it('continua seguindo a última pasta comum aberta no app', async () => {
+    comApi();
+    await metodologia();
+    await salvar('pastas', { id: 'pasta-etica', salaId: 'sala-doutoramento', tipo: 'comum', nome: 'Ética', ordem: 2 });
+    mostrar(HASH);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Bloco flutuante' }))[0]);
+    const seletor = (await naJanela().findByRole('combobox', { name: 'Pasta' })) as HTMLSelectElement;
+    await waitFor(() => expect(seletor.value).toBe('pasta:pasta-metodologia'));
+    act(() => {
+      location.hash = '#/sala/sala-doutoramento/pasta/pasta-etica';
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    await waitFor(() => expect(seletor.value).toBe('pasta:pasta-etica'));
+    expect(await naJanela().findByRole('heading', { name: 'Notas · Ética' })).toBeTruthy();
   });
 
   it('pasta apagada mostra o aviso', async () => {
@@ -145,6 +210,6 @@ describe('bloco flutuante', () => {
     mostrar('#/');
     fireEvent.click(await screen.findByRole('button', { name: 'Bloco flutuante' }));
     expect(await naJanela().findByText('Abra uma subpasta ou escolha uma acima.')).toBeTruthy();
-    expect(naJanela().queryByRole('heading', { name: 'Notas' })).toBeNull();
+    expect(naJanela().queryByRole('heading', { name: /^Notas/ })).toBeNull();
   });
 });

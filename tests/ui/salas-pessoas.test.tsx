@@ -314,30 +314,33 @@ describe('página da pessoa', () => {
   });
 });
 
-describe('notas', () => {
+// O campo único de notas da sala foi trocado pelo quadro de notas independentes (tests/ui/quadro-de-notas.test.tsx);
+// o campo que grava sozinho continua na página da pessoa, e é nela que estes testes o exercitam.
+describe('notas da pessoa', () => {
   const campo = () => principal().getByRole('textbox', { name: 'Notas' }) as HTMLTextAreaElement;
-  const salaGuardada = async () => (await lerRegistros([{ colecao: 'salas', id: 'sala-orientacoes' }]))[0] as Sala;
+  const pessoaGuardada = async () => (await lerRegistros([{ colecao: 'pessoas', id: 'p-marina' }]))[0] as Pessoa;
 
-  /** Outro aparelho grava a sala com outra nota, mais nova (o que a sincronia entrega). */
-  const notaDoCelular = (antes: Sala) =>
-    gravarDoServidor([{ colecao: 'salas', registro: { ...antes, notas: 'Nota escrita no celular', atualizadoEm: Date.now() + 5000, aparelho: 'celular-fake' } }]);
+  /** Outro aparelho grava a pessoa com outra nota, mais nova (o que a sincronia entrega). */
+  const notaDoCelular = (antes: Pessoa) =>
+    gravarDoServidor([{ colecao: 'pessoas', registro: { ...antes, notas: 'Nota escrita no celular', atualizadoEm: Date.now() + 5000, aparelho: 'celular-fake' } }]);
 
   async function abrirNotas() {
+    await marina();
     await scriptDeTeste();
-    mostrar('#/sala/sala-orientacoes');
+    mostrar('#/pessoa/p-marina');
     await principal().findByRole('textbox', { name: 'Notas' });
   }
 
   it('salvam sozinhas, um instante depois de parar de digitar, e sincronizam (pendente)', async () => {
     await abrirNotas();
     fireEvent.input(campo(), { target: { value: 'Combinar o calendário de entregas.' } });
-    expect((await salaGuardada()).notas).toBeUndefined(); // ainda não: espera o atraso
-    await waitFor(async () => expect((await salaGuardada()).notas).toBe('Combinar o calendário de entregas.'), {
+    expect((await pessoaGuardada()).notas).toBeUndefined(); // ainda não: espera o atraso
+    await waitFor(async () => expect((await pessoaGuardada()).notas).toBe('Combinar o calendário de entregas.'), {
       timeout: ATRASO_DAS_NOTAS_MS + 3000,
     });
     expect(await screen.findByText('Salvo')).toBeTruthy();
-    const sala = await salaGuardada();
-    expect(sala.nome).toBe('Orientações');
+    const pessoa = await pessoaGuardada();
+    expect(pessoa.nome).toBe('Marina');
   });
 
   it('sair do campo grava na hora, sem esperar o atraso', async () => {
@@ -345,7 +348,7 @@ describe('notas', () => {
     campo().focus();
     fireEvent.input(campo(), { target: { value: 'Lembrar da Aurora.' } });
     fireEvent.blur(campo());
-    await waitFor(async () => expect((await salaGuardada()).notas).toBe('Lembrar da Aurora.'), { timeout: 1500 });
+    await waitFor(async () => expect((await pessoaGuardada()).notas).toBe('Lembrar da Aurora.'), { timeout: 1500 });
   });
 
   it('trocar de página com texto por gravar grava antes de sair', async () => {
@@ -353,17 +356,19 @@ describe('notas', () => {
     campo().focus();
     fireEvent.input(campo(), { target: { value: 'Rascunho que não pode se perder.' } });
     navegar('#/salas');
-    await waitFor(async () => expect((await salaGuardada()).notas).toBe('Rascunho que não pode se perder.'), { timeout: 1500 });
+    await waitFor(async () => expect((await pessoaGuardada()).notas).toBe('Rascunho que não pode se perder.'), { timeout: 1500 });
   });
 
   it('apagar tudo remove o campo do registro', async () => {
-    await salvar('salas', { ...((await listar('salas')).find((s) => s.id === 'sala-orientacoes') as Sala), notas: 'Algo antigo' });
-    await abrirNotas();
+    await marina({ notas: 'Algo antigo' });
+    await scriptDeTeste();
+    mostrar('#/pessoa/p-marina');
+    await principal().findByRole('textbox', { name: 'Notas' });
     await waitFor(() => expect(campo().value).toBe('Algo antigo'));
     campo().focus();
     fireEvent.input(campo(), { target: { value: '' } });
     fireEvent.blur(campo());
-    await waitFor(async () => expect('notas' in (await salaGuardada())).toBe(false), { timeout: 1500 });
+    await waitFor(async () => expect('notas' in (await pessoaGuardada())).toBe(false), { timeout: 1500 });
   });
 
   it('uma atualização vinda de outro aparelho não tira o foco, o texto nem o cursor de quem está digitando', async () => {
@@ -373,13 +378,13 @@ describe('notas', () => {
     campo().setSelectionRange(9, 9);
     expect(document.activeElement).toBe(campo());
 
-    const antes = await salaGuardada();
-    // Outro aparelho grava a sala com outra nota, mais nova.
+    const antes = await pessoaGuardada();
+    // Outro aparelho grava a pessoa com outra nota, mais nova.
     await act(async () => {
       await notaDoCelular(antes);
     });
-    // A tela se refaz (a lista de salas é lida de novo), mas o campo em uso fica como estava.
-    await waitFor(async () => expect((await salaGuardada()).notas).toBe('Nota escrita no celular'));
+    // A tela se refaz (a lista de pessoas é lida de novo), mas o campo em uso fica como estava.
+    await waitFor(async () => expect((await pessoaGuardada()).notas).toBe('Nota escrita no celular'));
     await new Promise((resolver) => setTimeout(resolver, 150));
     expect(document.activeElement).toBe(campo());
     expect(campo().value).toBe('Primeira ideia, ainda por terminar');
@@ -388,14 +393,14 @@ describe('notas', () => {
 
     // O que o dono digitou vale mais: ao sair do campo grava por cima, com carimbo acima do que chegou.
     fireEvent.blur(campo());
-    await waitFor(async () => expect((await salaGuardada()).notas).toBe('Primeira ideia, ainda por terminar'), { timeout: 1500 });
+    await waitFor(async () => expect((await pessoaGuardada()).notas).toBe('Primeira ideia, ainda por terminar'), { timeout: 1500 });
     expect(campo().value).toBe('Primeira ideia, ainda por terminar');
   });
 
   it('com o campo em uso e nada digitado, a nota nova só aparece quando ele sai do campo', async () => {
     await abrirNotas();
     campo().focus();
-    const antes = await salaGuardada();
+    const antes = await pessoaGuardada();
     await act(async () => {
       await notaDoCelular(antes);
     });
@@ -408,35 +413,17 @@ describe('notas', () => {
 
   it('com o campo parado, a nota nova de outro aparelho aparece sozinha', async () => {
     await abrirNotas();
-    const antes = await salaGuardada();
+    const antes = await pessoaGuardada();
     await act(async () => {
       await notaDoCelular(antes);
     });
     await waitFor(() => expect(campo().value).toBe('Nota escrita no celular'));
   });
 
-  it('sala apagada em outro aparelho enquanto o dono escreve: não diz "Salvo", avisa e o texto continua no campo', async () => {
+  it('pessoa apagada com a nota por gravar: o aviso diz que a pessoa foi apagada e o texto fica', async () => {
     await abrirNotas();
     campo().focus();
-    fireEvent.input(campo(), { target: { value: 'Texto que não pode sumir' } });
-    const antes = await salaGuardada();
-    await act(async () => {
-      await gravarDoServidor([{ colecao: 'salas', registro: { ...antes, apagado: true, atualizadoEm: Date.now() + 5000, aparelho: 'celular-fake' } }]);
-    });
-
-    expect(await screen.findByText('Esta sala foi apagada; a nota não foi guardada.', {}, { timeout: ATRASO_DAS_NOTAS_MS + 3000 })).toBeTruthy();
-    expect(campo().value).toBe('Texto que não pode sumir');
-    expect(screen.queryByText('Salvo')).toBeNull();
-    expect((await salaGuardada()).notas).toBeUndefined();
-  });
-
-  it('pessoa apagada com a nota por gravar: o aviso diz que a pessoa foi apagada e o texto fica', async () => {
-    await marina();
-    await scriptDeTeste();
-    mostrar('#/pessoa/p-marina');
-    const notas = (await principal().findByRole('textbox', { name: 'Notas' })) as HTMLTextAreaElement;
-    notas.focus();
-    fireEvent.input(notas, { target: { value: 'Prefere reunião às terças.' } });
+    fireEvent.input(campo(), { target: { value: 'Prefere reunião às terças.' } });
     await act(async () => {
       await apagar('pessoas', 'p-marina');
     });
@@ -446,14 +433,42 @@ describe('notas', () => {
     expect(screen.queryByText('Salvo')).toBeNull();
   });
 
-  it('as notas da pessoa ficam na pessoa, e as da sala na sala', async () => {
-    await marina();
+  it('as notas da pessoa ficam na pessoa: a sala não recebe o texto, nem vira nota independente', async () => {
+    await abrirNotas();
+    fireEvent.input(campo(), { target: { value: 'Prefere reunião às terças.' } });
+    fireEvent.blur(campo());
+    await waitFor(async () => expect((await pessoaGuardada()).notas).toBe('Prefere reunião às terças.'), { timeout: 1500 });
+    expect((await listar('salas')).find((s) => s.id === 'sala-orientacoes')!.notas).toBeUndefined();
+    expect(await listar('notas')).toEqual([]);
+  });
+});
+
+describe('notas da sala', () => {
+  it('a página da sala tem o quadro de notas independentes, com Nova nota, e não o campo único', async () => {
     await scriptDeTeste();
-    mostrar('#/pessoa/p-marina');
-    const notas = await principal().findByRole('textbox', { name: 'Notas' });
-    fireEvent.input(notas, { target: { value: 'Prefere reunião às terças.' } });
-    fireEvent.blur(notas);
-    await waitFor(async () => expect((await listar('pessoas'))[0].notas).toBe('Prefere reunião às terças.'), { timeout: 1500 });
-    expect((await salaGuardada()).notas).toBeUndefined();
+    mostrar('#/sala/sala-orientacoes');
+    const notas = await secao('Notas');
+    expect(await notas.findByRole('button', { name: /Nova nota/ })).toBeTruthy();
+    expect(principal().queryByRole('textbox', { name: 'Notas' })).toBeNull();
+  });
+
+  it('o texto antigo das notas da sala aparece como uma nota (nada se perde)', async () => {
+    await salvar('salas', { ...((await listar('salas')).find((s) => s.id === 'sala-orientacoes') as Sala), notas: 'Combinar o calendário de entregas.' });
+    await scriptDeTeste();
+    mostrar('#/sala/sala-orientacoes');
+    expect(await (await secao('Notas')).findByText('Combinar o calendário de entregas.')).toBeTruthy();
+  });
+
+  it('escrever uma nota na sala e salvar grava uma nota da sala', async () => {
+    await scriptDeTeste();
+    mostrar('#/sala/sala-orientacoes');
+    // A página se refaz quando os dados chegam: o quadro é procurado de novo a cada passo.
+    const notas = async () => secao('Notas');
+    fireEvent.click(await (await notas()).findByRole('button', { name: /Nova nota/ }));
+    fireEvent.click(await (await notas()).findByRole('button', { name: 'Texto' }));
+    fireEvent.input(await (await notas()).findByRole('textbox', { name: 'Texto da nota' }), { target: { value: 'Falar com o Prof. Souza' } });
+    fireEvent.click((await notas()).getByRole('button', { name: 'Salvar nota' }));
+    await waitFor(async () => expect(await listar('notas')).toEqual([expect.objectContaining({ salaId: 'sala-orientacoes', texto: 'Falar com o Prof. Souza' })]));
+    expect(await (await notas()).findByText('Falar com o Prof. Souza')).toBeTruthy();
   });
 });

@@ -4,7 +4,7 @@
 // Linha com data vira tarefa ou compromisso pelo mesmo `interpretar` do chat.
 import { criarItem, interpretar } from '../chat/interpretar';
 import { desfazer, type Desfazivel } from './desfazer';
-import { lerRegistros, listar, salvar } from './loja';
+import { lerRegistros, salvar } from './loja';
 import type { Bloco, Pagina } from './tipos';
 
 export type TipoDeBloco = Bloco['tipo'];
@@ -69,33 +69,6 @@ export async function criarPagina(salaId: string, titulo: string, pastaId?: stri
     titulo: titulo.trim().slice(0, TITULO_DA_PAGINA_NO_MAXIMO) || 'Página sem título',
     blocos: [novoBloco('texto')],
   });
-}
-
-/** Garantias em andamento, por pasta: a página e a janelinha abrindo juntas criam uma página só. */
-const garantindo = new Map<string, Promise<Pagina | undefined>>();
-
-/**
- * A primeira página ("Notas") de uma pasta comum, criada sozinha ao abrir a pasta. Id fixo (`nota-<pastaId>`): dois
- * aparelhos gravam o mesmo registro. Não cria se a pasta já tem página viva, nem se o id fixo já existe (viva ou
- * apagada: página apagada pelo dono não volta). Devolve a página criada, ou `undefined` se não criou.
- */
-export function garantirPaginaDaPasta(salaId: string, pastaId: string): Promise<Pagina | undefined> {
-  const andando = garantindo.get(pastaId);
-  if (andando) return andando;
-  const feita = garantirDeVez(salaId, pastaId).finally(() => garantindo.delete(pastaId));
-  garantindo.set(pastaId, feita);
-  return feita;
-}
-
-async function garantirDeVez(salaId: string, pastaId: string): Promise<Pagina | undefined> {
-  const id = `nota-${pastaId}`;
-  const [existente] = await lerRegistros([{ colecao: 'paginas', id }]);
-  if (existente) return undefined;
-  const vivas = (await listar('paginas')).some((p) => p.pastaId === pastaId && !p.apagado);
-  if (vivas) return undefined;
-  // Bloco com id fixo: duas criações (dois aparelhos) dão a mesma página. Carimbo automático: perde para o que o
-  // dono escreveu ou apagou noutro aparelho.
-  return salvar('paginas', { id, salaId, pastaId, titulo: 'Notas', blocos: [{ id: `${id}-1`, tipo: 'texto', texto: '' }] }, { automatico: true });
 }
 
 /**

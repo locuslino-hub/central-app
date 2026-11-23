@@ -1,9 +1,11 @@
-// A última pasta comum aberta neste aparelho: o bloco flutuante mostra as notas dela. Fica só aqui (não sincroniza).
+// A última pasta comum aberta neste aparelho (ou a sala escolhida no seletor, sem pasta): o bloco flutuante mostra as
+// notas dela. Fica só aqui (não sincroniza).
 export const CHAVE_DA_ULTIMA_PASTA = 'central.notas.ultimaPasta';
 /** Disparado no `window` sempre que a última pasta muda (o bloco flutuante segue a pasta aberta). */
 export const EVENTO_DA_ULTIMA_PASTA = 'central:ultima-pasta';
 
-export type UltimaPasta = { salaId: string; pastaId: string };
+/** `pastaId` ausente: a escolha é a própria sala (as notas da sala). */
+export type UltimaPasta = { salaId: string; pastaId?: string };
 
 export function lerUltimaPasta(): UltimaPasta | null {
   try {
@@ -11,6 +13,7 @@ export function lerUltimaPasta(): UltimaPasta | null {
     if (lida && typeof lida === 'object') {
       const { salaId, pastaId } = lida as Record<string, unknown>;
       if (typeof salaId === 'string' && typeof pastaId === 'string') return { salaId, pastaId };
+      if (typeof salaId === 'string' && pastaId === undefined) return { salaId };
     }
   } catch {
     // Registro estragado ou sem armazenamento: como se não houvesse.
@@ -18,7 +21,7 @@ export function lerUltimaPasta(): UltimaPasta | null {
   return null;
 }
 
-export function guardarUltimaPasta(salaId: string, pastaId: string): void {
+export function guardarUltimaPasta(salaId: string, pastaId?: string): void {
   try {
     localStorage.setItem(CHAVE_DA_ULTIMA_PASTA, JSON.stringify({ salaId, pastaId }));
   } catch {

@@ -226,14 +226,15 @@ for (const [nome, viewport, sufixo] of [
       expect(await pequenos(page)).toEqual([]);
       expect(await semRolagemDeLado(page)).toBe(true);
 
-      // Notas: digitar, esperar o salvamento, recarregar.
-      const notas = principal.getByRole('textbox', { name: 'Notas' });
-      await notas.fill('Combinar o calendário de entregas com as quatro alunas.');
-      await expect(principal.getByText('Salvo')).toBeVisible();
+      // Notas: nova nota de texto, salvar, recarregar.
+      const notas = principal.getByRole('region', { name: 'Notas' });
+      await notas.getByRole('button', { name: /Nova nota/ }).click();
+      await notas.getByRole('button', { name: 'Texto' }).click();
+      await notas.getByRole('textbox', { name: 'Texto da nota' }).fill('Combinar o calendário de entregas com as quatro alunas.');
+      await notas.getByRole('button', { name: 'Salvar nota' }).click();
+      await expect(notas.getByText('Combinar o calendário de entregas com as quatro alunas.')).toBeVisible();
       await page.reload();
-      await expect(page.getByRole('main').getByRole('textbox', { name: 'Notas' })).toHaveValue(
-        'Combinar o calendário de entregas com as quatro alunas.',
-      );
+      await expect(page.getByRole('main').getByRole('region', { name: 'Notas' }).getByText('Combinar o calendário de entregas com as quatro alunas.')).toBeVisible();
 
       // O painel clicável da Marina abre a página dela.
       await page.getByRole('main').getByRole('region', { name: 'Pessoas' }).getByRole('link', { name: /Marina/ }).click();
