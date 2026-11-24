@@ -125,6 +125,32 @@ export async function renomearPasta(id: string, nome: string): Promise<Pasta> {
   return salvar('pastas', { ...(lida as Pasta), nome: novo });
 }
 
+export const PLANILHA_INVALIDA = 'planilha_invalida';
+
+/**
+ * O id de uma planilha do Google a partir do link colado (ou do próprio id). `null` se não parece uma planilha do Google.
+ */
+export function idDoLinkDePlanilha(texto: string): string | null {
+  const t = texto.trim();
+  const link = /^(?:https?:\/\/)?docs\.google\.com\/spreadsheets\/d\/([\w-]{1,200})(?:[/?#]|$)/.exec(t);
+  if (link) return link[1]!;
+  return ID_DE_PLANILHA.test(t) ? t : null;
+}
+
+/**
+ * Liga à pasta uma planilha que o dono já tinha (só para abrir: o app não lê nem grava nela). Texto vazio desliga.
+ * Link inválido: `planilha_invalida`; pasta que não existe: `pasta_nao_encontrada`.
+ */
+export async function definirPlanilhaDoDono(id: string, link: string): Promise<Pasta> {
+  const vazio = link.trim() === '';
+  const planilha = vazio ? undefined : idDoLinkDePlanilha(link);
+  if (!vazio && !planilha) throw new Error(PLANILHA_INVALIDA);
+  const [lida] = await lerRegistros([{ colecao: 'pastas', id }]);
+  if (!lida || lida.apagado) throw new Error(PASTA_NAO_ENCONTRADA);
+  const { planilhaDoDono: _antiga, ...resto } = lida as Pasta;
+  return salvar('pastas', planilha ? { ...resto, planilhaDoDono: planilha } : resto);
+}
+
 /**
  * Lápide: a pasta some da Central e a exclusão sincroniza. Nunca toca no
  * Drive: a planilha continua lá (e com quem mais tem acesso a ela). Devolve a pasta como era;

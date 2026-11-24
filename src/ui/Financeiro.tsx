@@ -29,6 +29,7 @@ import {
 } from '../dados/financeiro';
 import { dataDeTexto, dataEmBr } from '../dados/leituras';
 import { PLANILHA_MUDOU } from '../dados/planilha-mudou';
+import { definirPlanilhaDoDono, PLANILHA_INVALIDA } from '../dados/pastas';
 import type { Pasta } from '../dados/tipos';
 import { AvisoVivo } from './AvisoVivo';
 import { useAparelhoCelular, useDia } from './hooks';
@@ -59,6 +60,41 @@ type Carga = { situacao: 'lendo' } | { situacao: 'erro' } | { situacao: 'pronta'
 /** `chave` muda a cada cartão novo: o foco volta para ele mesmo quando o título é o mesmo. */
 type CampoComErro = 'valor' | 'descricao' | 'data' | null;
 type Cartao = { chave: number; titulo: string; detalhe: string; desfazer?: () => Promise<void>; desfeito?: boolean };
+
+/** Liga à pasta a planilha que o dono já tinha: o botão "Abrir planilha" passa a abri-la. O app não lê nem grava nela. */
+function PlanilhaDoDono({ pasta }: { pasta: Pasta }) {
+  const [aberto, setAberto] = useState(false);
+  const [link, setLink] = useState('');
+  const [erro, setErro] = useState('');
+  const salvar = async (e: Event) => {
+    e.preventDefault();
+    try {
+      await definirPlanilhaDoDono(pasta.id, link);
+      setAberto(false);
+      setErro('');
+    } catch (causa) {
+      setErro(causa instanceof Error && causa.message === PLANILHA_INVALIDA ? 'Cole o link de uma planilha do Google.' : 'Não consegui salvar. Tente de novo.');
+    }
+  };
+  if (!aberto) {
+    return (
+      <button type="button" class="botao-texto" onClick={() => { setLink(''); setAberto(true); }}>
+        {pasta.planilhaDoDono ? 'Trocar a minha planilha' : 'Usar a minha planilha'}
+      </button>
+    );
+  }
+  return (
+    <form onSubmit={salvar} class="pasta-acoes">
+      <label>
+        <span class="so-leitor">Link da sua planilha do Google</span>
+        <input type="text" aria-label="Link da sua planilha do Google" placeholder="Cole o link da planilha" value={link} onInput={(e) => setLink((e.target as HTMLInputElement).value)} />
+      </label>
+      <button type="submit" class="botao-texto">Salvar link</button>
+      <button type="button" class="botao-texto" onClick={() => setAberto(false)}>Cancelar</button>
+      {erro && <span role="alert" class="registro-aviso">{erro}</span>}
+    </form>
+  );
+}
 
 export function Financeiro({ pasta }: { pasta: Pasta }) {
   const hoje = useDia();
@@ -308,11 +344,12 @@ export function Financeiro({ pasta }: { pasta: Pasta }) {
           <button type="button" class="botao-texto" aria-disabled={lendo ? 'true' : undefined} onClick={() => !lendo && setVersao((v) => v + 1)}>
             {lendo ? 'Lendo…' : 'Reler a planilha'}
           </button>
-          <a class="botao-link pasta-planilha" href={linkDaPlanilha(pasta.planilhaId!)} target="_blank" rel="noopener noreferrer">
+          <a class="botao-link pasta-planilha" href={linkDaPlanilha(pasta.planilhaDoDono ?? pasta.planilhaId!)} target="_blank" rel="noopener noreferrer">
             <Icone nome="externo" />
             <span>Abrir planilha</span>
             <span class="so-leitor"> (abre em outra aba)</span>
           </a>
+          <PlanilhaDoDono pasta={pasta} />
         </div>
       </div>
 

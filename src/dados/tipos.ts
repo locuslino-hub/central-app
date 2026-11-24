@@ -162,6 +162,8 @@ export type Pasta = Base & {
   nome: string;
   ordem: number;
   planilhaId?: string;
+  /** Planilha que o dono já tinha (id do Google): a pasta só a abre, o app não lê nem grava nela. */
+  planilhaDoDono?: string;
   modelo?: 'compras' | 'consumo' | 'financeiro';
   servico?: 'agua' | 'luz' | 'gas';
   unidade?: 'm³' | 'kWh';

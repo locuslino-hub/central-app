@@ -813,3 +813,20 @@ describe('acessibilidade do Financeiro', () => {
     expect(regiao?.textContent).toMatch(/Sem internet: mostrando o que este aparelho guardou/);
   });
 });
+
+describe('planilha do dono', () => {
+  it('colar o link troca o destino do botão Abrir planilha, sem mexer na planilha do app', async () => {
+    await pastaFinanceiro({ planilhaId: 'plan-ficticia_9' });
+    planilhas.planilha('plan-ficticia_9', historico(), CABECALHO_FINANCEIRO);
+    mostrar();
+    await principal().findAllByRole('link', { name: /Abrir planilha/ });
+    fireEvent.click(principal().getByRole('button', { name: 'Usar a minha planilha' }));
+    fireEvent.input(principal().getByRole('textbox', { name: 'Link da sua planilha do Google' }), { target: { value: 'https://exemplo.com' } });
+    fireEvent.click(principal().getByRole('button', { name: 'Salvar link' }));
+    expect(await principal().findByText('Cole o link de uma planilha do Google.')).toBeTruthy();
+    fireEvent.input(principal().getByRole('textbox', { name: 'Link da sua planilha do Google' }), { target: { value: 'https://docs.google.com/spreadsheets/d/dono-ficticio_1/edit?gid=1' } });
+    fireEvent.click(principal().getByRole('button', { name: 'Salvar link' }));
+    await waitFor(() => expect(principal().getByRole('link', { name: /Abrir planilha/ }).getAttribute('href')).toBe('https://docs.google.com/spreadsheets/d/dono-ficticio_1'));
+    expect(principal().getByRole('button', { name: 'Trocar a minha planilha' })).toBeTruthy();
+  });
+});

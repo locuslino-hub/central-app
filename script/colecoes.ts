@@ -126,6 +126,7 @@ export const ESQUEMAS = {
     nome: 'nomeDePasta',
     ordem: 'numero?',
     planilhaId: 'idDePlanilha?',
+    planilhaDoDono: 'idDePlanilha?',
     modelo: 'modeloDePlanilha?',
     servico: 'servicoDeConsumo?',
     unidade: 'unidadeDeConsumo?',
